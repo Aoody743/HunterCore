@@ -34,7 +34,7 @@ index 04dd1bec1aff470e67a21fb0b25932685992ec82..72a0a80f1fffa43e143c80c689db5302
  
          Objects.checkFromToIndex(0, size, raw.length);
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index 6ea62fbffda38e477ef8e119608fc93793db95c3..dda53860397ee52f64209a8d08a7707cfa2f7592 100644
+index 6ea62fbffda38e477ef8e119608fc93793db95c3..66072f0851be5ca75f9fbef88297625272e7a597 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
 @@ -57,7 +57,7 @@ import org.slf4j.Logger;
@@ -59,68 +59,39 @@ index 6ea62fbffda38e477ef8e119608fc93793db95c3..dda53860397ee52f64209a8d08a7707c
      @Nullable
      @VisibleForDebug
      private NaturalSpawner.SpawnState lastSpawnState;
-@@ -156,34 +158,46 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -156,7 +158,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
      // Paper end - rewrite chunk system
      // Paper start - chunk tick iteration optimisations
      private final ca.spottedleaf.moonrise.common.util.SimpleThreadUnsafeRandom shuffleRandom = new ca.spottedleaf.moonrise.common.util.SimpleThreadUnsafeRandom(0L);
 -    private void iterateTickingChunksFaster() {
-+    private void iterateTickingChunksFaster(final CompletableFuture<Void> spawns) { // DivineMC - Regionized Chunk Ticking
++    protected void iterateTickingChunksFaster(final CompletableFuture<Void> spawns) { // DivineMC - private -> protected Regionized Chunk Ticking
          final ServerLevel world = this.level;
          final int randomTickSpeed = world.getGameRules().getInt(GameRules.RULE_RANDOMTICKING);
  
-         // TODO check on update: impl of forEachBlockTickingChunk will only iterate ENTITY ticking chunks!
-         // TODO check on update: consumer just runs tickChunk
--        final ca.spottedleaf.moonrise.common.list.ReferenceList<net.minecraft.world.level.chunk.LevelChunk> entityTickingChunks = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)world).moonrise$getEntityTickingChunks();
-+        final ca.spottedleaf.moonrise.common.list.ReferenceList<LevelChunk> entityTickingChunks = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)world).moonrise$getEntityTickingChunks(); // DivineMC - Regionized Chunk Ticking
+@@ -176,14 +178,16 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
  
-         // note: we can use the backing array here because:
-         // 1. we do not care about new additions
-         // 2. _removes_ are impossible at this stage in the tick
--        final LevelChunk[] raw = entityTickingChunks.getRawDataUnchecked();
-+        final LevelChunk[] raw = entityTickingChunks.toArray(new LevelChunk[0]); // DivineMC - use toArray instead of getRawDataUnchecked this way is safe and doesn't have performance impact
-         final int size = entityTickingChunks.size();
- 
--        java.util.Objects.checkFromToIndex(0, size, raw.length);
--        for (int i = 0; i < size; ++i) {
--            world.tickChunk(raw[i], randomTickSpeed);
--
--            // call mid-tick tasks for chunk system
--            if ((i & 7) == 0) {
+             // call mid-tick tasks for chunk system
+             if ((i & 7) == 0) {
 -                // DivineMC start - Parallel world ticking
 -                if (!org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking) {
 -                    ((ca.spottedleaf.moonrise.patches.chunk_system.server.ChunkSystemMinecraftServer) this.level.getServer()).moonrise$executeMidTickTasks();
 -                    continue;
-+        // DivineMC start - Regionized Chunk Ticking
-+        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableRegionizedChunkTicking) {
-+            if (this instanceof org.bxteam.divinemc.async.rct.RegionizedChunkTicking rct) {
-+                rct.execute(spawns, raw);
-+            }
-+        } else {
-+            java.util.Objects.checkFromToIndex(0, size, raw.length);
-+            for (int i = 0; i < size; ++i) {
-+                world.tickChunk(raw[i], randomTickSpeed);
-+
-+                // call mid-tick tasks for chunk system
-+                if ((i & 7) == 0) {
-+                    // DivineMC start - Parallel world ticking
-+                    if (!org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking) {
-+                        ((ca.spottedleaf.moonrise.patches.chunk_system.server.ChunkSystemMinecraftServer) this.level.getServer()).moonrise$executeMidTickTasks();
-+                        continue;
-+                    }
-+                    // DivineMC end - Parallel world ticking
-                 }
+-                }
 -                // DivineMC end - Parallel world ticking
-+            }
-+
-+            if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.asyncNaturalSpawn) {
-+                spawns.join();
++                ((ca.spottedleaf.moonrise.patches.chunk_system.server.ChunkSystemMinecraftServer)this.level.getServer()).moonrise$executeMidTickTasks();
++                continue;
              }
          }
++
++        // DivineMC start - Regionized Chunk Ticking
++        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.asyncNaturalSpawn) {
++            spawns.join();
++        }
 +        // DivineMC end - Regionized Chunk Ticking
      }
      // Paper end - chunk tick iteration optimisations
  
-@@ -502,14 +516,21 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -502,14 +506,21 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
          long gameTime = this.level.getGameTime();
          long l = gameTime - this.lastInhabitedUpdate;
          this.lastInhabitedUpdate = gameTime;
@@ -146,7 +117,7 @@ index 6ea62fbffda38e477ef8e119608fc93793db95c3..dda53860397ee52f64209a8d08a7707c
          // DivineMC start - Pufferfish: Optimize mob spawning
          if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableAsyncSpawning) {
              for (ServerPlayer player : this.level.players) {
-@@ -553,14 +574,18 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -553,14 +564,18 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
      }
  
      private void broadcastChangedChunks() {
@@ -171,7 +142,7 @@ index 6ea62fbffda38e477ef8e119608fc93793db95c3..dda53860397ee52f64209a8d08a7707c
      }
  
      private void tickChunks(long timeInhabited) {
-@@ -610,6 +635,24 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -610,6 +625,24 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
              filteredSpawningCategories = List.of();
          }
  
@@ -196,7 +167,7 @@ index 6ea62fbffda38e477ef8e119608fc93793db95c3..dda53860397ee52f64209a8d08a7707c
          List<LevelChunk> list = this.spawningChunks;
  
          try {
-@@ -627,12 +670,12 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -627,12 +660,12 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
          } finally {
              list.clear();
          }
@@ -214,7 +185,7 @@ index 6ea62fbffda38e477ef8e119608fc93793db95c3..dda53860397ee52f64209a8d08a7707c
      private void tickSpawningChunk(LevelChunk chunk, long timeInhabited, List<MobCategory> spawnCategories, NaturalSpawner.SpawnState spawnState) {
          ChunkPos pos = chunk.getPos();
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index ca9883277c0f036c94e861f7917ca42facd3c47b..8c98c2593eec14a8a378041e94cf52b8fbfedc30 100644
+index ca9883277c0f036c94e861f7917ca42facd3c47b..694f90490c44dc87127c9806f4d08028e6184798 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -197,7 +197,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
@@ -277,20 +248,27 @@ index ca9883277c0f036c94e861f7917ca42facd3c47b..8c98c2593eec14a8a378041e94cf52b8
          this.chunkSource.getGeneratorState().ensureStructuresGenerated();
          this.portalForcer = new PortalForcer(this);
          this.updateSkyBrightness();
-@@ -846,6 +864,13 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+@@ -846,6 +864,12 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
                  this.dragonFight.tick();
              }
  
 +            // DivineMC start - Regionized Chunk Ticking
 +            if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableRegionizedChunkTicking) {
 +                this.tickBlockEntities();
-+                return;
-+            }
++            } else {
 +            // DivineMC end - Regionized Chunk Ticking
 +
              io.papermc.paper.entity.activation.ActivationRange.activateEntities(this); // Paper - EAR
              this.entityTickList
                  .forEach(
+@@ -871,6 +895,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+                     }
+                 );
+             this.tickBlockEntities();
++            }
+         }
+ 
+         // Paper - rewrite chunk system
 @@ -1874,22 +1899,16 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
          if (Shapes.joinIsNotEmpty(collisionShape, collisionShape1, BooleanOp.NOT_SAME)) {
              List<PathNavigation> list = new ObjectArrayList<>();

@@ -12,6 +12,14 @@ import it.unimi.dsi.fastutil.longs.LongIterator;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -26,16 +34,8 @@ import net.minecraft.world.level.storage.DimensionDataStorage;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import org.bxteam.divinemc.config.DivineConfig;
 import org.bxteam.divinemc.util.NamedAgnosticThreadFactory;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.function.Supplier;
 
 public final class RegionizedChunkTicking extends ServerChunkCache {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -47,15 +47,17 @@ public final class RegionizedChunkTicking extends ServerChunkCache {
         super(level, levelStorageAccess, fixerUpper, structureManager, dispatcher, generator, viewDistance, simulationDistance, sync, chunkStatusListener, overworldDataStorage);
     }
 
-    public void execute(CompletableFuture<Void> spawns, final LevelChunk[] raw) {
+    @Override
+    protected void iterateTickingChunksFaster(final @NotNull CompletableFuture<Void> spawns) {
+        final ServerLevel world = this.level;
+        final int randomTickSpeed = world.getGameRules().getInt(GameRules.RULE_RANDOMTICKING);
+        final LevelChunk[] raw = world.moonrise$getEntityTickingChunks().toArray(new LevelChunk[0]);
+
         final TickPair tickPair = computePlayerRegionsParallel();
         final RegionData[] regions = tickPair.regions();
-        final int regionCount = regions.length;
 
         ActivationRange.activateEntities(level); // Paper - EAR
-
-        final int randomTickSpeed = level.getGameRules().getInt(GameRules.RULE_RANDOMTICKING);
-        ObjectArrayList<CompletableFuture<LongOpenHashSet>> ticked = new ObjectArrayList<>(regionCount);
+        ObjectArrayList<CompletableFuture<LongOpenHashSet>> ticked = new ObjectArrayList<>(regions.length);
 
         for (final RegionData region : regions) {
             if (region == null || region.isEmpty()) {
@@ -87,9 +89,7 @@ public final class RegionizedChunkTicking extends ServerChunkCache {
                 level.tickChunk(chunk, randomTickSpeed);
             }
             for (Entity entity : region.entities()) {
-                if (!entity.moonrise$isUpdatingSectionStatus()) {
-                    tickEntity(entity);
-                }
+                tickEntity(entity);
             }
 
             return regionChunksIDs;
@@ -225,21 +225,19 @@ public final class RegionizedChunkTicking extends ServerChunkCache {
     }
 
     private void tickEntity(Entity entity) {
-        if (!entity.isRemoved()) {
-            if (!level.tickRateManager().isEntityFrozen(entity)) {
-                entity.checkDespawn();
-                // Paper - rewrite chunk system
-                Entity vehicle = entity.getVehicle();
-                if (vehicle != null) {
-                    if (!vehicle.isRemoved() && vehicle.hasPassenger(entity)) {
-                        return;
-                    }
-
-                    entity.stopRiding();
+        if (!entity.isRemoved() && !entity.moonrise$isUpdatingSectionStatus() && !level.tickRateManager().isEntityFrozen(entity)) {
+            entity.checkDespawn();
+            // Paper - rewrite chunk system
+            Entity vehicle = entity.getVehicle();
+            if (vehicle != null) {
+                if (!vehicle.isRemoved() && vehicle.hasPassenger(entity)) {
+                    return;
                 }
 
-                level.guardEntityTick(level::tickNonPassenger, entity);
+                entity.stopRiding();
             }
+
+            level.guardEntityTick(level::tickNonPassenger, entity);
         }
     }
 }
