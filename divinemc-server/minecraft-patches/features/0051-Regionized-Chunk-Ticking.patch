@@ -21,18 +21,42 @@ index 35b6f8365f4568da7bc0f4e47c39cb3690292aaf..e28d859b457ca0e24bc6dc9d6cd4a97f
              if (var2 instanceof ClosedChannelException) {
                  LOGGER.info("Connection closed during protocol change");
 diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
-index 04dd1bec1aff470e67a21fb0b25932685992ec82..72a0a80f1fffa43e143c80c689db5302f462114e 100644
+index 04dd1bec1aff470e67a21fb0b25932685992ec82..d22088a2648f1394206131302d10708c9d3484db 100644
 --- a/net/minecraft/server/level/ChunkMap.java
 +++ b/net/minecraft/server/level/ChunkMap.java
-@@ -737,7 +737,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -737,19 +737,23 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          // Paper start - optimise chunk tick iteration
          final ca.spottedleaf.moonrise.common.list.ReferenceList<net.minecraft.world.level.chunk.LevelChunk> tickingChunks = ((ca.spottedleaf.moonrise.patches.chunk_tick_iteration.ChunkTickServerLevel)this.level).moonrise$getPlayerTickingChunks();
  
 -        final LevelChunk[] raw = tickingChunks.getRawDataUnchecked();
-+        final LevelChunk[] raw = tickingChunks.toArray(new LevelChunk[0]); // DivineMC - Regionized Chunk Ticking - sync fix
-         final int size = tickingChunks.size();
+-        final int size = tickingChunks.size();
++        // DivineMC start - Regionized Chunk Ticking
++        synchronized (tickingChunks) {
++            final LevelChunk[] raw = tickingChunks.toArray(new LevelChunk[0]); // DivineMC - Regionized Chunk Ticking - sync fix
++            final int size = tickingChunks.size();
  
-         Objects.checkFromToIndex(0, size, raw.length);
+-        Objects.checkFromToIndex(0, size, raw.length);
+-        for (int i = 0; i < size; ++i) {
+-            final LevelChunk levelChunk = raw[i];
++            Objects.checkFromToIndex(0, size, raw.length);
++            for (int i = 0; i < size; ++i) {
++                final LevelChunk levelChunk = raw[i];
+ 
+-            if (!this.isChunkNearPlayer((ChunkMap)(Object)this, levelChunk.getPos(), levelChunk)) {
+-                continue;
+-            }
++                if (!this.isChunkNearPlayer((ChunkMap) (Object) this, levelChunk.getPos(), levelChunk)) {
++                    continue;
++                }
+ 
+-            output.add(levelChunk);
++                output.add(levelChunk);
++            }
+         }
++        // DivineMC end - Regionized Chunk Ticking
+         // Paper end - optimise chunk tick iteration
+     }
+ 
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
 index 6ea62fbffda38e477ef8e119608fc93793db95c3..66072f0851be5ca75f9fbef88297625272e7a597 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
@@ -185,7 +209,7 @@ index 6ea62fbffda38e477ef8e119608fc93793db95c3..66072f0851be5ca75f9fbef882976252
      private void tickSpawningChunk(LevelChunk chunk, long timeInhabited, List<MobCategory> spawnCategories, NaturalSpawner.SpawnState spawnState) {
          ChunkPos pos = chunk.getPos();
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index ca9883277c0f036c94e861f7917ca42facd3c47b..694f90490c44dc87127c9806f4d08028e6184798 100644
+index d5fd3688f2a72ef09a6206a58565cf58a61e9498..a69876e036b711091f72afe0297bd719fae30174 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -197,7 +197,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
