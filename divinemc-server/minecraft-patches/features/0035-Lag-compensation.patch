@@ -285,7 +285,7 @@ index 606c33d67fc7612b25ca23fe34769d3b179ebbd6..2d4807134e071254ce882e0bc4988242
                          // Paper start - Remove the Block Entity if it's invalid
                          } else {
 diff --git a/net/minecraft/world/level/material/LavaFluid.java b/net/minecraft/world/level/material/LavaFluid.java
-index b7c01dadd69ce314ef6066d4c5d7c27080c7af8f..f838577f0290a1d9bffb860cbeb2daaa6b19957d 100644
+index ccbaed0f81c3edb25231037950bf1559ca3e616d..f9ad547c86d553b9cc7020d3966169f1fa23cd0d 100644
 --- a/net/minecraft/world/level/material/LavaFluid.java
 +++ b/net/minecraft/world/level/material/LavaFluid.java
 @@ -190,9 +190,22 @@ public abstract class LavaFluid extends FlowingFluid {
@@ -301,9 +301,9 @@ index b7c01dadd69ce314ef6066d4c5d7c27080c7af8f..f838577f0290a1d9bffb860cbeb2daaa
 +
      @Override
      public int getTickDelay(LevelReader level) {
--        return level.dimensionType().ultraWarm() ? level.getWorldBorder().world.purpurConfig.lavaSpeedNether : level.getWorldBorder().world.purpurConfig.lavaSpeedNotNether; // Purpur - Make lava flow speed configurable
+-        return level.getWorldBorder().world != null ? (level.dimensionType().ultraWarm() ? level.getWorldBorder().world.purpurConfig.lavaSpeedNether : level.getWorldBorder().world.purpurConfig.lavaSpeedNotNether) : (level.dimensionType().ultraWarm() ? 10 : 30); // Purpur - Make lava flow speed configurable
 +        // DivineMC start - Lag compensation
-+        int original = level.dimensionType().ultraWarm() ? level.getWorldBorder().world.purpurConfig.lavaSpeedNether : level.getWorldBorder().world.purpurConfig.lavaSpeedNotNether; // Purpur - Make lava flow speed configurable
++        int original = level.getWorldBorder().world != null ? (level.dimensionType().ultraWarm() ? level.getWorldBorder().world.purpurConfig.lavaSpeedNether : level.getWorldBorder().world.purpurConfig.lavaSpeedNotNether) : (level.dimensionType().ultraWarm() ? 10 : 30); // Purpur - Make lava flow speed configurable
 +        if (level instanceof ServerLevel serverLevel) {
 +            return lagCompensation(original, serverLevel);
 +        }
