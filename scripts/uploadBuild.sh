@@ -28,11 +28,19 @@ else
 fi
 
 if [ "$COMMIT_COUNT" -gt 0 ]; then
-  COMMITS_JSON=$(git log --pretty='{"sha":"%H","message":"%s","time":"%cI"}' "$VERSION_BRANCH" -"$COMMIT_COUNT" | \
-    sed ':a;N;$!ba;s/\n/,/g' | \
-    sed 's/"/\\"/g' | \
-    sed 's/\\\\"/\\"/g')
-  COMMITS_JSON="[$COMMITS_JSON]"
+  COMMITS_JSON="["
+  FIRST=true
+  while IFS= read -r sha && IFS= read -r message && IFS= read -r time; do
+    if [ "$FIRST" = true ]; then
+      FIRST=false
+    else
+      COMMITS_JSON="$COMMITS_JSON,"
+    fi
+
+    message=$(echo "$message" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\t/\\t/g' | tr -d '\n\r')
+    COMMITS_JSON="$COMMITS_JSON{\"sha\":\"$sha\",\"message\":\"$message\",\"time\":\"$time\"}"
+  done < <(git log --pretty='%H%n%s%n%cI' "$VERSION_BRANCH" -"$COMMIT_COUNT")
+  COMMITS_JSON="$COMMITS_JSON]"
 else
   COMMITS_JSON="[]"
 fi
