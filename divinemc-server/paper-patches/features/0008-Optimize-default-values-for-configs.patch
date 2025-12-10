@@ -5,10 +5,10 @@ Subject: [PATCH] Optimize default values for configs
 
 
 diff --git a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
-index 81553c3f08bfac855b914997fb6a4e7cf2241272..6c23b24477dd24ed43932d0c5ae5d97f80d968f6 100644
+index c95bca1a3100952fb02a7bff46fcf9155b185a80..61aeb613da5c3b38124d3eeea451b13e25527878 100644
 --- a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
 +++ b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
-@@ -332,8 +332,8 @@ public class GlobalConfiguration extends ConfigurationPart {
+@@ -333,8 +333,8 @@ public class GlobalConfiguration extends ConfigurationPart {
          @Constraints.Min(4)
          public int regionFileCacheSize = 256;
          @Comment("See https://luckformula.emc.gs")
@@ -20,7 +20,7 @@ index 81553c3f08bfac855b914997fb6a4e7cf2241272..6c23b24477dd24ed43932d0c5ae5d97f
          public IntOr.Default compressionLevel = IntOr.Default.USE_DEFAULT;
          @Comment("Defines the leniency distance added on the server to the interaction range of a player when validating interact packets.")
 diff --git a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
-index e65e3068ca11836bde554a3be2540760aeb25aff..3e4381a8a76385ba9dc9bef0d8d16fce36f3647b 100644
+index 2f36c4ba409830b1392a2b728effbcc45f8b7666..6ea8459c63c2ab30a882e290cd67512934f63096 100644
 --- a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
 +++ b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
 @@ -149,8 +149,10 @@ public class WorldConfiguration extends ConfigurationPart {

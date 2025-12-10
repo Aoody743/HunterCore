@@ -209,19 +209,6 @@ index 554fc2c53b5028c8f89a0ae69a75e075ba4f4435..a3e4065916f2aa2971f4e19f0702c7a0
                  // We don't need to parse pending
                  // (async tasks must live with race-conditions if they attempt to cancel between these few lines of code)
              }
-diff --git a/src/main/java/org/bukkit/craftbukkit/util/Versioning.java b/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
-index e34ceaa77c7e538c8d6bc341c4c6f450488ce426..4aef151bd162c4c99a3eaec1854b54639980a630 100644
---- a/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
-+++ b/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
-@@ -11,7 +11,7 @@ public final class Versioning {
-     public static String getBukkitVersion() {
-         String result = "Unknown-Version";
- 
--        InputStream stream = Bukkit.class.getClassLoader().getResourceAsStream("META-INF/maven/org.purpurmc.purpur/purpur-api/pom.properties"); // Purpur - Rebrand
-+        InputStream stream = Bukkit.class.getClassLoader().getResourceAsStream("META-INF/maven/org.bxteam.divinemc/divinemc-api/pom.properties"); // DivineMC - Rebrand
-         Properties properties = new Properties();
- 
-         if (stream != null) {
 diff --git a/src/main/java/org/spigotmc/WatchdogThread.java b/src/main/java/org/spigotmc/WatchdogThread.java
 index bf0cda94d87e46149a21505fc67ddb9ad9af0838..0e5b10153821fda6056791e1c216d05a9ac8e5bc 100644
 --- a/src/main/java/org/spigotmc/WatchdogThread.java
