@@ -47,13 +47,14 @@ fi
 
 METADATA=$(cat <<EOF
 {
+  "buildNumber": ${BUILD_NUMBER},
   "channel": "$CHANNEL",
   "commits": $COMMITS_JSON
 }
 EOF
 )
 
-echo "Uploading: $PROJECT_KEY $MC_VERSION ($CHANNEL)"
+echo "Uploading: $PROJECT_KEY $MC_VERSION build #$BUILD_NUMBER ($CHANNEL)"
 
 UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
   -X POST "$API_URL/v2/projects/$PROJECT_KEY/versions/$MC_VERSION/builds/upload" \

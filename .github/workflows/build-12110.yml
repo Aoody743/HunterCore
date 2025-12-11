@@ -10,8 +10,6 @@ jobs:
   build:
     runs-on: blacksmith-8vcpu-ubuntu-2204
     if: "!contains(github.event.commits[0].message, '[ci-skip]')"
-    env:
-      BUILD_NUMBER: ${{ github.run_number }}
     outputs:
       build_number: ${{ env.BUILD_NUMBER }}
       jar_file: ${{ steps.prepare_jar.outputs.jar_file }}
@@ -85,5 +83,6 @@ jobs:
           API_KEY: ${{ secrets.ATLAS_API_KEY }}
           PROJECT_KEY: 'divinemc'
           VERSION_BRANCH: 'ver/1.21.10'
+          BUILD_NUMBER: ${{ github.run_number }}
           JAR_FILE: ${{ env.JAR_FILE }}
         run: bash scripts/uploadBuild.sh

@@ -2830,7 +2830,7 @@ index 4c3fa61566ecabf8eccea32f10aabfa7c961e4c5..1b62bc5836fbf0ddc37d8f979b4e7aa6
  
      // Paper start - Add mobcaps commands
 diff --git a/net/minecraft/world/level/ServerExplosion.java b/net/minecraft/world/level/ServerExplosion.java
-index c0c87b7c8e0b6b941fe8a63dc361504e94459d86..3c4de8b43a5658e02ddce7db9f453bfd344703e3 100644
+index ecce109b540654686efd0e34edb0fd55baa37ae6..3d08b183389027e1971559b37f742bba93d267d2 100644
 --- a/net/minecraft/world/level/ServerExplosion.java
 +++ b/net/minecraft/world/level/ServerExplosion.java
 @@ -14,8 +14,6 @@ import net.minecraft.core.BlockPos;
@@ -2842,7 +2842,7 @@ index c0c87b7c8e0b6b941fe8a63dc361504e94459d86..3c4de8b43a5658e02ddce7db9f453bfd
  import net.minecraft.world.damagesource.DamageSource;
  import net.minecraft.world.entity.Entity;
  import net.minecraft.world.entity.EntityType;
-@@ -657,10 +655,7 @@ public class ServerExplosion implements Explosion {
+@@ -658,10 +656,7 @@ public class ServerExplosion implements Explosion {
          List<BlockPos> list = this.calculateExplodedPositions();
          this.hurtEntities();
          if (this.interactsWithBlocks()) {
