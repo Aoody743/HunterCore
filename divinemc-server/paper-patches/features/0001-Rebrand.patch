@@ -27,7 +27,7 @@ index 6194d6d8952864c71cc4017a639b818e4ecccea9..46e62dead64e18691122a6dfaa1df77a
                  metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
                      Map<String, Map<String, Integer>> map = new HashMap<>();
 diff --git a/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java b/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
-index a5a7334f7a1f147945079f20aa04b4f317d9e94c..5f595378d68fb9e3f069fdb6cbd70e8927ffe7e2 100644
+index a5a7334f7a1f147945079f20aa04b4f317d9e94c..9db450c3f87c552fc01a16002b6029cfdc3a5a60 100644
 --- a/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
 +++ b/src/main/java/com/destroystokyo/paper/PaperVersionFetcher.java
 @@ -36,7 +36,7 @@ public class PaperVersionFetcher implements VersionFetcher {
@@ -35,7 +35,7 @@ index a5a7334f7a1f147945079f20aa04b4f317d9e94c..5f595378d68fb9e3f069fdb6cbd70e89
      private static final int DISTANCE_UNKNOWN = -2;
      // Purpur start - Rebrand
 -    private static final String DOWNLOAD_PAGE = "https://purpurmc.org/downloads";
-+    private static final String DOWNLOAD_PAGE = "https://github.com/BX-Team/DivineMC/releases/latest"; // DivineMC - Rebrand
++    private static final String DOWNLOAD_PAGE = "https://bxteam.org/downloads/divinemc"; // DivineMC - Rebrand
      private static int distance = DISTANCE_UNKNOWN; public int distance() { return distance; }
      // Purpur end - Rebrand
  
@@ -48,58 +48,39 @@ index a5a7334f7a1f147945079f20aa04b4f317d9e94c..5f595378d68fb9e3f069fdb6cbd70e89
          }
          final @Nullable Component history = this.getHistory();
  
-@@ -60,18 +60,13 @@ public class PaperVersionFetcher implements VersionFetcher {
-     }
- 
-     private static Component getUpdateStatusMessage(final String repo, final ServerBuildInfo build) {
--        //int distance = DISTANCE_ERROR; // Purpur - use field - Rebrand
--
--        final OptionalInt buildNumber = build.buildNumber();
--        if (buildNumber.isPresent()) {
--            distance = fetchDistanceFromSiteApi(build, buildNumber.getAsInt());
--        } else {
--            final Optional<String> gitBranch = build.gitBranch();
--            final Optional<String> gitCommit = build.gitCommit();
--            if (gitBranch.isPresent() && gitCommit.isPresent()) {
--                distance = fetchDistanceFromGitHub(repo, gitBranch.get(), gitCommit.get());
--            }
-+        // DivineMC start - Rebrand
-+        final Optional<String> gitBranch = build.gitBranch();
-+        final Optional<String> gitCommit = build.gitCommit();
-+        if (gitBranch.isPresent() && gitCommit.isPresent()) {
-+            distance = fetchDistanceFromGitHub(repo, gitBranch.get(), gitCommit.get());
-         }
-+        // DivineMC end - Rebrand
- 
-         return switch (distance) {
-             case DISTANCE_ERROR -> text("* Error obtaining version information", NamedTextColor.RED); // Purpur - Rebrand
-@@ -86,26 +81,6 @@ public class PaperVersionFetcher implements VersionFetcher {
+@@ -86,18 +86,18 @@ public class PaperVersionFetcher implements VersionFetcher {
          };
      }
  
 -    private static int fetchDistanceFromSiteApi(final ServerBuildInfo build, final int jenkinsBuild) {
--        try {
--            try (final BufferedReader reader = Resources.asCharSource(
++    // DivineMC start - Rebrand
++    private static int fetchDistanceFromSiteApi(final ServerBuildInfo build, final int localBuildNumber) {
+         try {
+             try (final BufferedReader reader = Resources.asCharSource(
 -                URI.create("https://api.purpurmc.org/v2/purpur/" + build.minecraftVersionId()).toURL(), // Purpur - Rebrand
--                StandardCharsets.UTF_8
--            ).openBufferedStream()) {
--                final JsonObject json = new Gson().fromJson(reader, JsonObject.class);
++                URI.create("https://api.bxteam.org/v2/projects/divinemc/versions/" + build.minecraftVersionId() + "/builds/latest").toURL(),
+                 StandardCharsets.UTF_8
+             ).openBufferedStream()) {
+                 final JsonObject json = new Gson().fromJson(reader, JsonObject.class);
 -                //final JsonArray builds = json.getAsJsonArray("builds"); // Purpur - Rebrand
 -                final int latest = json.getAsJsonObject("builds").getAsJsonPrimitive("latest").getAsInt(); // Purpur - Rebrand
 -                return latest - jenkinsBuild;
--            } catch (final JsonSyntaxException ex) {
++                final int latest = json.getAsJsonPrimitive("id").getAsInt();
++                return latest - localBuildNumber;
+             } catch (final JsonSyntaxException ex) {
 -                LOGGER.error("Error parsing json from Purpur's downloads API", ex); // Purpur - Rebrand
--                return DISTANCE_ERROR;
--            }
--        } catch (final IOException e) {
--            LOGGER.error("Error while parsing version", e);
--            return DISTANCE_ERROR;
--        }
--    }
--
++                LOGGER.error("Error parsing json from DivineMC's downloads API", ex);
+                 return DISTANCE_ERROR;
+             }
+         } catch (final IOException e) {
+@@ -105,6 +105,7 @@ public class PaperVersionFetcher implements VersionFetcher {
+             return DISTANCE_ERROR;
+         }
+     }
++    // DivineMC end - Rebrand
+ 
      // Contributed by Techcable <Techcable@outlook.com> in GH-65
      private static int fetchDistanceFromGitHub(final String repo, final String branch, final String hash) {
-         try {
 diff --git a/src/main/java/com/destroystokyo/paper/console/PaperConsole.java b/src/main/java/com/destroystokyo/paper/console/PaperConsole.java
 index bc7e4e5560708fea89c584b1d8b471f4966f311a..6567ff18cb1c21230565c2d92caf3a7f7f915c17 100644
 --- a/src/main/java/com/destroystokyo/paper/console/PaperConsole.java
