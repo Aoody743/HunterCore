@@ -32,10 +32,10 @@ index d7398b1ecf2660c29fb7d106b48fe02d3736603e..ab499a7eaccdc1578ec64f90f54f79b0
          }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 21ecf7a0c607eebdd28aa26474a363beb7b57b72..1a111cabac9995aa481baaf2fe7bfbf02a296b96 100644
+index 722717120a9a2da55386154b636632ee13b9b0e9..268586de0cca16bfffad641c1255e6f3b9cabf0c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -2716,7 +2716,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -2725,7 +2725,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
          Iterator<AttributeInstance> iterator = collection.iterator();
          while (iterator.hasNext()) {
              AttributeInstance genericInstance = iterator.next();
