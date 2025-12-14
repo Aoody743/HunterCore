@@ -28,7 +28,7 @@ DivineMC is a multi-functional fork of [Purpur](https://github.com/PurpurMC/Purp
 ## 📥 Downloading & Installing
 If you want to install DivineMC, you can read our [installation documentation](https://bxteam.org/docs/divinemc/getting-started/installation).
 
-You can find the latest successful build in [Releases](https://github.com/BX-Team/DivineMC/releases) or you can use [MCJars](https://mcjars.app/DIVINEMC/versions) website.
+You can find the latest successful builds on our [website](https://bxteam.org/downloads/divinemc) or on [MCJars](https://mcjars.app/DIVINEMC/versions).
 
 ## 📦 Building and setting up
 Run the following commands in the root directory:
@@ -53,7 +53,7 @@ For anything else you can refer to our [contribution guide](https://bxteam.org/d
 <dependency>
   <groupId>org.bxteam.divinemc</groupId>
   <artifactId>divinemc-api</artifactId>
-  <version>1.21.10-R0.1-SNAPSHOT</version>
+  <version>1.21.11-R0.1-SNAPSHOT</version>
   <scope>provided</scope>
 </dependency>
 ```
@@ -66,11 +66,11 @@ repositories {
 ```
 ```kotlin
 dependencies {
-    compileOnly("org.bxteam.divinemc:divinemc-api:1.21.10-R0.1-SNAPSHOT")
+    compileOnly("org.bxteam.divinemc:divinemc-api:1.21.11-R0.1-SNAPSHOT")
 }
 ```
 
-We also have a [Javadoc](https://repo.bxteam.org/javadoc/snapshots/org/bxteam/divinemc/divinemc-api/1.21.10-R0.1-SNAPSHOT/raw/index.html) for the API.
+We also have a [Javadoc](https://repo.bxteam.org/javadoc/snapshots/org/bxteam/divinemc/divinemc-api/1.21.11-R0.1-SNAPSHOT/raw/index.html) for the API.
 
 ## ⚖️ License
 DivineMC is licensed under the GNU General Public License v3.0. You can find the license [here](LICENSE).

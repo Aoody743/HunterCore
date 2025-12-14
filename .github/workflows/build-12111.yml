@@ -1,9 +1,9 @@
-name: Build DivineMC 1.21.10
+name: Build DivineMC 1.21.11
 
 on:
   push:
     branches:
-      - "ver/1.21.10"
+      - "ver/1.21.11"
   workflow_dispatch:
 
 jobs:
@@ -91,7 +91,7 @@ jobs:
             try {
               await github.rest.git.updateRef({
                 owner: context.repo.owner,
-                repo: context. repo.repo,
+                repo: context.repo.repo,
                 ref: `tags/${tag}`,
                 sha: context.sha,
                 force: true
@@ -99,11 +99,11 @@ jobs:
               console.log(`✅ Tag ${tag} updated successfully`);
             } catch (error) {
               if (error.status === 404) {
-                await github.rest.git. createRef({
+                await github.rest.git.createRef({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   ref: ref,
-                  sha: context. sha
+                  sha: context.sha
                 });
                 console.log(`✅ Tag ${tag} created successfully`);
               } else {
