@@ -5,7 +5,7 @@ Subject: [PATCH] Entity Status Lock
 
 
 diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
-index b2bcfb3557a0326fd7ec1059f95d6da4568dfd80..5b3e8951c619cc2af023d13c2067b8d3df9e76e3 100644
+index 2dfd412344a0e57f25a08d9c65656a13113baa4e..e58e29524e1ad70b6e33fb866178157c5cec61d3 100644
 --- a/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
 +++ b/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
 @@ -225,8 +225,10 @@ public final class ChunkEntitySlices {

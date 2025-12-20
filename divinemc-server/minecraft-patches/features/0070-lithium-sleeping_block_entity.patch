@@ -96,7 +96,7 @@ index 6489b47810b0431c350098d574469bbe0adcd726..9e67466397fe5cd903154e89e00e9a8a
  
      int getContainerSize();
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index e18f4d60e94054f7f7ebbd066ff3ae45ce441507..9f463bfa228d791eede8d1131749dd08aebe786a 100644
+index 36acef56faf73bd9c0afa987775c6f7bebfc66e1..f7ca136af6f75e6be362c0f797970b447f1dbe89 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -5127,6 +5127,18 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name

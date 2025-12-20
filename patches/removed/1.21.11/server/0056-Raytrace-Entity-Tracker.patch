@@ -9,6 +9,8 @@ Original license: Custom License
 Original project: https://github.com/LogisticsCraft/OcclusionCulling
 Original license: MIT
 
+Will be rewrited later, currently not ready for production use.
+
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
 index 65a72cedfd3f3da0323b553afe0e9a515d4f3986..5893372688c9355759602645577cdbab7e6e3716 100644
 --- a/net/minecraft/world/entity/Entity.java
