@@ -187,7 +187,7 @@ index 1e00a7bd89d885cabb4b9ca3c86fbd8cd93cebf5..4fb31f578c2a4a5dc137c38de8f64159
 +    // DivineMC end - lithium: equipment_tracking
  }
 diff --git a/net/minecraft/world/entity/LivingEntity.java b/net/minecraft/world/entity/LivingEntity.java
-index 2005a3787b4b74913d02b09dac27cee8db9ec0ca..4d14baa31657287b6e565bf7c64d964db28afebc 100644
+index 2dc6a0df89a88ed1b811bd5ea8fe31ac44b33cd2..4412d8f67c0521bf0ce87cacf249a1f8384552ad 100644
 --- a/net/minecraft/world/entity/LivingEntity.java
 +++ b/net/minecraft/world/entity/LivingEntity.java
 @@ -440,9 +440,17 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
@@ -210,7 +210,7 @@ index 2005a3787b4b74913d02b09dac27cee8db9ec0ca..4d14baa31657287b6e565bf7c64d964d
  
          super.baseTick();
          if (this.isAlive() && this.level() instanceof ServerLevel serverLevel1) {
-@@ -3585,6 +3593,7 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
+@@ -3597,6 +3605,7 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
      public void detectEquipmentUpdates() {
          Map<EquipmentSlot, ItemStack> map = this.collectEquipmentChanges();
          if (map != null) {
@@ -218,7 +218,7 @@ index 2005a3787b4b74913d02b09dac27cee8db9ec0ca..4d14baa31657287b6e565bf7c64d964d
              this.handleHandSwap(map);
              if (!map.isEmpty()) {
                  this.handleEquipmentChanges(map);
-@@ -3593,6 +3602,14 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
+@@ -3605,6 +3614,14 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
      }
  
      private @Nullable Map<EquipmentSlot, ItemStack> collectEquipmentChanges() {

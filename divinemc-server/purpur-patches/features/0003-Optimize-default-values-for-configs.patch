@@ -18,10 +18,10 @@ index c6abcc520f11538532cf22a550e8741056f68e6a..2257a8ac0b31f4c353fa50d9a4f43b1e
          useAlternateKeepAlive = getBoolean("settings.use-alternate-keepalive", useAlternateKeepAlive);
      }
 diff --git a/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java b/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
-index 9236c5b6c11885f0cea49fa7c4a35c4dbcad3b24..975608ac58b800ba01c613dfcf78e4be3b8ef3ef 100644
+index 2d4141ab95036250dd870c85205079cd55ede16d..1964f4897f0758cfd3c15252bc7fef5dff4cc723 100644
 --- a/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
 +++ b/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
-@@ -3342,8 +3342,8 @@ public class PurpurWorldConfig {
+@@ -3337,8 +3337,8 @@ public class PurpurWorldConfig {
      public boolean villagerDisplayTradeItem = true;
      public int villagerSpawnIronGolemRadius = 0;
      public int villagerSpawnIronGolemLimit = 0;

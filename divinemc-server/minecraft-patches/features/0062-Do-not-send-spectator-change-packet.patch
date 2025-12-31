@@ -5,7 +5,7 @@ Subject: [PATCH] Do not send spectator change packet
 
 
 diff --git a/net/minecraft/server/level/ServerPlayerGameMode.java b/net/minecraft/server/level/ServerPlayerGameMode.java
-index df6ebb53ec75f4a66e397100f4ef85978a1db3c5..e80380d9de4fc6e2123ce582ad26bbfffb0ca55b 100644
+index e9c58fc9bb16f8605410fe85971a7d4b1c3d3915..04f5473d3a49717efb9a1b1daf1c2392159f068b 100644
 --- a/net/minecraft/server/level/ServerPlayerGameMode.java
 +++ b/net/minecraft/server/level/ServerPlayerGameMode.java
 @@ -84,10 +84,7 @@ public class ServerPlayerGameMode {
@@ -20,7 +20,7 @@ index df6ebb53ec75f4a66e397100f4ef85978a1db3c5..e80380d9de4fc6e2123ce582ad26bbff
              this.level.updateSleepingPlayerList();
              if (gameModeForPlayer == GameType.CREATIVE) {
                  this.player.resetCurrentImpulseContext();
-@@ -592,4 +589,17 @@ public class ServerPlayerGameMode {
+@@ -606,4 +603,17 @@ public class ServerPlayerGameMode {
          return false;
      }
      // Purpur end - Shift right click to use exp for mending
@@ -39,7 +39,7 @@ index df6ebb53ec75f4a66e397100f4ef85978a1db3c5..e80380d9de4fc6e2123ce582ad26bbff
 +    // DivineMC end - Do not send spectator change packet
  }
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index d5b649811508b113326f459251522a962148fe9b..27ec5a0ed3211b6df2feb8fdc69d7a1f43fe2fa8 100644
+index cac2f1f35b7776f0d08de3607443371604bc633d..478002381c6df4e957df3020316a68c747a7d43a 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -264,6 +264,7 @@ public abstract class PlayerList {

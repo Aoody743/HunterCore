@@ -5,10 +5,10 @@ Subject: [PATCH] Configurable movement speed for entities
 
 
 diff --git a/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java b/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
-index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3fc40aba0c 100644
+index 1964f4897f0758cfd3c15252bc7fef5dff4cc723..d028db3245c26eb91cf446c86751d28c40c117b1 100644
 --- a/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
 +++ b/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
-@@ -1753,6 +1753,7 @@ public class PurpurWorldConfig {
+@@ -1748,6 +1748,7 @@ public class PurpurWorldConfig {
      public boolean drownedTakeDamageFromWater = false;
      public boolean drownedBreakDoors = false;
      public boolean drownedAlwaysDropExp = false;
@@ -16,7 +16,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      private void drownedSettings() {
          drownedRidable = getBoolean("mobs.drowned.ridable", drownedRidable);
          drownedRidableInWater = getBoolean("mobs.drowned.ridable-in-water", drownedRidableInWater);
-@@ -1771,6 +1772,7 @@ public class PurpurWorldConfig {
+@@ -1766,6 +1767,7 @@ public class PurpurWorldConfig {
          drownedTakeDamageFromWater = getBoolean("mobs.drowned.takes-damage-from-water", drownedTakeDamageFromWater);
          drownedBreakDoors = getBoolean("mobs.drowned.can-break-doors", drownedBreakDoors);
          drownedAlwaysDropExp = getBoolean("mobs.drowned.always-drop-exp", drownedAlwaysDropExp);
@@ -24,7 +24,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      }
  
      public boolean elderGuardianRidable = false;
-@@ -2198,6 +2200,7 @@ public class PurpurWorldConfig {
+@@ -2193,6 +2195,7 @@ public class PurpurWorldConfig {
      public boolean huskJockeyTryExistingChickens = true;
      public boolean huskTakeDamageFromWater = false;
      public boolean huskAlwaysDropExp = false;
@@ -32,7 +32,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      private void huskSettings() {
          huskRidable = getBoolean("mobs.husk.ridable", huskRidable);
          huskRidableInWater = getBoolean("mobs.husk.ridable-in-water", huskRidableInWater);
-@@ -2215,6 +2218,7 @@ public class PurpurWorldConfig {
+@@ -2210,6 +2213,7 @@ public class PurpurWorldConfig {
          huskJockeyTryExistingChickens = getBoolean("mobs.husk.jockey.try-existing-chickens", huskJockeyTryExistingChickens);
          huskTakeDamageFromWater = getBoolean("mobs.husk.takes-damage-from-water", huskTakeDamageFromWater);
          huskAlwaysDropExp = getBoolean("mobs.husk.always-drop-exp", huskAlwaysDropExp);
@@ -40,7 +40,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      }
  
      public boolean illusionerRidable = false;
-@@ -3625,6 +3629,7 @@ public class PurpurWorldConfig {
+@@ -3620,6 +3624,7 @@ public class PurpurWorldConfig {
      public boolean zombieTakeDamageFromWater = false;
      public boolean zombieAlwaysDropExp = false;
      public double zombieHeadVisibilityPercent = 0.5D;
@@ -48,7 +48,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      private void zombieSettings() {
          zombieRidable = getBoolean("mobs.zombie.ridable", zombieRidable);
          zombieRidableInWater = getBoolean("mobs.zombie.ridable-in-water", zombieRidableInWater);
-@@ -3650,6 +3655,7 @@ public class PurpurWorldConfig {
+@@ -3645,6 +3650,7 @@ public class PurpurWorldConfig {
          zombieTakeDamageFromWater = getBoolean("mobs.zombie.takes-damage-from-water", zombieTakeDamageFromWater);
          zombieAlwaysDropExp = getBoolean("mobs.zombie.always-drop-exp", zombieAlwaysDropExp);
          zombieHeadVisibilityPercent = getDouble("mobs.zombie.head-visibility-percent", zombieHeadVisibilityPercent);
@@ -56,7 +56,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      }
  
      public boolean zombieHorseRidable = false;
-@@ -3714,6 +3720,7 @@ public class PurpurWorldConfig {
+@@ -3709,6 +3715,7 @@ public class PurpurWorldConfig {
      public int zombieVillagerCuringTimeMax = 6000;
      public boolean zombieVillagerCureEnabled = true;
      public boolean zombieVillagerAlwaysDropExp = false;
@@ -64,7 +64,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      private void zombieVillagerSettings() {
          zombieVillagerRidable = getBoolean("mobs.zombie_villager.ridable", zombieVillagerRidable);
          zombieVillagerRidableInWater = getBoolean("mobs.zombie_villager.ridable-in-water", zombieVillagerRidableInWater);
-@@ -3734,6 +3741,7 @@ public class PurpurWorldConfig {
+@@ -3729,6 +3736,7 @@ public class PurpurWorldConfig {
          zombieVillagerCuringTimeMax = getInt("mobs.zombie_villager.curing_time.max", zombieVillagerCuringTimeMax);
          zombieVillagerCureEnabled = getBoolean("mobs.zombie_villager.cure.enabled", zombieVillagerCureEnabled);
          zombieVillagerAlwaysDropExp = getBoolean("mobs.zombie_villager.always-drop-exp", zombieVillagerAlwaysDropExp);
@@ -72,7 +72,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      }
  
      public boolean zombifiedPiglinRidable = false;
-@@ -3748,6 +3756,7 @@ public class PurpurWorldConfig {
+@@ -3743,6 +3751,7 @@ public class PurpurWorldConfig {
      public boolean zombifiedPiglinCountAsPlayerKillWhenAngry = false;
      public boolean zombifiedPiglinTakeDamageFromWater = false;
      public boolean zombifiedPiglinAlwaysDropExp = false;
@@ -80,7 +80,7 @@ index 975608ac58b800ba01c613dfcf78e4be3b8ef3ef..57bbcf0ef659e4f0954b994d40468b3f
      private void zombifiedPiglinSettings() {
          zombifiedPiglinRidable = getBoolean("mobs.zombified_piglin.ridable", zombifiedPiglinRidable);
          zombifiedPiglinRidableInWater = getBoolean("mobs.zombified_piglin.ridable-in-water", zombifiedPiglinRidableInWater);
-@@ -3769,6 +3778,7 @@ public class PurpurWorldConfig {
+@@ -3764,6 +3773,7 @@ public class PurpurWorldConfig {
          zombifiedPiglinCountAsPlayerKillWhenAngry = getBoolean("mobs.zombified_piglin.count-as-player-kill-when-angry", zombifiedPiglinCountAsPlayerKillWhenAngry);
          zombifiedPiglinTakeDamageFromWater = getBoolean("mobs.zombified_piglin.takes-damage-from-water", zombifiedPiglinTakeDamageFromWater);
          zombifiedPiglinAlwaysDropExp = getBoolean("mobs.zombified_piglin.always-drop-exp", zombifiedPiglinAlwaysDropExp);

@@ -96,7 +96,7 @@ index 6489b47810b0431c350098d574469bbe0adcd726..9e67466397fe5cd903154e89e00e9a8a
  
      int getContainerSize();
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 36acef56faf73bd9c0afa987775c6f7bebfc66e1..f7ca136af6f75e6be362c0f797970b447f1dbe89 100644
+index 85bbf4d2a62de10a4d103b76ba03a23c967dff9e..33b82ac2812148581a9030900f56288df3a2343f 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -5127,6 +5127,18 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
@@ -264,10 +264,10 @@ index 79541b56a07d10de450f63945d0849a7f320da6c..bc09bd428ed2dc8c2b6e42cab2192f48
 +    // DivineMC end - lithium: sleeping_block_entity
  }
 diff --git a/net/minecraft/world/inventory/AbstractContainerMenu.java b/net/minecraft/world/inventory/AbstractContainerMenu.java
-index c794021c49b67463326d3c0335e623350ca27b27..f01ad6faeb14ebdd1972e4ff1d7a1c7a936d87fb 100644
+index 96dc93287f639912cc34f9bdeb131aa055931d36..d65c35a191ae3c078716bb614e9529ae0a2b3063 100644
 --- a/net/minecraft/world/inventory/AbstractContainerMenu.java
 +++ b/net/minecraft/world/inventory/AbstractContainerMenu.java
-@@ -902,6 +902,12 @@ public abstract class AbstractContainerMenu {
+@@ -898,6 +898,12 @@ public abstract class AbstractContainerMenu {
          } else {
              float f = 0.0F;
  
