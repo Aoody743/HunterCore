@@ -58,7 +58,7 @@ index 27144f8572eba20e1ced8d8eff0205925d23df3f..34f45b931a86987412c6c23b3dcdaf5c
      }
  
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index 809bd6e35b629f73b5a93cd00225a90aa7fa89b7..27b3d6109a4b1b82dd54aaf475a01a4250ed10f2 100644
+index 809bd6e35b629f73b5a93cd00225a90aa7fa89b7..518235b3e9bda992f408a6996331a1054fe928a3 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
 @@ -56,7 +56,7 @@ import org.slf4j.Logger;
@@ -176,7 +176,7 @@ index 809bd6e35b629f73b5a93cd00225a90aa7fa89b7..27b3d6109a4b1b82dd54aaf475a01a42
 +            spawns = CompletableFuture.runAsync(() -> naturalSpawn(filteredSpawningCategories, timeInhabited), org.bxteam.divinemc.async.rct.RegionizedChunkTicking.REGION_EXECUTOR);
 +        } else {
 +            naturalSpawn(filteredSpawningCategories, timeInhabited);
-+            spawns = new CompletableFuture<>();
++            spawns = CompletableFuture.completedFuture(null);
 +        }
 +        // DivineMC end - Regionized Chunk Ticking
 +
@@ -209,7 +209,7 @@ index 809bd6e35b629f73b5a93cd00225a90aa7fa89b7..27b3d6109a4b1b82dd54aaf475a01a42
      private void tickSpawningChunk(LevelChunk chunk, long timeInhabited, List<MobCategory> spawnCategories, NaturalSpawner.SpawnState spawnState) {
          ChunkPos pos = chunk.getPos();
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 259b1bd7f46acbe05681cb3e58bf7bf921fcf440..eb2ed61faac0d4803298325dc5aeec3c6b0a1ad2 100644
+index e1c4e246a3d05a92548f2c98f7962655334e72ab..1d58c0d02f1164cfc842b7b234fc2c09ab07c335 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -204,7 +204,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
@@ -325,7 +325,7 @@ index 259b1bd7f46acbe05681cb3e58bf7bf921fcf440..eb2ed61faac0d4803298325dc5aeec3c
              try {
                  this.isUpdatingNavigations = true;
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 09395fa632835ae34bdf01002ae60b5b84b52398..2c6f6f3bf53529673415987904465a2362aad96e 100644
+index 52797da6d82f2a1e319a2eabdb5411be74150e33..e23d3822cf60619373ff5e9a2c2e9ad203b6be32 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -113,7 +113,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
