@@ -26,10 +26,10 @@ index db4829b55a1cc5b5928afe88633c545dd4cd72aa..76133bca70e871d562816a7551ff91d1
   
          // DivineMC start - Pufferfish: SIMD Support
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 6f41d5b730ed9840a64b7c50e966353f907dbeaf..6ad24d39f15373afb353c59928c29ee874f69ea9 100644
+index a78cac2454d05ce4c266e9142badadd8fa60e173..3411190aace37f6ce39675828563d15c4a0695e2 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
-@@ -167,6 +167,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -166,6 +166,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
      // Paper end - add paper world config
  
      public final org.purpurmc.purpur.PurpurWorldConfig purpurConfig; // Purpur - Purpur config files
@@ -37,7 +37,7 @@ index 6f41d5b730ed9840a64b7c50e966353f907dbeaf..6ad24d39f15373afb353c59928c29ee8
      public static @Nullable BlockPos lastPhysicsProblem; // Spigot
      private int tileTickPosition;
      public final Map<ServerExplosion.CacheKey, Float> explosionDensityCache = new java.util.HashMap<>(); // Paper - Optimize explosions
-@@ -891,6 +892,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -890,6 +891,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
          this.spigotConfig = new org.spigotmc.SpigotWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) levelData).getLevelName()); // Spigot
          this.paperConfig = paperWorldConfigCreator.apply(this.spigotConfig); // Paper - create paper world config
          this.purpurConfig = new org.purpurmc.purpur.PurpurWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) levelData).getLevelName(), environment); // Purpur - Purpur config files

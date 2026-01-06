@@ -325,7 +325,7 @@ index e1c4e246a3d05a92548f2c98f7962655334e72ab..1d58c0d02f1164cfc842b7b234fc2c09
              try {
                  this.isUpdatingNavigations = true;
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 52797da6d82f2a1e319a2eabdb5411be74150e33..e23d3822cf60619373ff5e9a2c2e9ad203b6be32 100644
+index cfd66fd55d720ed521e85e78ec44ebff44abc119..e89c4b1ac718f13d2affd6a96504460f391bfe27 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -113,7 +113,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
@@ -337,7 +337,7 @@ index 52797da6d82f2a1e319a2eabdb5411be74150e33..e23d3822cf60619373ff5e9a2c2e9ad2
      private boolean tickingBlockEntities;
      public final Thread thread;
      private final boolean isDebug;
-@@ -145,7 +145,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -144,7 +144,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
      public boolean captureBlockStates = false;
      public boolean captureTreeGeneration = false;
@@ -346,7 +346,7 @@ index 52797da6d82f2a1e319a2eabdb5411be74150e33..e23d3822cf60619373ff5e9a2c2e9ad2
      public Map<BlockPos, BlockEntity> capturedTileEntities = new java.util.LinkedHashMap<>(); // Paper - Retain block place order when capturing blockstates
      @Nullable
      public List<net.minecraft.world.entity.item.ItemEntity> captureDrops;
-@@ -1454,10 +1454,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1453,10 +1453,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
      public void tickBlockEntities() {
          this.tickingBlockEntities = true;

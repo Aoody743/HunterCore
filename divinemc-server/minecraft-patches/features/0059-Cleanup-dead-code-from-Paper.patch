@@ -102,7 +102,7 @@ index 1d58c0d02f1164cfc842b7b234fc2c09ab07c335..d3f285c0a490ddeca8288f0ead188902
  
      private void tickPassenger(Entity ridingEntity, Entity passengerEntity, final boolean isActive) { // Paper - EAR 2
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index f0e42763ac179b4f9e71e3829018c4460a11c443..867d7fda2a47c8b756d6a8c2874149d8cf030fac 100644
+index c66492176b8c98ec698cd5cacfb4d100d217408b..234dd43e9f027e5a9a933ef3f4fc993d2540de58 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -1132,29 +1132,10 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
@@ -149,7 +149,7 @@ index f0e42763ac179b4f9e71e3829018c4460a11c443..867d7fda2a47c8b756d6a8c2874149d8
      }
  
      private void applyMovementEmissionAndPlaySound(Entity.MovementEmission movementEmission, Vec3 movement, BlockPos pos, BlockState state) {
-@@ -5020,9 +4994,7 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+@@ -5019,9 +4993,7 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
  
      public void setDeltaMovement(Vec3 deltaMovement) {
          if (deltaMovement.isFinite()) {
@@ -159,7 +159,7 @@ index f0e42763ac179b4f9e71e3829018c4460a11c443..867d7fda2a47c8b756d6a8c2874149d8
          }
      }
  
-@@ -5123,9 +5095,7 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+@@ -5122,9 +5094,7 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
          }
          // Paper end - Block invalid positions and bounding box
          if (this.position.x != x || this.position.y != y || this.position.z != z) {

@@ -663,10 +663,10 @@ index 2bb51cf48c55cf9a00eb497c987842c17a1fb9fd..09dbd6061cf77f59a2be453b6d639cd0
                      @Override
                      protected float distance(Node first, Node second) {
 diff --git a/net/minecraft/world/entity/monster/zombie/Drowned.java b/net/minecraft/world/entity/monster/zombie/Drowned.java
-index e7724c599c0b69bf786041db647a170c9b0a2a71..fb3729bb9e1a6ea70a1fe2d4666a1093e04399d6 100644
+index 07a611f1a128fb989981cefca426128b7231a91c..f03643b557ed5ab1f06f6ad2fa99396f517487c2 100644
 --- a/net/minecraft/world/entity/monster/zombie/Drowned.java
 +++ b/net/minecraft/world/entity/monster/zombie/Drowned.java
-@@ -325,7 +325,7 @@ public class Drowned extends Zombie implements RangedAttackMob {
+@@ -332,7 +332,7 @@ public class Drowned extends Zombie implements RangedAttackMob {
  
      protected boolean closeToNextPos() {
          Path path = this.getNavigation().getPath();

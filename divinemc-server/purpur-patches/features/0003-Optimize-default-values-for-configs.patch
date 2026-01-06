@@ -5,7 +5,7 @@ Subject: [PATCH] Optimize default values for configs
 
 
 diff --git a/src/main/java/org/purpurmc/purpur/PurpurConfig.java b/src/main/java/org/purpurmc/purpur/PurpurConfig.java
-index c6abcc520f11538532cf22a550e8741056f68e6a..2257a8ac0b31f4c353fa50d9a4f43b1e8014cbc7 100644
+index 46e298983e2d162bc53979e31f061a0106bb7b51..17be70e2a02afa1660c1e3486895e6b3a7fcd465 100644
 --- a/src/main/java/org/purpurmc/purpur/PurpurConfig.java
 +++ b/src/main/java/org/purpurmc/purpur/PurpurConfig.java
 @@ -246,7 +246,7 @@ public class PurpurConfig {
@@ -18,10 +18,10 @@ index c6abcc520f11538532cf22a550e8741056f68e6a..2257a8ac0b31f4c353fa50d9a4f43b1e
          useAlternateKeepAlive = getBoolean("settings.use-alternate-keepalive", useAlternateKeepAlive);
      }
 diff --git a/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java b/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
-index 2d4141ab95036250dd870c85205079cd55ede16d..1964f4897f0758cfd3c15252bc7fef5dff4cc723 100644
+index d60c34df822714a45135f9171c29d49bb4a67a82..2c83a544884fc5ae429cd57e8638ed98c2b7ef3f 100644
 --- a/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
 +++ b/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
-@@ -3337,8 +3337,8 @@ public class PurpurWorldConfig {
+@@ -3382,8 +3382,8 @@ public class PurpurWorldConfig {
      public boolean villagerDisplayTradeItem = true;
      public int villagerSpawnIronGolemRadius = 0;
      public int villagerSpawnIronGolemLimit = 0;
@@ -29,6 +29,6 @@ index 2d4141ab95036250dd870c85205079cd55ede16d..1964f4897f0758cfd3c15252bc7fef5d
 -    public int villagerNearestBedSensorSearchRadius = 48;
 +    public int villagerAcquirePoiSearchRadius = 16; // DivineMC - Optimize default values for configs
 +    public int villagerNearestBedSensorSearchRadius = 16; // DivineMC - Optimize default values for configs
+     public Boolean villagerCanPickUpLoot = null;
      private void villagerSettings() {
          villagerRidable = getBoolean("mobs.villager.ridable", villagerRidable);
-         villagerRidableInWater = getBoolean("mobs.villager.ridable-in-water", villagerRidableInWater);

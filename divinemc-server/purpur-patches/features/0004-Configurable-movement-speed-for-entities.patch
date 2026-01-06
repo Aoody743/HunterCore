@@ -5,85 +5,85 @@ Subject: [PATCH] Configurable movement speed for entities
 
 
 diff --git a/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java b/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
-index 1964f4897f0758cfd3c15252bc7fef5dff4cc723..d028db3245c26eb91cf446c86751d28c40c117b1 100644
+index 2c83a544884fc5ae429cd57e8638ed98c2b7ef3f..6e19e32710f2c66696ceb6b0d13b166c49d31a6d 100644
 --- a/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
 +++ b/src/main/java/org/purpurmc/purpur/PurpurWorldConfig.java
-@@ -1748,6 +1748,7 @@ public class PurpurWorldConfig {
-     public boolean drownedTakeDamageFromWater = false;
+@@ -1772,6 +1772,7 @@ public class PurpurWorldConfig {
      public boolean drownedBreakDoors = false;
      public boolean drownedAlwaysDropExp = false;
+     public Boolean drownedCanPickUpLoot = null;
 +    public double drownedMovementSpeed = 0.23F; // DivineMC - Configurable movement speed for entities
      private void drownedSettings() {
          drownedRidable = getBoolean("mobs.drowned.ridable", drownedRidable);
          drownedRidableInWater = getBoolean("mobs.drowned.ridable-in-water", drownedRidableInWater);
-@@ -1766,6 +1767,7 @@ public class PurpurWorldConfig {
-         drownedTakeDamageFromWater = getBoolean("mobs.drowned.takes-damage-from-water", drownedTakeDamageFromWater);
+@@ -1791,6 +1792,7 @@ public class PurpurWorldConfig {
          drownedBreakDoors = getBoolean("mobs.drowned.can-break-doors", drownedBreakDoors);
          drownedAlwaysDropExp = getBoolean("mobs.drowned.always-drop-exp", drownedAlwaysDropExp);
+         drownedCanPickUpLoot = getBooleanOrDefault("mobs.drowned.can-pick-up-loot", drownedCanPickUpLoot);
 +        drownedMovementSpeed = getDouble("mobs.drowned.movement-speed", drownedMovementSpeed); // DivineMC - Configurable movement speed for entities
      }
  
      public boolean elderGuardianRidable = false;
-@@ -2193,6 +2195,7 @@ public class PurpurWorldConfig {
-     public boolean huskJockeyTryExistingChickens = true;
+@@ -2221,6 +2223,7 @@ public class PurpurWorldConfig {
      public boolean huskTakeDamageFromWater = false;
      public boolean huskAlwaysDropExp = false;
+     public Boolean huskCanPickUpLoot = null;
 +    public double huskMovementSpeed = 0.23F; // DivineMC - Configurable movement speed for entities
      private void huskSettings() {
          huskRidable = getBoolean("mobs.husk.ridable", huskRidable);
          huskRidableInWater = getBoolean("mobs.husk.ridable-in-water", huskRidableInWater);
-@@ -2210,6 +2213,7 @@ public class PurpurWorldConfig {
-         huskJockeyTryExistingChickens = getBoolean("mobs.husk.jockey.try-existing-chickens", huskJockeyTryExistingChickens);
+@@ -2239,6 +2242,7 @@ public class PurpurWorldConfig {
          huskTakeDamageFromWater = getBoolean("mobs.husk.takes-damage-from-water", huskTakeDamageFromWater);
          huskAlwaysDropExp = getBoolean("mobs.husk.always-drop-exp", huskAlwaysDropExp);
+         huskCanPickUpLoot = getBooleanOrDefault("mobs.husk.can-pick-up-loot", huskCanPickUpLoot);
 +        huskMovementSpeed = getDouble("mobs.husk.movement-speed", huskMovementSpeed); // DivineMC - Configurable movement speed for entities
      }
  
      public boolean illusionerRidable = false;
-@@ -3620,6 +3624,7 @@ public class PurpurWorldConfig {
-     public boolean zombieTakeDamageFromWater = false;
+@@ -3672,6 +3676,7 @@ public class PurpurWorldConfig {
      public boolean zombieAlwaysDropExp = false;
      public double zombieHeadVisibilityPercent = 0.5D;
+     public Boolean zombieCanPickUpLoot = null;
 +    public double zombieMovementSpeed = 0.23F; // DivineMC - Configurable movement speed for entities
      private void zombieSettings() {
          zombieRidable = getBoolean("mobs.zombie.ridable", zombieRidable);
          zombieRidableInWater = getBoolean("mobs.zombie.ridable-in-water", zombieRidableInWater);
-@@ -3645,6 +3650,7 @@ public class PurpurWorldConfig {
-         zombieTakeDamageFromWater = getBoolean("mobs.zombie.takes-damage-from-water", zombieTakeDamageFromWater);
+@@ -3698,6 +3703,7 @@ public class PurpurWorldConfig {
          zombieAlwaysDropExp = getBoolean("mobs.zombie.always-drop-exp", zombieAlwaysDropExp);
          zombieHeadVisibilityPercent = getDouble("mobs.zombie.head-visibility-percent", zombieHeadVisibilityPercent);
+         zombieCanPickUpLoot = getBooleanOrDefault("mobs.zombie.can-pick-up-loot", zombieCanPickUpLoot);
 +        zombieMovementSpeed = getDouble("mobs.zombie.movement-speed", zombieMovementSpeed); // DivineMC - Configurable movement speed for entities
      }
  
      public boolean zombieHorseRidable = false;
-@@ -3709,6 +3715,7 @@ public class PurpurWorldConfig {
-     public int zombieVillagerCuringTimeMax = 6000;
+@@ -3763,6 +3769,7 @@ public class PurpurWorldConfig {
      public boolean zombieVillagerCureEnabled = true;
      public boolean zombieVillagerAlwaysDropExp = false;
+     public Boolean zombieVillagerCanPickUpLoot = null;
 +    public double zombieVillagerMovementSpeed = 0.23F; // DivineMC - Configurable movement speed for entities
      private void zombieVillagerSettings() {
          zombieVillagerRidable = getBoolean("mobs.zombie_villager.ridable", zombieVillagerRidable);
          zombieVillagerRidableInWater = getBoolean("mobs.zombie_villager.ridable-in-water", zombieVillagerRidableInWater);
-@@ -3729,6 +3736,7 @@ public class PurpurWorldConfig {
-         zombieVillagerCuringTimeMax = getInt("mobs.zombie_villager.curing_time.max", zombieVillagerCuringTimeMax);
+@@ -3784,6 +3791,7 @@ public class PurpurWorldConfig {
          zombieVillagerCureEnabled = getBoolean("mobs.zombie_villager.cure.enabled", zombieVillagerCureEnabled);
          zombieVillagerAlwaysDropExp = getBoolean("mobs.zombie_villager.always-drop-exp", zombieVillagerAlwaysDropExp);
+         zombieVillagerCanPickUpLoot = getBooleanOrDefault("mobs.zombie_villager.can-pick-up-loot", zombieVillagerCanPickUpLoot);
 +        zombieVillagerMovementSpeed = getDouble("mobs.zombie_villager.movement-speed", zombieVillagerMovementSpeed); // DivineMC - Configurable movement speed for entities
      }
  
      public boolean zombifiedPiglinRidable = false;
-@@ -3743,6 +3751,7 @@ public class PurpurWorldConfig {
-     public boolean zombifiedPiglinCountAsPlayerKillWhenAngry = false;
+@@ -3799,6 +3807,7 @@ public class PurpurWorldConfig {
      public boolean zombifiedPiglinTakeDamageFromWater = false;
      public boolean zombifiedPiglinAlwaysDropExp = false;
+     public Boolean zombifiedPiglinCanPickUpLoot = null;
 +    public double zombifiedPiglinMovementSpeed = 0.23F; // DivineMC - Configurable movement speed for entities
      private void zombifiedPiglinSettings() {
          zombifiedPiglinRidable = getBoolean("mobs.zombified_piglin.ridable", zombifiedPiglinRidable);
          zombifiedPiglinRidableInWater = getBoolean("mobs.zombified_piglin.ridable-in-water", zombifiedPiglinRidableInWater);
-@@ -3764,6 +3773,7 @@ public class PurpurWorldConfig {
-         zombifiedPiglinCountAsPlayerKillWhenAngry = getBoolean("mobs.zombified_piglin.count-as-player-kill-when-angry", zombifiedPiglinCountAsPlayerKillWhenAngry);
+@@ -3821,6 +3830,7 @@ public class PurpurWorldConfig {
          zombifiedPiglinTakeDamageFromWater = getBoolean("mobs.zombified_piglin.takes-damage-from-water", zombifiedPiglinTakeDamageFromWater);
          zombifiedPiglinAlwaysDropExp = getBoolean("mobs.zombified_piglin.always-drop-exp", zombifiedPiglinAlwaysDropExp);
+         zombifiedPiglinCanPickUpLoot = getBooleanOrDefault("mobs.zombified_piglin.can-pick-up-loot", zombifiedPiglinCanPickUpLoot);
 +        zombifiedPiglinMovementSpeed = getDouble("mobs.zombified_piglin.movement-speed", zombifiedPiglinMovementSpeed); // DivineMC - Configurable movement speed for entities
      }
  

@@ -31,10 +31,10 @@ index 7e11dae67841cedde4a86e4d17000fc8dc1b32fb..9ed990da630c6385110dfdf5165a813b
  
          Plugin[] pluginClone = pluginManager.getPlugins().clone(); // Paper
 diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
-index 612bb96d16deb9da8f85355612b0cd2341eb9b9c..64d0e152becc011bd01f2fa71946e8f4c616be09 100644
+index d665dc3fbd0989eb399c55d0717bc6fd79a0db17..eaaf399978c43b00f3d8555440fd930116f7e9ff 100644
 --- a/src/main/java/org/bukkit/craftbukkit/Main.java
 +++ b/src/main/java/org/bukkit/craftbukkit/Main.java
-@@ -170,6 +170,14 @@ public class Main {
+@@ -177,6 +177,14 @@ public class Main {
                      .describedAs("Yml file");
                  // Purpur end - Purpur config files
  

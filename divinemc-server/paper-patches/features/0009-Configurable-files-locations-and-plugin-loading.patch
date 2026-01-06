@@ -18,7 +18,7 @@ index 6567ff18cb1c21230565c2d92caf3a7f7f915c17..f5bc0eff886e9e3386467f40d4f32945
                  .option(LineReader.Option.COMPLETE_IN_WORD, true);
          if (io.papermc.paper.configuration.GlobalConfiguration.get().console.enableBrigadierHighlighting) {
 diff --git a/src/main/java/io/papermc/paper/plugin/PluginInitializerManager.java b/src/main/java/io/papermc/paper/plugin/PluginInitializerManager.java
-index 70413fddd23ca1165cb5090cce4fddcb1bbca93f..ae70b84e6473fa2ed94416bf4bef88492de3e5f8 100644
+index 3200aef1ba5d079fc3790841c826b4cf3951f2cf..a2af67b86e344bdd2ee81fe8b91fa77716a0036c 100644
 --- a/src/main/java/io/papermc/paper/plugin/PluginInitializerManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/PluginInitializerManager.java
 @@ -112,6 +112,20 @@ public class PluginInitializerManager {
@@ -43,10 +43,10 @@ index 70413fddd23ca1165cb5090cce4fddcb1bbca93f..ae70b84e6473fa2ed94416bf4bef8849
          @SuppressWarnings("unchecked")
          java.util.List<Path> files = ((java.util.List<File>) optionSet.valuesOf("add-plugin")).stream().map(File::toPath).toList();
 diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
-index 64d0e152becc011bd01f2fa71946e8f4c616be09..7f5d440fb13b5ebf9c1659877874fe580323aa9d 100644
+index eaaf399978c43b00f3d8555440fd930116f7e9ff..f728e991bd67447d7a94ed5ea5d9c3182ea16bc3 100644
 --- a/src/main/java/org/bukkit/craftbukkit/Main.java
 +++ b/src/main/java/org/bukkit/craftbukkit/Main.java
-@@ -178,6 +178,52 @@ public class Main {
+@@ -185,6 +185,52 @@ public class Main {
                      .describedAs("Yml file");
                  // DivineMC end - Configuration
  

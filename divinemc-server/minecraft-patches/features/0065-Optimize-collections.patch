@@ -54,10 +54,10 @@ index b9eea26bb7e838a3b158b136d9e42f8ee93ddd8b..7721cad8962eb3f5d5f45ece9199c0d4
      public int serverViewDistance;
      public final WorldGenContext worldGenContext; // Paper - public
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 2c6f6f3bf53529673415987904465a2362aad96e..01e844df3ed46ef5ae34ae56845ae3d011567157 100644
+index e89c4b1ac718f13d2affd6a96504460f391bfe27..b4338407a658e61df1a4df702f501124b6c5cb14 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
-@@ -260,7 +260,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -259,7 +259,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
      @Override
      public final <T extends Entity> List<T> getEntitiesOfClass(final Class<T> entityClass, final AABB boundingBox, final Predicate<? super T> predicate) {
@@ -66,7 +66,7 @@ index 2c6f6f3bf53529673415987904465a2362aad96e..01e844df3ed46ef5ae34ae56845ae3d0
  
          ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemLevel)this).moonrise$getEntityLookup().getEntities(entityClass, null, boundingBox, ret, predicate);
  
-@@ -269,7 +269,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -268,7 +268,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
      @Override
      public final List<Entity> moonrise$getHardCollidingEntities(final Entity entity, final AABB box, final Predicate<? super Entity> predicate) {

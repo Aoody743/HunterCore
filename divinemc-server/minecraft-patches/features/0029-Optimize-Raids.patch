@@ -5,7 +5,7 @@ Subject: [PATCH] Optimize Raids
 
 
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 857a1ac427644a1f24a8564041ba3f41da540ef4..477cb54c89b59812af74758c841fb714a39bf6c5 100644
+index a06f31dc3eeb9cba437e9e917f2e036aac9f88af..3c8282fca40b9484ccb310276c06054552b724bc 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -229,6 +229,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
@@ -59,7 +59,7 @@ index 0248808df911c8a63cbc5e3ae67e44760b0e1871..eaf3acb203ae58f4ef11585a44d4474b
  
      public float getHealthOfLivingRaiders() {
 diff --git a/net/minecraft/world/entity/raid/Raider.java b/net/minecraft/world/entity/raid/Raider.java
-index 40984af1fc912a7b0367c530c68ee00d51173b64..2b9a4b43466dbd7b497e4fec9f82f1c84947c934 100644
+index e9a0372f5a262d13b25875d8c507fba9b5751840..fd9e3f025c72d2fceeb8d3053177543a89f57aaa 100644
 --- a/net/minecraft/world/entity/raid/Raider.java
 +++ b/net/minecraft/world/entity/raid/Raider.java
 @@ -43,9 +43,25 @@ import org.jspecify.annotations.Nullable;
@@ -124,7 +124,7 @@ index 40984af1fc912a7b0367c530c68ee00d51173b64..2b9a4b43466dbd7b497e4fec9f82f1c8
 +        // DivineMC end - Optimize Raids
 +
          private boolean cannotPickUpBanner() {
-             if (!getServerLevel(this.mob).getGameRules().get(net.minecraft.world.level.gamerules.GameRules.MOB_GRIEFING, this.mob.level().purpurConfig.pillagerMobGriefingOverride)) return true; // Paper - respect game and entity rules for picking up items // Purpur - Add mobGriefing override to everything affected
+             if (!getServerLevel(this.mob).getGameRules().get(net.minecraft.world.level.gamerules.GameRules.MOB_GRIEFING, this.mob.level().purpurConfig.pillagerCanPickUpLoot)) return true; // Paper - respect game and entity rules for picking up items // Purpur - Check mobGriefing Overrides
              if (!this.mob.hasActiveRaid()) {
 @@ -404,7 +430,7 @@ public abstract class Raider extends PatrollingMonster {
              } else if (!this.mob.canBeLeader()) {

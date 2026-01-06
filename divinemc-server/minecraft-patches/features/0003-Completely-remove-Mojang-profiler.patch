@@ -1511,7 +1511,7 @@ index 853bb92c034b6361ff8c55daf52f38a226fdae2c..a06f31dc3eeb9cba437e9e917f2e036a
              for (Entity entity : passengerEntity.getPassengers()) {
                  this.tickPassenger(passengerEntity, entity, isActive); // Paper - EAR 2
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 95722a5ec6b2e7b20bd5a6d7d9291273afb378b9..d9fa3f39737eed009c0d5abcecec49551c08f43c 100644
+index 9e0e39321add37b376cc85cd03c9bf973fc765ae..d4a6e7e6a178d2171e03aabaf7e1501f153e3413 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -105,8 +105,6 @@ import net.minecraft.util.ProblemReporter;
@@ -1765,7 +1765,7 @@ index 39a604c9a53930b53d959b1d2eb504aa964e9a58..0d0380e3955836ce125f777841477503
  
      @Override
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index c574c15820673a5b44428d28a5839e5d2729bf6c..8a9a77a2f97907e0c440258038edc8b7982a604c 100644
+index d137cc6db12f7a7032aa4ae33da7bd192bb250de..ed5d542796da7f88fc23cad33d64ff1b857077ce 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -83,8 +83,6 @@ import net.minecraft.util.Util;
@@ -1837,7 +1837,7 @@ index c574c15820673a5b44428d28a5839e5d2729bf6c..8a9a77a2f97907e0c440258038edc8b7
              }
          }
          // Paper start - detailed watchdog information
-@@ -3556,8 +3543,6 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+@@ -3555,8 +3542,6 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
              this.processPortalCooldown();
              if (this.portalProcess != null) {
                  if (this.portalProcess.processPortalTeleportation(serverLevel, this, this.canUsePortal(false))) {
@@ -1846,7 +1846,7 @@ index c574c15820673a5b44428d28a5839e5d2729bf6c..8a9a77a2f97907e0c440258038edc8b7
                      this.setPortalCooldown();
                      TeleportTransition portalDestination = this.portalProcess.getPortalDestination(serverLevel, this);
                      if (portalDestination != null) {
-@@ -3568,8 +3553,6 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+@@ -3567,8 +3552,6 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
                              this.teleport(portalDestination);
                          }
                      }
@@ -1855,7 +1855,7 @@ index c574c15820673a5b44428d28a5839e5d2729bf6c..8a9a77a2f97907e0c440258038edc8b7
                  } else if (this.portalProcess.hasExpired()) {
                      this.portalProcess = null;
                  }
-@@ -4134,15 +4117,12 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+@@ -4133,15 +4116,12 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
              entity.teleport(this.calculatePassengerTransition(teleportTransition, entity));
          }
  
@@ -1871,7 +1871,7 @@ index c574c15820673a5b44428d28a5839e5d2729bf6c..8a9a77a2f97907e0c440258038edc8b7
          return this;
      }
  
-@@ -4158,11 +4138,8 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+@@ -4157,11 +4137,8 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
              }
          }
  
@@ -1883,7 +1883,7 @@ index c574c15820673a5b44428d28a5839e5d2729bf6c..8a9a77a2f97907e0c440258038edc8b7
              return null;
          } else {
              // Paper start - Fix item duplication and teleport issues
-@@ -4182,7 +4159,6 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+@@ -4181,7 +4158,6 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
              newLevel.resetEmptyTime();
              teleportTransition.postTeleportTransition().onTransition(entityx);
              this.teleportSpectators(teleportTransition, oldLevel);
@@ -2002,7 +2002,7 @@ index 805c97bdb86e2fd1a431c63451cee78b8ce67ea3..32108ea8062436962d77e69ca7eb62cf
          // Purpur start - Ridables
          if (this.xo != this.getX() || this.yo != this.getY() || this.zo != this.getZ() || this.yRotO != this.getYRot() || this.xRotO != this.getXRot()) {
 diff --git a/net/minecraft/world/entity/Mob.java b/net/minecraft/world/entity/Mob.java
-index 615293655410eeb9b330ec4f0d4d18bb318d33fb..64b12c6617e4a787c614f0c9c1bf2ba704f45d17 100644
+index 09016282c0c6850d19e48966426d480310726a73..7b8066f677734937f71a6582fcf84435d41591fa 100644
 --- a/net/minecraft/world/entity/Mob.java
 +++ b/net/minecraft/world/entity/Mob.java
 @@ -31,8 +31,6 @@ import net.minecraft.util.debug.DebugGoalInfo;
@@ -2048,8 +2048,8 @@ index 615293655410eeb9b330ec4f0d4d18bb318d33fb..64b12c6617e4a787c614f0c9c1bf2ba7
 -        profilerFiller.pop();
      }
  
-     protected EquipmentSlot sunProtectionSlot() {
-@@ -819,42 +810,21 @@ public abstract class Mob extends LivingEntity implements EquipmentUser, Leashab
+     // Purpur start - Check mobGriefing Overrides
+@@ -825,42 +816,21 @@ public abstract class Mob extends LivingEntity implements EquipmentUser, Leashab
              return;
          }
          // Paper end - Allow nerfed mobs to jump and float
@@ -2198,7 +2198,7 @@ index c569074403b1d8b443aaa98ba9cf9bbd0e98bd2d..b1aa7294f9479f45fcde77c5ea46db9f
                  this.seen.add(id);
              } else {
 diff --git a/net/minecraft/world/entity/animal/allay/Allay.java b/net/minecraft/world/entity/animal/allay/Allay.java
-index ea7666cc10aee49e13dbdd6e3367fabaa0dcbc17..9e0fe52c81f764843580ebb5fe6a5bd6b2522794 100644
+index 8635ecfa49e2504c981dd48acbfbca5303a37611..c9e7c17b0e9cc27606b86373db406c9561e07574 100644
 --- a/net/minecraft/world/entity/animal/allay/Allay.java
 +++ b/net/minecraft/world/entity/animal/allay/Allay.java
 @@ -23,8 +23,6 @@ import net.minecraft.tags.GameEventTags;
@@ -2210,7 +2210,7 @@ index ea7666cc10aee49e13dbdd6e3367fabaa0dcbc17..9e0fe52c81f764843580ebb5fe6a5bd6
  import net.minecraft.world.InteractionHand;
  import net.minecraft.world.InteractionResult;
  import net.minecraft.world.SimpleContainer;
-@@ -268,14 +266,9 @@ public class Allay extends PathfinderMob implements InventoryCarrier, VibrationS
+@@ -275,14 +273,9 @@ public class Allay extends PathfinderMob implements InventoryCarrier, VibrationS
  
      @Override
      protected void customServerAiStep(ServerLevel level) {
@@ -2621,7 +2621,7 @@ index 460640f5512be6553f1ec69e20e27c7cc797068b..81cca68abdf5fa2e176d0121785bbdee
          if (this.isConverting()) {
              this.timeInOverworld++;
 diff --git a/net/minecraft/world/entity/monster/piglin/Piglin.java b/net/minecraft/world/entity/monster/piglin/Piglin.java
-index 49ed463ae7ef65b2630a5b914689e04fa729a40c..5ceca0b60903b6a5a51db009ac7e583eef24d119 100644
+index 6f1c3d423b7a37aa261c78a0c8f5e1cb02eee320..fd19c64fa3a1f048f5c14da9613000b9b4055e2d 100644
 --- a/net/minecraft/world/entity/monster/piglin/Piglin.java
 +++ b/net/minecraft/world/entity/monster/piglin/Piglin.java
 @@ -16,8 +16,6 @@ import net.minecraft.tags.ItemTags;
@@ -2633,7 +2633,7 @@ index 49ed463ae7ef65b2630a5b914689e04fa729a40c..5ceca0b60903b6a5a51db009ac7e583e
  import net.minecraft.world.DifficultyInstance;
  import net.minecraft.world.InteractionHand;
  import net.minecraft.world.InteractionResult;
-@@ -356,11 +354,8 @@ public class Piglin extends AbstractPiglin implements CrossbowAttackMob, Invento
+@@ -363,11 +361,8 @@ public class Piglin extends AbstractPiglin implements CrossbowAttackMob, Invento
  
      @Override
      protected void customServerAiStep(ServerLevel level) {
@@ -2646,7 +2646,7 @@ index 49ed463ae7ef65b2630a5b914689e04fa729a40c..5ceca0b60903b6a5a51db009ac7e583e
          super.customServerAiStep(level);
      }
 diff --git a/net/minecraft/world/entity/monster/piglin/PiglinBrute.java b/net/minecraft/world/entity/monster/piglin/PiglinBrute.java
-index 7baccc23f868ac9b8720bfd77b2af6b7dd368820..9cc8b965b5e39265e932e25253a1d5382cfa33c7 100644
+index 91f1e6b1c916b06914c32b268b8b8c2eb3c49ce2..282c039d67f4e30aa9702e06a383ace94a00d339 100644
 --- a/net/minecraft/world/entity/monster/piglin/PiglinBrute.java
 +++ b/net/minecraft/world/entity/monster/piglin/PiglinBrute.java
 @@ -7,8 +7,6 @@ import net.minecraft.server.level.ServerLevel;
@@ -2658,7 +2658,7 @@ index 7baccc23f868ac9b8720bfd77b2af6b7dd368820..9cc8b965b5e39265e932e25253a1d538
  import net.minecraft.world.DifficultyInstance;
  import net.minecraft.world.damagesource.DamageSource;
  import net.minecraft.world.entity.EntitySpawnReason;
-@@ -153,11 +151,8 @@ public class PiglinBrute extends AbstractPiglin {
+@@ -160,11 +158,8 @@ public class PiglinBrute extends AbstractPiglin {
  
      @Override
      protected void customServerAiStep(ServerLevel level) {
@@ -2696,7 +2696,7 @@ index 4f4bf16cfa1390f19a7e8745d86e42e24ffb3bbc..96db45d6885831c290ea6e29400633a5
          if ((this.tickCount + this.getId()) % 120 == 0) {
              applyDarknessAround(level, this.position(), this, 20);
 diff --git a/net/minecraft/world/entity/npc/villager/Villager.java b/net/minecraft/world/entity/npc/villager/Villager.java
-index 996468c21a79d698a8d842189ffd4f2dc86a4302..40fae3fdcd9fc875df1db02d8c0d1f2388e0436a 100644
+index 0c110421074d57e7283168c1133cd4ee314b57f6..2d721ba4480fd571f7b60f30ac3a44b32e4abb17 100644
 --- a/net/minecraft/world/entity/npc/villager/Villager.java
 +++ b/net/minecraft/world/entity/npc/villager/Villager.java
 @@ -34,8 +34,6 @@ import net.minecraft.stats.Stats;
@@ -2708,7 +2708,7 @@ index 996468c21a79d698a8d842189ffd4f2dc86a4302..40fae3fdcd9fc875df1db02d8c0d1f23
  import net.minecraft.world.Difficulty;
  import net.minecraft.world.DifficultyInstance;
  import net.minecraft.world.InteractionHand;
-@@ -394,8 +392,6 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+@@ -401,8 +399,6 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
      }
      protected void customServerAiStep(ServerLevel level, boolean inactive) { // Purpur - Lobotomize stuck villagers - not final
          // Paper end - EAR 2
@@ -2717,7 +2717,7 @@ index 996468c21a79d698a8d842189ffd4f2dc86a4302..40fae3fdcd9fc875df1db02d8c0d1f23
          // Purpur start - Lobotomize stuck villagers
          if (this.level().purpurConfig.villagerLobotomizeEnabled) {
              // treat as inactive if lobotomized
-@@ -408,7 +404,6 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+@@ -415,7 +411,6 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
          }
          else if (this.isLobotomized && shouldRestock(level)) restock();
          // Purpur end - Lobotomize stuck villagers
@@ -2756,7 +2756,7 @@ index 4e0b0d630e18bde916a07889bcaf0e7accf064ca..158e42d22da29a184d51c43e3e4ad4a1
          LOGGER.info("Loaded {} recipes", object.values().size());
      }
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 6ad24d39f15373afb353c59928c29ee874f69ea9..01eab96e85b3663e902cab1f8bc6e723d5cfa515 100644
+index 3411190aace37f6ce39675828563d15c4a0695e2..b75e658a0dcdbc1d350f5a1f98651c19e3db5426 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -35,7 +35,6 @@ import net.minecraft.util.AbortableIterationConsumer;
@@ -2767,7 +2767,7 @@ index 6ad24d39f15373afb353c59928c29ee874f69ea9..01eab96e85b3663e902cab1f8bc6e723
  import net.minecraft.util.random.WeightedList;
  import net.minecraft.world.TickRateManager;
  import net.minecraft.world.attribute.EnvironmentAttributeSystem;
-@@ -260,7 +259,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -259,7 +258,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
      @Override
      public final <T extends Entity> List<T> getEntitiesOfClass(final Class<T> entityClass, final AABB boundingBox, final Predicate<? super T> predicate) {
@@ -2775,7 +2775,7 @@ index 6ad24d39f15373afb353c59928c29ee874f69ea9..01eab96e85b3663e902cab1f8bc6e723
          final List<T> ret = new java.util.ArrayList<>();
  
          ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemLevel)this).moonrise$getEntityLookup().getEntities(entityClass, null, boundingBox, ret, predicate);
-@@ -270,7 +268,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -269,7 +267,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
      @Override
      public final List<Entity> moonrise$getHardCollidingEntities(final Entity entity, final AABB box, final Predicate<? super Entity> predicate) {
@@ -2783,7 +2783,7 @@ index 6ad24d39f15373afb353c59928c29ee874f69ea9..01eab96e85b3663e902cab1f8bc6e723
          final List<Entity> ret = new java.util.ArrayList<>();
  
          ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemLevel)this).moonrise$getEntityLookup().getHardCollidingEntities(entity, box, ret, predicate);
-@@ -1726,7 +1723,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1725,7 +1722,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
      @Override
      public List<Entity> getEntities(@Nullable Entity entity, AABB boundingBox, Predicate<? super Entity> predicate) {
@@ -2791,7 +2791,7 @@ index 6ad24d39f15373afb353c59928c29ee874f69ea9..01eab96e85b3663e902cab1f8bc6e723
          List<Entity> list = Lists.newArrayList();
  
          // Paper start - rewrite chunk system
-@@ -1755,8 +1751,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1754,8 +1750,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
      public <T extends Entity> void getEntities(final EntityTypeTest<Entity, T> entityTypeTest,
                                                 final AABB boundingBox, final Predicate<? super T> predicate,
                                                 final List<? super T> into, final int maxCount) {
@@ -2800,7 +2800,7 @@ index 6ad24d39f15373afb353c59928c29ee874f69ea9..01eab96e85b3663e902cab1f8bc6e723
          if (entityTypeTest instanceof net.minecraft.world.entity.EntityType<T> byType) {
              if (maxCount != Integer.MAX_VALUE) {
                  ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemLevel)this).moonrise$getEntityLookup().getEntities(byType, boundingBox, into, predicate, maxCount);
-@@ -1841,7 +1835,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1840,7 +1834,6 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
      // Paper end - rewrite chunk system
  
      public <T extends Entity> boolean hasEntities(EntityTypeTest<Entity, T> entityTypeTest, AABB bounds, Predicate<? super T> predicate) {
