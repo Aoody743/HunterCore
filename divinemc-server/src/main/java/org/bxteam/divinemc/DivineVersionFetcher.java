@@ -39,15 +39,10 @@ public class DivineVersionFetcher implements VersionFetcher {
     private static final int DISTANCE_UNKNOWN = -2;
     private static final String DOWNLOAD_PAGE = "https://bxteam.org/downloads/divinemc";
     private static final String REPOSITORY = "BX-Team/DivineMC";
-    private static final ServerBuildInfo BUILD_INFO;
-    private static final String USER_AGENT;
+    private static final ServerBuildInfo BUILD_INFO = ServerBuildInfo.buildInfo();
+    private static final String USER_AGENT = BUILD_INFO.brandName() + "/" + BUILD_INFO.asString(VERSION_SIMPLE) + " (https://bxteam.org)";
     private static final Gson GSON = new Gson();
     private static int distance = DISTANCE_UNKNOWN;
-
-    static {
-        BUILD_INFO = ServerBuildInfo.buildInfo();
-        USER_AGENT = BUILD_INFO.brandName() + "/" + BUILD_INFO.asString(VERSION_SIMPLE) + " (https://bxteam.org)";
-    }
 
     @Override
     public long getCacheTime() {
