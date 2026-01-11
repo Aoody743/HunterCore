@@ -111,7 +111,7 @@ index fc618f97cee829dbd4b0c167c5fe515a58189c37..1e4eeb81fe7ef7356d398bb898278699
                      List<org.bukkit.block.BlockState> states = new java.util.ArrayList<>(level.capturedBlockStates.values());
                      level.capturedBlockStates.clear();
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index 7758332f03fa960ccded6e44e1076d912cfb2d04..878aaf027f6059f96078949be386a92e379662d2 100644
+index 1080c67b2f366c2ee81716aee90f1c89e4d1ca8f..8908ce962e2e1d6f1dd76deba9cdeca59145d6f3 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
 @@ -294,6 +294,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -172,7 +172,7 @@ index 7758332f03fa960ccded6e44e1076d912cfb2d04..878aaf027f6059f96078949be386a92e
      }
  
      @Override
-@@ -1742,6 +1755,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1740,6 +1753,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      public final io.papermc.paper.threadedregions.EntityScheduler.EntitySchedulerTickList entitySchedulerTickList = new io.papermc.paper.threadedregions.EntityScheduler.EntitySchedulerTickList(); // Paper - optimise Folia entity scheduler
  
@@ -191,7 +191,7 @@ index 7758332f03fa960ccded6e44e1076d912cfb2d04..878aaf027f6059f96078949be386a92e
      protected void tickChildren(BooleanSupplier hasTimeLeft) {
          this.getPlayerList().getPlayers().forEach(serverPlayer1 -> serverPlayer1.connection.suspendFlushing());
          this.server.getScheduler().mainThreadHeartbeat(); // CraftBukkit
-@@ -1788,28 +1813,43 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1786,28 +1811,43 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          }
  
          this.isIteratingOverLevels = true; // Paper - Throw exception on world create while being ticked
@@ -253,7 +253,7 @@ index 7758332f03fa960ccded6e44e1076d912cfb2d04..878aaf027f6059f96078949be386a92e
          this.isIteratingOverLevels = false; // Paper - Throw exception on world create while being ticked
  
          this.tickConnection();
-@@ -1893,6 +1933,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1891,6 +1931,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          Map<ResourceKey<Level>, ServerLevel> oldLevels = this.levels;
          Map<ResourceKey<Level>, ServerLevel> newLevels = Maps.newLinkedHashMap(oldLevels);
          newLevels.remove(level.dimension());
@@ -465,7 +465,7 @@ index e50d070a4819a0e1481c34ad6a55234c1217ba90..5e34c7972d821bb3a8a54fa43dc60727
          // Paper start - extra debug info
          if (entity.valid) {
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index d4a6e7e6a178d2171e03aabaf7e1501f153e3413..bdd96d1f88754f63f86de5b5a44587a691855ab3 100644
+index b4b08dea892533c60cc3e722f3e98a6509653ac6..c351214f944152c35c0e6ef96049043f22d58a20 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
 @@ -434,6 +434,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
