@@ -67,4 +67,10 @@ public class DivineWorldConfig {
         allowTripwireDupe = getBoolean("unsupported-features.allow-tripwire-dupe", allowTripwireDupe,
             "Bring back MC-59471, MC-129055 on 1.21.2+, which fixed in 1.21.2 snapshots 24w33a and 24w36a");
     }
+
+    public boolean spectatorDontGetAdvancement = false;
+    private void worldFeatures() {
+        spectatorDontGetAdvancement = getBoolean("features.spectator-dont-get-advancement", spectatorDontGetAdvancement,
+            "Prevents spectators from getting advancements");
+    }
 }
