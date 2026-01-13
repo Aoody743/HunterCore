@@ -76,7 +76,8 @@ public class DivineConfig {
         for (Method method : clazz.getDeclaredMethods()) {
             if (Modifier.isPrivate(method.getModifiers()) && 
                 method.getParameterTypes().length == 0 && 
-                method.getReturnType() == Void.TYPE) {
+                method.getReturnType() == Void.TYPE &&
+                !method.getName().equals("checkExperimentalFeatures")) {
                 try {
                     method.setAccessible(true);
                     method.invoke(instance);
