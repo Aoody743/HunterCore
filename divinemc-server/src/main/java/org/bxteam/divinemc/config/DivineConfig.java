@@ -356,6 +356,7 @@ public class DivineConfig {
         public static boolean deduplicateShuffledTemplatePoolElementList = false;
 
         // General optimizations
+        public static boolean disableMethodProfiler = true;
         public static boolean skipUselessSecondaryPoiSensor = true;
         public static boolean clumpOrbs = true;
         public static boolean enableSuffocationOptimization = true;
@@ -458,6 +459,8 @@ public class DivineConfig {
         }
 
         private static void optimizationSettings() {
+            disableMethodProfiler = getBoolean(ConfigCategory.PERFORMANCE.key("optimizations.disable-method-profiler"), disableMethodProfiler,
+                "Disables the method profiler to save some performance. Mainly used for debugging purposes.");
             skipUselessSecondaryPoiSensor = getBoolean(ConfigCategory.PERFORMANCE.key("optimizations.skip-useless-secondary-poi-sensor"), skipUselessSecondaryPoiSensor);
             clumpOrbs = getBoolean(ConfigCategory.PERFORMANCE.key("optimizations.clump-orbs"), clumpOrbs,
                 "Clumps experience orbs together to reduce entity count");

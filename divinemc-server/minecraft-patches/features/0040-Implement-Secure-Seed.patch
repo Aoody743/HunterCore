@@ -52,10 +52,10 @@ index 2a3b10c5e031ef44a2b53bc4fdc6e86c917f75d4..e9fbc5b6116b4cd680a1589d5d561681
              this.get("generator-settings", property -> GsonHelper.parse(!property.isEmpty() ? property : "{}"), new JsonObject()),
              this.get("level-type", property -> property.toLowerCase(Locale.ROOT), WorldPresets.NORMAL.identifier().toString())
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index d58f05a6ffd7d445cdeae35bbe81fed9d52ee9f5..dca4059bfc46fddf6de537f71c6abd699b618e1b 100644
+index 6106e79cdb3dc77b4848d1536801a40ec7f8991e..6714a60f8cea6ca9a51309243128b99f20dc0b81 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
-@@ -610,6 +610,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -637,6 +637,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
      }
  
      public ChunkGenerator getGenerator() {
@@ -64,10 +64,10 @@ index d58f05a6ffd7d445cdeae35bbe81fed9d52ee9f5..dca4059bfc46fddf6de537f71c6abd69
      }
  
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 45d33ea79d9464a821f1770771d31e53e80bdea7..421ec3dd350ad49b2249779c61aca0f99b96b897 100644
+index c9a9ac95c985bb1da6a1b40919b0fc691e51e3d1..c87ebe4c3d69c2d3df527f9a6803d0aeb483872b 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
-@@ -661,6 +661,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+@@ -663,6 +663,7 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
              chunkGenerator = new org.bukkit.craftbukkit.generator.CustomChunkGenerator(this, chunkGenerator, gen);
          }
          // CraftBukkit end
@@ -126,7 +126,7 @@ index f2111830b112870c07bf20a0dd52427309d25332..1dfad162acf6ed53f3f12760cd3a707a
  
      public @Nullable BlockState setBlockState(BlockPos pos, BlockState state) {
 diff --git a/net/minecraft/world/level/chunk/ChunkGenerator.java b/net/minecraft/world/level/chunk/ChunkGenerator.java
-index 78600f4c583056403c93e72ec0996b00ec6d1284..15b9298ca0ea151608f88517fb16e18fe6601275 100644
+index 7b98964eb77a619bdaaf5a9d331e3cfe080b52a4..880e4482846c91cb1cd6c2082ce9b049c94ab651 100644
 --- a/net/minecraft/world/level/chunk/ChunkGenerator.java
 +++ b/net/minecraft/world/level/chunk/ChunkGenerator.java
 @@ -342,7 +342,11 @@ public abstract class ChunkGenerator {
