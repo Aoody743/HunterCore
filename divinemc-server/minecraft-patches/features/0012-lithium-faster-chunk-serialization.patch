@@ -6,6 +6,7 @@ Subject: [PATCH] lithium: faster chunk serialization
 This patch is based on the following mixins and classes:
 * "net/caffeinemc/mods/lithium/common/world/chunk/CompactingPackedIntegerArray.java"
 * "net/caffeinemc/mods/lithium/common/world/chunk/LithiumHashPalette.java"
+* "net/caffeinemc/mods/lithium/mixin/chunk/palette/StrategyMixin.java"
 * "net/caffeinemc/mods/lithium/mixin/chunk/serialization/SimpleBitStorageMixin.java"
 * "net/caffeinemc/mods/lithium/mixin/chunk/serialization/PalettedContainerMixin.java"
 By: Angeline <jellysquid3@users.noreply.github.com>
@@ -24,7 +25,7 @@ index 02502d50f0255f5bbcc0ecb965abb48cc1a112da..89c65b8e4b99b78ec847f0ef958166a6
 +    <T> void compact(net.minecraft.world.level.chunk.Palette<T> srcPalette, net.minecraft.world.level.chunk.Palette<T> dstPalette, short[] out, net.minecraft.world.level.chunk.PalettedContainer<T> resizeHandler); // DivineMC - lithium: faster chunk serialization
  }
 diff --git a/net/minecraft/util/SimpleBitStorage.java b/net/minecraft/util/SimpleBitStorage.java
-index e6306a68c8652d4c5d22d5ecb1416f5f931f76ee..536cf90d2c4bccabe67bffde6bc4fa644a9e7d63 100644
+index 08af7687cdbf395116c2ae0c40befa518b796846..3c754d6d012ce2f1530e5bccbc27b02cb7c41ca3 100644
 --- a/net/minecraft/util/SimpleBitStorage.java
 +++ b/net/minecraft/util/SimpleBitStorage.java
 @@ -465,4 +465,44 @@ public class SimpleBitStorage implements BitStorage {
@@ -84,7 +85,7 @@ index 09fd99c9cbd23b5f3c899bfb00c9b89651948ed8..6fdd51c767399bce29dce1ecea2e1307
 +    @Override public <T> void compact(net.minecraft.world.level.chunk.Palette<T> srcPalette, net.minecraft.world.level.chunk.Palette<T> dstPalette, short[] out, net.minecraft.world.level.chunk.PalettedContainer<T> resizeHandler) { } // DivineMC - lithium: faster chunk serialization
  }
 diff --git a/net/minecraft/world/level/chunk/PalettedContainer.java b/net/minecraft/world/level/chunk/PalettedContainer.java
-index 54d71bd666a946bdf6eece520e080c3f96003452..51ece91c956fd4d55eaef34a534fdb38c6d24446 100644
+index 7c8f8772a6fba04dbafdb5dbf8098b6ebce6d6f2..862db0785a7246d4001f3063246a795bdb5cd4d4 100644
 --- a/net/minecraft/world/level/chunk/PalettedContainer.java
 +++ b/net/minecraft/world/level/chunk/PalettedContainer.java
 @@ -29,6 +29,23 @@ public class PalettedContainer<T> implements PaletteResize<T>, PalettedContainer
@@ -215,3 +216,52 @@ index 54d71bd666a946bdf6eece520e080c3f96003452..51ece91c956fd4d55eaef34a534fdb38
      }
  
      @FunctionalInterface
+diff --git a/net/minecraft/world/level/chunk/Strategy.java b/net/minecraft/world/level/chunk/Strategy.java
+index 787f5173425f617a89033e5b76256688be36b31d..477764905c670d12a7b1216108b61d49c5f24b14 100644
+--- a/net/minecraft/world/level/chunk/Strategy.java
++++ b/net/minecraft/world/level/chunk/Strategy.java
+@@ -6,16 +6,19 @@ import net.minecraft.util.Mth;
+ public abstract class Strategy<T> {
+     public static final Palette.Factory SINGLE_VALUE_PALETTE_FACTORY = SingleValuePalette::create; // Paper - Anti-Xray
+     private static final Palette.Factory LINEAR_PALETTE_FACTORY = LinearPalette::create;
+-    private static final Palette.Factory HASHMAP_PALETTE_FACTORY = HashMapPalette::create;
++    // DivineMC start - lithium: faster chunk serialization
++    private static final Palette.Factory HASH = net.caffeinemc.mods.lithium.common.world.chunk.LithiumHashPalette::create;
++    private static final Configuration HASH_4BIT = new Configuration.Simple(HASH, 4);
++    private static final Configuration HASH_5BIT = new Configuration.Simple(HASH, 5);
++    private static final Configuration HASH_6BIT = new Configuration.Simple(HASH, 6);
++    private static final Configuration HASH_7BIT = new Configuration.Simple(HASH, 7);
++    private static final Configuration HASH_8BIT = new Configuration.Simple(HASH, 8);
++    // DivineMC end - lithium: faster chunk serialization
+     static final Configuration ZERO_BITS = new Configuration.Simple(SINGLE_VALUE_PALETTE_FACTORY, 0);
+     static final Configuration ONE_BIT_LINEAR = new Configuration.Simple(LINEAR_PALETTE_FACTORY, 1);
+     static final Configuration TWO_BITS_LINEAR = new Configuration.Simple(LINEAR_PALETTE_FACTORY, 2);
+     static final Configuration THREE_BITS_LINEAR = new Configuration.Simple(LINEAR_PALETTE_FACTORY, 3);
+     static final Configuration FOUR_BITS_LINEAR = new Configuration.Simple(LINEAR_PALETTE_FACTORY, 4);
+-    static final Configuration FIVE_BITS_HASHMAP = new Configuration.Simple(HASHMAP_PALETTE_FACTORY, 5);
+-    static final Configuration SIX_BITS_HASHMAP = new Configuration.Simple(HASHMAP_PALETTE_FACTORY, 6);
+-    static final Configuration SEVEN_BITS_HASHMAP = new Configuration.Simple(HASHMAP_PALETTE_FACTORY, 7);
+-    static final Configuration EIGHT_BITS_HASHMAP = new Configuration.Simple(HASHMAP_PALETTE_FACTORY, 8);
+     private final IdMap<T> globalMap;
+     private final GlobalPalette<T> globalPalette;
+     protected final int globalPaletteBitsInMemory;
+@@ -36,11 +39,14 @@ public abstract class Strategy<T> {
+             public Configuration getConfigurationForBitCount(int bits) {
+                 return (Configuration)(switch (bits) {
+                     case 0 -> Strategy.ZERO_BITS;
+-                    case 1, 2, 3, 4 -> Strategy.FOUR_BITS_LINEAR;
+-                    case 5 -> Strategy.FIVE_BITS_HASHMAP;
+-                    case 6 -> Strategy.SIX_BITS_HASHMAP;
+-                    case 7 -> Strategy.SEVEN_BITS_HASHMAP;
+-                    case 8 -> Strategy.EIGHT_BITS_HASHMAP;
++                    // DivineMC start - lithium: faster chunk serialization
++                    case 1, 2 -> Strategy.FOUR_BITS_LINEAR;
++                    case 3, 4 -> Strategy.HASH_4BIT;
++                    case 5 -> Strategy.HASH_5BIT;
++                    case 6 -> Strategy.HASH_6BIT;
++                    case 7 -> Strategy.HASH_7BIT;
++                    case 8 -> Strategy.HASH_8BIT;
++                    // DivineMC end - lithium: faster chunk serialization
+                     default -> new Configuration.Global(this.globalPaletteBitsInMemory, bits);
+                 });
+             }
