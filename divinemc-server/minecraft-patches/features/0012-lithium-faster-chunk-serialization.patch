@@ -6,7 +6,6 @@ Subject: [PATCH] lithium: faster chunk serialization
 This patch is based on the following mixins and classes:
 * "net/caffeinemc/mods/lithium/common/world/chunk/CompactingPackedIntegerArray.java"
 * "net/caffeinemc/mods/lithium/common/world/chunk/LithiumHashPalette.java"
-* "net/caffeinemc/mods/lithium/mixin/chunk/palette/StrategyMixin.java"
 * "net/caffeinemc/mods/lithium/mixin/chunk/serialization/SimpleBitStorageMixin.java"
 * "net/caffeinemc/mods/lithium/mixin/chunk/serialization/PalettedContainerMixin.java"
 By: Angeline <jellysquid3@users.noreply.github.com>
@@ -216,52 +215,3 @@ index 7c8f8772a6fba04dbafdb5dbf8098b6ebce6d6f2..862db0785a7246d4001f3063246a795b
      }
  
      @FunctionalInterface
-diff --git a/net/minecraft/world/level/chunk/Strategy.java b/net/minecraft/world/level/chunk/Strategy.java
-index 787f5173425f617a89033e5b76256688be36b31d..477764905c670d12a7b1216108b61d49c5f24b14 100644
---- a/net/minecraft/world/level/chunk/Strategy.java
-+++ b/net/minecraft/world/level/chunk/Strategy.java
-@@ -6,16 +6,19 @@ import net.minecraft.util.Mth;
- public abstract class Strategy<T> {
-     public static final Palette.Factory SINGLE_VALUE_PALETTE_FACTORY = SingleValuePalette::create; // Paper - Anti-Xray
-     private static final Palette.Factory LINEAR_PALETTE_FACTORY = LinearPalette::create;
--    private static final Palette.Factory HASHMAP_PALETTE_FACTORY = HashMapPalette::create;
-+    // DivineMC start - lithium: faster chunk serialization
-+    private static final Palette.Factory HASH = net.caffeinemc.mods.lithium.common.world.chunk.LithiumHashPalette::create;
-+    private static final Configuration HASH_4BIT = new Configuration.Simple(HASH, 4);
-+    private static final Configuration HASH_5BIT = new Configuration.Simple(HASH, 5);
-+    private static final Configuration HASH_6BIT = new Configuration.Simple(HASH, 6);
-+    private static final Configuration HASH_7BIT = new Configuration.Simple(HASH, 7);
-+    private static final Configuration HASH_8BIT = new Configuration.Simple(HASH, 8);
-+    // DivineMC end - lithium: faster chunk serialization
-     static final Configuration ZERO_BITS = new Configuration.Simple(SINGLE_VALUE_PALETTE_FACTORY, 0);
-     static final Configuration ONE_BIT_LINEAR = new Configuration.Simple(LINEAR_PALETTE_FACTORY, 1);
-     static final Configuration TWO_BITS_LINEAR = new Configuration.Simple(LINEAR_PALETTE_FACTORY, 2);
-     static final Configuration THREE_BITS_LINEAR = new Configuration.Simple(LINEAR_PALETTE_FACTORY, 3);
-     static final Configuration FOUR_BITS_LINEAR = new Configuration.Simple(LINEAR_PALETTE_FACTORY, 4);
--    static final Configuration FIVE_BITS_HASHMAP = new Configuration.Simple(HASHMAP_PALETTE_FACTORY, 5);
--    static final Configuration SIX_BITS_HASHMAP = new Configuration.Simple(HASHMAP_PALETTE_FACTORY, 6);
--    static final Configuration SEVEN_BITS_HASHMAP = new Configuration.Simple(HASHMAP_PALETTE_FACTORY, 7);
--    static final Configuration EIGHT_BITS_HASHMAP = new Configuration.Simple(HASHMAP_PALETTE_FACTORY, 8);
-     private final IdMap<T> globalMap;
-     private final GlobalPalette<T> globalPalette;
-     protected final int globalPaletteBitsInMemory;
-@@ -36,11 +39,14 @@ public abstract class Strategy<T> {
-             public Configuration getConfigurationForBitCount(int bits) {
-                 return (Configuration)(switch (bits) {
-                     case 0 -> Strategy.ZERO_BITS;
--                    case 1, 2, 3, 4 -> Strategy.FOUR_BITS_LINEAR;
--                    case 5 -> Strategy.FIVE_BITS_HASHMAP;
--                    case 6 -> Strategy.SIX_BITS_HASHMAP;
--                    case 7 -> Strategy.SEVEN_BITS_HASHMAP;
--                    case 8 -> Strategy.EIGHT_BITS_HASHMAP;
-+                    // DivineMC start - lithium: faster chunk serialization
-+                    case 1, 2 -> Strategy.FOUR_BITS_LINEAR;
-+                    case 3, 4 -> Strategy.HASH_4BIT;
-+                    case 5 -> Strategy.HASH_5BIT;
-+                    case 6 -> Strategy.HASH_6BIT;
-+                    case 7 -> Strategy.HASH_7BIT;
-+                    case 8 -> Strategy.HASH_8BIT;
-+                    // DivineMC end - lithium: faster chunk serialization
-                     default -> new Configuration.Global(this.globalPaletteBitsInMemory, bits);
-                 });
-             }
