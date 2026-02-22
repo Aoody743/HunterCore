@@ -50,12 +50,12 @@ public class ExecutorShutdown {
             } catch (InterruptedException ignored) { }
         }
 
-        if (AsyncPath.PATH_PROCESSING_EXECUTOR != null) {
+        if (AsyncPath.EXECUTOR != null) {
             LOGGER.info("Shutting down mob pathfinding processing executor...");
-            AsyncPath.PATH_PROCESSING_EXECUTOR.shutdown();
+            AsyncPath.EXECUTOR.shutdown();
 
             try {
-                AsyncPath.PATH_PROCESSING_EXECUTOR.awaitTermination(10L, TimeUnit.SECONDS);
+                AsyncPath.EXECUTOR.awaitTermination(10L, TimeUnit.SECONDS);
             } catch (InterruptedException ignored) { }
         }
     }
