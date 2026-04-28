@@ -5,12 +5,12 @@ Subject: [PATCH] Paper PR: Add FillBottleEvents for player and dispenser
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index de1ffa1f2a8b8331f484a7a6546f4b29e2c853c6..95e5b280c68b503fdd70ca6d8e8547421cfc2e72 100644
+index 6c4045b842a23caa2f3f1e52cb0130a97ffc2682..14d7f43ead19faf920b76b73b1293ee433350d7c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-@@ -2393,4 +2393,18 @@ public class CraftEventFactory {
+@@ -2437,4 +2437,18 @@ public class CraftEventFactory {
          }
-         return false;
+         return new TimeSkipEvent(source.getLevel().getWorld(), ClockTimeSkipEvent.SkipReason.COMMAND, skipAmount);
      }
 +
 +    // DivineMC start - Paper PR: Add FillBottleEvents for player and dispenser

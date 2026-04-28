@@ -32,10 +32,10 @@ index d7398b1ecf2660c29fb7d106b48fe02d3736603e..ab499a7eaccdc1578ec64f90f54f79b0
          }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 41865926b8bec98bac54f3904a5accfb2f83e8c5..e70182272e502381bcf15b63a8bc9e8508bda541 100644
+index d656019c665d1f02daf3e528f1d92bb032fecf06..2539549ecb5d6c8d63de4378408d23bda3c6921a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -2719,7 +2719,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+@@ -2720,7 +2720,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
          Iterator<AttributeInstance> iterator = collection.iterator();
          while (iterator.hasNext()) {
              AttributeInstance genericInstance = iterator.next();
@@ -45,13 +45,13 @@ index 41865926b8bec98bac54f3904a5accfb2f83e8c5..e70182272e502381bcf15b63a8bc9e85
                  break;
              }
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index 95e5b280c68b503fdd70ca6d8e8547421cfc2e72..633c6a1f607a2f73b4265cbab4c5caa010413abf 100644
+index c7a9c6df9aaf87a589c748cc4fd57a2ed624191b..4ce0d7d13c32c608ff95a69ab7a0ecdefa27ebd2 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-@@ -1930,6 +1930,26 @@ public class CraftEventFactory {
+@@ -1946,6 +1946,26 @@ public class CraftEventFactory {
      }
  
-     public static boolean handleBlockFormEvent(Level world, BlockPos pos, net.minecraft.world.level.block.state.BlockState state, @net.minecraft.world.level.block.Block.UpdateFlags int flags, @Nullable Entity entity, boolean checkSetResult) {
+     public static boolean handleBlockFormEvent(Level level, BlockPos pos, net.minecraft.world.level.block.state.BlockState state, @net.minecraft.world.level.block.Block.UpdateFlags int flags, @Nullable Entity entity, boolean checkSetResult) {
 +        // DivineMC start - Multithreaded Tracker
 +        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.multithreadedEnabled && Thread.currentThread() instanceof org.bxteam.divinemc.async.tracking.MultithreadedTracker.MultithreadedTrackerThread) {
 +            java.util.concurrent.CompletableFuture<Boolean> future = new java.util.concurrent.CompletableFuture<>();
@@ -72,6 +72,6 @@ index 95e5b280c68b503fdd70ca6d8e8547421cfc2e72..633c6a1f607a2f73b4265cbab4c5caa0
 +            return future.join();
 +        }
 +        // DivineMC end - Multithreaded Tracker
-         CraftBlockState snapshot = CraftBlockStates.getBlockState(world, pos);
-         snapshot.setData(state);
+         CraftBlockState snapshot = CraftBlockStates.getBlockState(level, pos);
+         snapshot.setBlock(state);
  

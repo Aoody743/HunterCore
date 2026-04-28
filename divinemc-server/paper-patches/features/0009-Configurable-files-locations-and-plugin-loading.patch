@@ -18,10 +18,10 @@ index 6567ff18cb1c21230565c2d92caf3a7f7f915c17..f5bc0eff886e9e3386467f40d4f32945
                  .option(LineReader.Option.COMPLETE_IN_WORD, true);
          if (io.papermc.paper.configuration.GlobalConfiguration.get().console.enableBrigadierHighlighting) {
 diff --git a/src/main/java/io/papermc/paper/plugin/PluginInitializerManager.java b/src/main/java/io/papermc/paper/plugin/PluginInitializerManager.java
-index 3200aef1ba5d079fc3790841c826b4cf3951f2cf..ab3e51aaf532514901548b9a152a40a7d6c854d8 100644
+index 5741a60faba70da485053599c9370f0e27e868f4..d4dbd4eccc49192bdc4aa44aef8a1714b6399543 100644
 --- a/src/main/java/io/papermc/paper/plugin/PluginInitializerManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/PluginInitializerManager.java
-@@ -117,9 +117,19 @@ public class PluginInitializerManager {
+@@ -108,9 +108,19 @@ public class PluginInitializerManager {
          java.util.List<Path> files = ((java.util.List<File>) optionSet.valuesOf("add-plugin")).stream().map(File::toPath).toList();
          io.papermc.paper.plugin.util.EntrypointUtil.registerProvidersFromSource(io.papermc.paper.plugin.provider.source.PluginFlagProviderSource.INSTANCE, files);
  

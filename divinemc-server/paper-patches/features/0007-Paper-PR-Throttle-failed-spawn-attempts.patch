@@ -22,7 +22,7 @@ Example config in paper-world-defaults.yml:
 ```
 
 diff --git a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
-index d34e627f8b6711d443553af74113d096b783b36d..d9c5e2327ea86d39e841c237fc847be95a0af5fe 100644
+index 76d4b3ecec1e380207918988d32f828327ba5751..a64f55850654930d83b6cf18a307b5d6989ca459 100644
 --- a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
 +++ b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
 @@ -185,6 +185,17 @@ public class WorldConfiguration extends ConfigurationPart {
