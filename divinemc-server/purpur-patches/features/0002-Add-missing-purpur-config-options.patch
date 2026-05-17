@@ -5,7 +5,7 @@ Subject: [PATCH] Add missing purpur config options
 
 
 diff --git a/src/main/java/org/purpurmc/purpur/PurpurConfig.java b/src/main/java/org/purpurmc/purpur/PurpurConfig.java
-index 7b84a68cb7656b72eb23260679ecae16333b0a66..0e2458cd50c46f0a1eb3ee62ac5af42ff4285800 100644
+index ca9223d62444726070694cf564439ef3a1bc3624..bd49e8738c174745149fe2853a1be4f089b18510 100644
 --- a/src/main/java/org/purpurmc/purpur/PurpurConfig.java
 +++ b/src/main/java/org/purpurmc/purpur/PurpurConfig.java
 @@ -333,6 +333,7 @@ public class PurpurConfig {
@@ -15,8 +15,8 @@ index 7b84a68cb7656b72eb23260679ecae16333b0a66..0e2458cd50c46f0a1eb3ee62ac5af42f
 +    public static int chestBoatRows = 3; // DivineMC - Add missing purpur config options
      public static boolean enderChestSixRows = false;
      public static boolean enderChestPermissionRows = false;
-     public static boolean cryingObsidianValidForPortalFrame = false;
-@@ -376,6 +377,7 @@ public class PurpurConfig {
+     public static boolean enderChestPersistHiddenRows = true;
+@@ -377,6 +378,7 @@ public class PurpurConfig {
              case 1 -> 9;
              default -> 27;
          });
