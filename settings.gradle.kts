@@ -39,3 +39,16 @@ for (name in listOf("divinemc-api", "divinemc-server")) {
     include(projName)
     findProject(":$projName")!!.projectDir = file(name)
 }
+
+
+gradle.lifecycle.beforeProject {
+    val mcVersion = providers.gradleProperty("mcVersion").get().trim()
+    val divinemcChannel = providers.gradleProperty("channel").get().trim()
+    val divinemcBuildNumber = providers.environmentVariable("BUILD_NUMBER").orNull?.trim()?.toInt()
+    val versionString = if (divinemcBuildNumber == null) {
+        "$mcVersion.local-SNAPSHOT"
+    } else {
+        "$mcVersion.build.$divinemcBuildNumber-${divinemcChannel.lowercase()}"
+    }
+    version = versionString
+}

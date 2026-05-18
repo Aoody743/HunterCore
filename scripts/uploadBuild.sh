@@ -8,13 +8,12 @@ prop() {
 
 commitid=$(git log --pretty='%h' -1)
 mcversion=$(prop mcVersion)
-version=$(prop version)
-experimental=$(prop experimental)
+channel=$(prop channel)
+api_channel=$([ "$channel" = "EXPERIMENTAL" ] && echo "BETA" || echo "$channel")
+version="$mcversion.build.$BUILD_NUMBER-${channel,,}"
 tagid="$mcversion-$BUILD_NUMBER-$commitid"
 jarName="divinemc-$mcversion-$BUILD_NUMBER.jar"
 divinemcid="DivineMC-$tagid"
-
-channel=$([ "$experimental" = "true" ] && echo "BETA" || echo "STABLE")
 
 mv divinemc-server/build/libs/divinemc-paperclip-"$version"-mojmap.jar "$jarName"
 
@@ -43,11 +42,11 @@ done < <(git log --pretty='%h %s' "-$number")
 
 commits_json+="]"
 
-metadata_json="{\"buildNumber\":$BUILD_NUMBER,\"channel\":\"$channel\",\"commits\":$commits_json}"
+metadata_json="{\"buildNumber\":$BUILD_NUMBER,\"channel\":\"$api_channel\",\"commits\":$commits_json}"
 
 echo "$metadata_json" | jq . > metadata.json 2>/dev/null || echo "$metadata_json" > metadata.json
 
-API_URL="https://api.bxteam.org/v2/projects/divinemc/versions/$mcversion/builds/upload"
+API_URL="https://bxteam.org/api/v2/projects/divinemc/versions/$mcversion/builds/upload"
 API_KEY="${API_KEY:-}"
 
 if [ -z "$API_KEY" ]; then
@@ -60,7 +59,7 @@ echo "🚀 Uploading build to API..."
 echo "   URL: $API_URL"
 echo "   File: $jarName"
 echo "   Build: $BUILD_NUMBER"
-echo "   Channel: $channel"
+echo "   Channel: $channel (API: $api_channel)"
 echo "   Commits: $number"
 
 response=$(curl -X POST "$API_URL" \

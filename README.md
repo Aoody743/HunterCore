@@ -34,8 +34,8 @@ You can find the latest successful builds on our [website](https://bxteam.org/do
 Run the following commands in the root directory:
 
 ```bash
-> ./gradlew applyAllPatches              # apply all patches
-> ./gradlew createMojmapPaperclipJar     # build the server jar
+> ./gradlew applyAllPatches        # apply all patches
+> ./gradlew createPaperclipJar     # build the server jar
 ```
 
 For anything else you can refer to our [contribution guide](https://bxteam.org/docs/divinemc/development/contributing).
@@ -53,7 +53,7 @@ For anything else you can refer to our [contribution guide](https://bxteam.org/d
 <dependency>
   <groupId>org.bxteam.divinemc</groupId>
   <artifactId>divinemc-api</artifactId>
-  <version>1.21.11-R0.1-SNAPSHOT</version>
+  <version>[26.1.2.build,)</version>
   <scope>provided</scope>
 </dependency>
 ```
@@ -66,11 +66,9 @@ repositories {
 ```
 ```kotlin
 dependencies {
-    compileOnly("org.bxteam.divinemc:divinemc-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("org.bxteam.divinemc:divinemc-api:26.1.2.build.+")
 }
 ```
-
-We also have a [Javadoc](https://repo.bxteam.org/javadoc/snapshots/org/bxteam/divinemc/divinemc-api/1.21.11-R0.1-SNAPSHOT/raw/index.html) for the API.
 
 ## ⚖️ License
 DivineMC is licensed under the GNU General Public License v3.0. You can find the license [here](LICENSE).

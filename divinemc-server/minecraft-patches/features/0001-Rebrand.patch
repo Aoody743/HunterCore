@@ -31,17 +31,18 @@ index 439e2663a297029efc77adef9e8d99a0d8c02f41..b2a42bf642d80df6fb02e2e2e72da585
  
      @Override
 diff --git a/net/minecraft/server/Main.java b/net/minecraft/server/Main.java
-index bcbb780c82fdb3283925359a04d8706087f86501..b118a3fe78c4c433b08e4dfe0588ffd150e8d982 100644
+index bcbb780c82fdb3283925359a04d8706087f86501..3d5b7fd67d203b09cb68a14b062d24d11daab19f 100644
 --- a/net/minecraft/server/Main.java
 +++ b/net/minecraft/server/Main.java
-@@ -64,36 +64,30 @@ public class Main {
+@@ -64,36 +64,31 @@ public class Main {
  
      @SuppressForbidden(reason = "System.out needed before bootstrap")
      public static void main(final OptionSet options) { // CraftBukkit - replaces main(String[] args)
 +        // DivineMC start - Rebrand
 +        io.papermc.paper.ServerBuildInfo info = io.papermc.paper.ServerBuildInfo.buildInfo();
-+        if (io.papermc.paper.ServerBuildInfoImpl.IS_EXPERIMENTAL) {
-+            LOGGER.warn("Running an experimental version of {}, please proceed with caution.", info.brandName());
++        switch (io.papermc.paper.ServerBuildInfoImpl.CHANNEL) {
++            case "ALPHA" -> LOGGER.warn("Running an alpha version of {}, please proceed with caution.", info.brandName());
++            case "EXPERIMENTAL" -> LOGGER.warn("Running an experimental version of {}, please proceed with caution.", info.brandName());
 +        }
 +
 +        Path path2 = Paths.get("eula.txt");
@@ -91,7 +92,7 @@ index bcbb780c82fdb3283925359a04d8706087f86501..b118a3fe78c4c433b08e4dfe0588ffd1
              Path pidFilePath = (Path) options.valueOf("pidFile"); // CraftBukkit
              if (pidFilePath != null) {
                  writePidFile(pidFilePath);
-@@ -125,8 +119,6 @@ public class Main {
+@@ -125,8 +120,6 @@ public class Main {
              }
              // Paper end
              RegionFileVersion.configure(settings.getProperties().regionFileComression);
@@ -100,7 +101,7 @@ index bcbb780c82fdb3283925359a04d8706087f86501..b118a3fe78c4c433b08e4dfe0588ffd1
              // Paper start - load config files early for access below if needed
              org.bukkit.configuration.file.YamlConfiguration bukkitConfiguration = io.papermc.paper.configuration.PaperConfigurations.loadLegacyConfigFile((File) options.valueOf("bukkit-settings"));
              org.bukkit.configuration.file.YamlConfiguration spigotConfiguration = io.papermc.paper.configuration.PaperConfigurations.loadLegacyConfigFile((File) options.valueOf("spigot-settings"));
-@@ -145,19 +137,7 @@ public class Main {
+@@ -145,19 +138,7 @@ public class Main {
                  commandsConfiguration.setDefaults(org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(new java.io.InputStreamReader(Main.class.getClassLoader().getResourceAsStream("configurations/commands.yml"), java.nio.charset.StandardCharsets.UTF_8)));
                  commandsConfiguration.save(commandFile);
                  // CraftBukkit end

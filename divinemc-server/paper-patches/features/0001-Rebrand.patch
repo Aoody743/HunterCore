@@ -67,21 +67,21 @@ index d543b1b107ab8d3eeb1fc3c1cadf489928d2786e..e77078e54efdfe931202ecf8c8550840
      }
  }
 diff --git a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
-index 1b0ee48e28aaa68ddb1f28c23d3c5f5f40505c98..4d3518795a238d87ca4f3df0bee074ab5bcc2734 100644
+index 1b0ee48e28aaa68ddb1f28c23d3c5f5f40505c98..c0c294d5e4e28d944787a572ec16cfdb8623fc75 100644
 --- a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
 +++ b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
 @@ -23,15 +23,18 @@ public record ServerBuildInfoImpl(
      Optional<String> gitBranch,
      Optional<String> gitCommit
  ) implements ServerBuildInfo {
-+    public static boolean IS_EXPERIMENTAL = false; // DivineMC - Rebrand
++    public static String CHANNEL = "STABLE"; // DivineMC - Rebrand
      private static final String ATTRIBUTE_BRAND_ID = "Brand-Id";
      private static final String ATTRIBUTE_BRAND_NAME = "Brand-Name";
      private static final String ATTRIBUTE_BUILD_TIME = "Build-Time";
      private static final String ATTRIBUTE_BUILD_NUMBER = "Build-Number";
      private static final String ATTRIBUTE_GIT_BRANCH = "Git-Branch";
      private static final String ATTRIBUTE_GIT_COMMIT = "Git-Commit";
-+    private static final String ATTRIBUTE_EXPERIMENTAL = "Experimental"; // DivineMC - Rebrand
++    private static final String ATTRIBUTE_CHANNEL = "Channel"; // DivineMC - Rebrand
  
      private static final String BRAND_PAPER_NAME = "Paper";
      private static final String BRAND_PURPUR_NAME = "Purpur"; // Purpur - Rebrand
@@ -105,7 +105,7 @@ index 1b0ee48e28aaa68ddb1f28c23d3c5f5f40505c98..4d3518795a238d87ca4f3df0bee074ab
              getManifestAttribute(manifest, ATTRIBUTE_GIT_BRANCH),
              getManifestAttribute(manifest, ATTRIBUTE_GIT_COMMIT)
          );
-+        IS_EXPERIMENTAL = Boolean.parseBoolean(getManifestAttribute(manifest, ATTRIBUTE_EXPERIMENTAL).orElse("false")); // DivineMC - Rebrand
++        CHANNEL = getManifestAttribute(manifest, ATTRIBUTE_CHANNEL).orElse("STABLE"); // DivineMC - Rebrand
      }
  
      @Override
