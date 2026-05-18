@@ -5,7 +5,7 @@
              double z3 = playerLoc.z + 13.0 / distBtwn * (raidLoc.z - playerLoc.z);
              if (distBtwn <= 64.0 || playersInRaid.contains(player)) {
 -                player.connection.send(new ClientboundSoundPacket(SoundEvents.RAID_HORN, SoundSource.NEUTRAL, x3, player.getY(), z3, 64.0F, 1.0F, seed));
-+                    .send(new ClientboundSoundPacket(SoundEvents.RAID_HORN, SoundSource.HOSTILE, d, serverPlayer.getY(), d1, 64.0F, 1.0F, randomLong)); // DivineMC - Fix MC-245394
++                player.connection.send(new ClientboundSoundPacket(SoundEvents.RAID_HORN, SoundSource.HOSTILE, x3, player.getY(), z3, 64.0F, 1.0F, seed)); // DivineMC - Fix MC-245394
              }
          }
      }

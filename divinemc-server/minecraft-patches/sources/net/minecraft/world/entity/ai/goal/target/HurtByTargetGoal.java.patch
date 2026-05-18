@@ -4,7 +4,7 @@
      }
  
      protected void alertOther(final Mob other, final LivingEntity hurtByMob) {
-+        if (mob == target) return; // DivineMC - Fix MC-110386
++        if (other == hurtByMob) return; // DivineMC - Fix MC-110386
          other.setTarget(hurtByMob, org.bukkit.event.entity.EntityTargetEvent.TargetReason.TARGET_ATTACKED_NEARBY_ENTITY); // CraftBukkit - reason
      }
  }

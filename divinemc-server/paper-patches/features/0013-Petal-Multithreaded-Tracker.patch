@@ -32,7 +32,7 @@ index d7398b1ecf2660c29fb7d106b48fe02d3736603e..ab499a7eaccdc1578ec64f90f54f79b0
          }
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index d656019c665d1f02daf3e528f1d92bb032fecf06..2539549ecb5d6c8d63de4378408d23bda3c6921a 100644
+index a5bf4267075adf151815af16a4497e3b05150228..bc71e7ebf6618586576f5b37b872e0b51d8bf818 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -2720,7 +2720,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
@@ -45,7 +45,7 @@ index d656019c665d1f02daf3e528f1d92bb032fecf06..2539549ecb5d6c8d63de4378408d23bd
                  break;
              }
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index c7a9c6df9aaf87a589c748cc4fd57a2ed624191b..4ce0d7d13c32c608ff95a69ab7a0ecdefa27ebd2 100644
+index 14d7f43ead19faf920b76b73b1293ee433350d7c..8b75627507fa3ab88301a1dc43ce9150097293b4 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 @@ -1946,6 +1946,26 @@ public class CraftEventFactory {
@@ -57,8 +57,8 @@ index c7a9c6df9aaf87a589c748cc4fd57a2ed624191b..4ce0d7d13c32c608ff95a69ab7a0ecde
 +            java.util.concurrent.CompletableFuture<Boolean> future = new java.util.concurrent.CompletableFuture<>();
 +            net.minecraft.server.MinecraftServer.getServer().scheduleOnMain(() -> {
 +                boolean resultFlag = false;
-+                CraftBlockState snapshot = CraftBlockStates.getBlockState(world, pos);
-+                snapshot.setData(state);
++                CraftBlockState snapshot = CraftBlockStates.getBlockState(level, pos);
++                snapshot.setBlock(state);
 +
 +                BlockFormEvent event = (entity == null) ? new BlockFormEvent(snapshot.getBlock(), snapshot) : new EntityBlockFormEvent(entity.getBukkitEntity(), snapshot.getBlock(), snapshot);
 +                if (event.callEvent()) {

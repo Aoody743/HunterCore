@@ -113,7 +113,7 @@ index a1018e9ca9dfb978d6e6633577abd7d5d0960fa6..1ad23d86a82e0c6404ddc48306372ffd
          this.x = input.readInt();
          this.z = input.readInt();
 diff --git a/net/minecraft/server/network/PlayerChunkSender.java b/net/minecraft/server/network/PlayerChunkSender.java
-index 373da9d604cfb1614a0618d856aefd2be3c7682b..325dbca451d9edf7da9be06e071fc5d2a7ee8993 100644
+index 373da9d604cfb1614a0618d856aefd2be3c7682b..8577c3a329d49369388eb5f1791584f9e3f1a217 100644
 --- a/net/minecraft/server/network/PlayerChunkSender.java
 +++ b/net/minecraft/server/network/PlayerChunkSender.java
 @@ -64,13 +64,25 @@ public class PlayerChunkSender {
@@ -136,7 +136,7 @@ index 373da9d604cfb1614a0618d856aefd2be3c7682b..325dbca451d9edf7da9be06e071fc5d2
 -                        connection.send(new ClientboundChunkBatchFinishedPacket(chunksToSend.size()));
 +                        // DivineMC start - Async Chunk Sending
 +                        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.asyncChunkSendingEnabled) {
-+                            org.bxteam.divinemc.async.AsyncChunkSend.POOL.execute(() -> connection.send(new ClientboundChunkBatchFinishedPacket(list.size())));
++                            org.bxteam.divinemc.async.AsyncChunkSend.POOL.execute(() -> connection.send(new ClientboundChunkBatchFinishedPacket(chunksToSend.size())));
 +                        } else {
 +                            connection.send(new ClientboundChunkBatchFinishedPacket(chunksToSend.size()));
 +                        }

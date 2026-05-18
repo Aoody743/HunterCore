@@ -9,27 +9,29 @@
      protected final CollectingNeighborUpdater neighborUpdater;
      private final List<TickingBlockEntity> pendingBlockEntityTickers = Lists.newArrayList();
      private boolean tickingBlockEntities;
-@@ -1537,14 +_,12 @@
+@@ -1537,14 +_,10 @@
          boolean tickBlockEntities = this.tickRateManager().runsNormally();
  
          int tickedEntities = 0; // Paper - rewrite chunk system
 -        // Paper start - Fix MC-117075 use removeAll
 -        final it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<@Nullable TickingBlockEntity> toRemove = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>();
-         toRemove.add(null);
-         for (int tickerIndex = 0; tickerIndex < this.blockEntityTickers.size(); tickerIndex++) {
+-        toRemove.add(null);
+-        for (int tickerIndex = 0; tickerIndex < this.blockEntityTickers.size(); tickerIndex++) {
++        for (int tickerIndex = 0; tickerIndex < this.blockEntityTickers.size(); tickerIndex++) { // DivineMC - optimize block entity removals - Fix MC-117075
              final TickingBlockEntity ticker = this.blockEntityTickers.get(tickerIndex);
-         // Paper end - Fix MC-117075 use removeAll
+-        // Paper end - Fix MC-117075 use removeAll
              if (ticker.isRemoved()) {
 -                toRemove.add(ticker); // Paper - Fix MC-117075 use removeAll
-+                this.blockEntityTickers.markAsRemoved(this.tileTickPosition); // DivineMC - optimize block entity removals - Fix MC-117075
++                this.blockEntityTickers.markAsRemoved(tickerIndex); // DivineMC - optimize block entity removals - Fix MC-117075
              } else if (tickBlockEntities && this.shouldTickBlocksAt(ticker.getPos())) {
                  ticker.tick();
                  // Paper start - rewrite chunk system
-@@ -1554,6 +_,7 @@
-                 // Paper end - rewrite chunk system
+@@ -1555,7 +_,7 @@
              }
          }
-+        this.blockEntityTickers.removeMarkedEntries(); // DivineMC - optimize block entity removals - Fix MC-117075
  
-         this.blockEntityTickers.removeAll(toRemove); // Paper - Fix MC-117075 use removeAll
+-        this.blockEntityTickers.removeAll(toRemove); // Paper - Fix MC-117075 use removeAll
++        this.blockEntityTickers.removeMarkedEntries(); // DivineMC - optimize block entity removals - Fix MC-117075
          this.tickingBlockEntities = false;
+     }
+ 

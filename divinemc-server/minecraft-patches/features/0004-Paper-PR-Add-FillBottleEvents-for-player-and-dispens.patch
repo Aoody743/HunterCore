@@ -23,7 +23,7 @@ index 63e93e299a13cf04d26a588485481fef5310da5f..6b1d4d27ff4e0720d418bc75c2669378
                      player.awardStat(Stats.ITEM_USED.get(usedItem));
                      // level.setBlockAndUpdate(pos, Blocks.WATER_CAULDRON.defaultBlockState()); // CraftBukkit
 diff --git a/net/minecraft/core/dispenser/DispenseItemBehavior.java b/net/minecraft/core/dispenser/DispenseItemBehavior.java
-index 2018428758d4cad3d627be5667d246b64ac90567..758524e017313f9ddc80dd06ab8ebc26f50bb2a0 100644
+index 2018428758d4cad3d627be5667d246b64ac90567..2c92b3afc29e0adfe4a388efa62e57fbb621ea0f 100644
 --- a/net/minecraft/core/dispenser/DispenseItemBehavior.java
 +++ b/net/minecraft/core/dispenser/DispenseItemBehavior.java
 @@ -523,13 +523,25 @@ public interface DispenseItemBehavior {
@@ -31,7 +31,7 @@ index 2018428758d4cad3d627be5667d246b64ac90567..758524e017313f9ddc80dd06ab8ebc26
                      if (state.is(BlockTags.BEEHIVES, s -> s.hasProperty(BeehiveBlock.HONEY_LEVEL) && s.getBlock() instanceof BeehiveBlock)
                          && state.getValue(BeehiveBlock.HONEY_LEVEL) >= 5) {
 +                        // DivineMC start - Paper PR: Add FillBottleEvents for player and dispenser
-+                        final io.papermc.paper.event.block.BlockFillBottleEvent bottleEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callBlockFillBottleEvent(serverLevel, blockSource.pos(), item, new ItemStack(Items.HONEY_BOTTLE));
++                        final io.papermc.paper.event.block.BlockFillBottleEvent bottleEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callBlockFillBottleEvent(level, source.pos(), dispensed, new ItemStack(Items.HONEY_BOTTLE));
 +                        if (bottleEvent.isCancelled()) {
 +                            return dispensed;
 +                        }

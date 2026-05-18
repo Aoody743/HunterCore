@@ -417,10 +417,10 @@ index dc72cf09b2c738ddaec1d3a41e4f714ce5dcf97d..04a3bd122f06b262052b4e77f53d6878
 +    // DivineMC end - lithium: sleeping_block_entity
  }
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 638bbbe8289048bd4f85e572b43308062bc2c200..8c06def2f13e4f67af34a15d23010dd798003bdf 100644
+index 77defb27fbd8413ade00072594263b68c10ab2d1..c4bf15379b4f189c1d91f78de9f4fb7654dbb0d2 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
-@@ -2286,4 +2286,25 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -2283,4 +2283,25 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
          return getWorld().getEnvironment() == org.bukkit.World.Environment.THE_END;
      }
      // Purpur end - Add allow water in end world option
@@ -559,7 +559,7 @@ index e032b5289abe413009fe7c9068e71e788fab512a..82f6d64aa87a973596c42cc5dfc331ea
 +    // DivineMC end - lithium: sleeping_block_entity
  }
 diff --git a/net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity.java b/net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity.java
-index 26d6fa5b9ab8d75eb5a300b399a81daf59a409d4..b066e8e65546648d58afe09c77a56f9553f21f34 100644
+index 26d6fa5b9ab8d75eb5a300b399a81daf59a409d4..1e592e025ad0c1965829953a7b433c9cbc6bb282 100644
 --- a/net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity.java
 +++ b/net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity.java
 @@ -40,7 +40,7 @@ import net.minecraft.world.level.storage.ValueOutput;
@@ -623,7 +623,7 @@ index 26d6fa5b9ab8d75eb5a300b399a81daf59a409d4..b066e8e65546648d58afe09c77a56f95
 +    }
 +
 +    private void checkSleep(BlockState state) {
-+        if (!this.isLit() && this.cookingTimer == 0 && (state.is(net.minecraft.world.level.block.Blocks.FURNACE) || state.is(net.minecraft.world.level.block.Blocks.BLAST_FURNACE) || state.is(net.minecraft.world.level.block.Blocks.SMOKER)) && this.level != null) {
++        if (!(this.litTimeRemaining > 0) && this.cookingTimer == 0 && (state.is(net.minecraft.world.level.block.Blocks.FURNACE) || state.is(net.minecraft.world.level.block.Blocks.BLAST_FURNACE) || state.is(net.minecraft.world.level.block.Blocks.SMOKER)) && this.level != null) {
 +            this.lithium$startSleeping();
 +        }
 +    }
@@ -636,7 +636,7 @@ index 26d6fa5b9ab8d75eb5a300b399a81daf59a409d4..b066e8e65546648d58afe09c77a56f95
 +    }
 +
 +    @Override
-+    public net.minecraft.core.NonNullList<net.minecraft.world.item.ItemStack> getInventoryLithium() {q
++    public net.minecraft.core.NonNullList<net.minecraft.world.item.ItemStack> getInventoryLithium() {
 +        return items;
 +    }
 +
@@ -993,7 +993,7 @@ index 60a0a2c466cc688377815b9f17ff09c59b72eb64..6cf24b59e258ab7491a4f54b552d2708
 +    // DivineMC end - lithium: sleeping_block_entity
  }
 diff --git a/net/minecraft/world/level/block/entity/CampfireBlockEntity.java b/net/minecraft/world/level/block/entity/CampfireBlockEntity.java
-index ee6bc6e60b943e4b304b055de56443905ca4c771..71e10e2d8da3ce507e110715eabfa0c4580a9f5a 100644
+index ee6bc6e60b943e4b304b055de56443905ca4c771..11d31a6e6c8cbd72562c46a1b3f161e061baf184 100644
 --- a/net/minecraft/world/level/block/entity/CampfireBlockEntity.java
 +++ b/net/minecraft/world/level/block/entity/CampfireBlockEntity.java
 @@ -39,7 +39,7 @@ import net.minecraft.world.level.storage.ValueOutput;
@@ -1011,7 +1011,7 @@ index ee6bc6e60b943e4b304b055de56443905ca4c771..71e10e2d8da3ce507e110715eabfa0c4
              setChanged(level, pos, state);
 +        // DivineMC start - lithium: sleeping_block_entity
 +        } else if (org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.sleepingBlockEntity) {
-+            campfire.lithium$startSleeping();
++            entity.lithium$startSleeping();
          }
 +        // DivineMC end - lithium: sleeping_block_entity
      }
@@ -1023,7 +1023,7 @@ index ee6bc6e60b943e4b304b055de56443905ca4c771..71e10e2d8da3ce507e110715eabfa0c4
              setChanged(level, pos, state);
 +        // DivineMC start - lithium: sleeping_block_entity
 +        } else if (org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.sleepingBlockEntity) {
-+            blockEntity.lithium$startSleeping();
++            entity.lithium$startSleeping();
          }
 +        // DivineMC end - lithium: sleeping_block_entity
      }
@@ -1191,7 +1191,7 @@ index c9151d1572b2c5fc0f19575f19c20cbdf09c5daa..4bcd5ba16e009a97017256983f8f77ac
 +    // DivineMC end - lithium: sleeping_block_entity
  }
 diff --git a/net/minecraft/world/level/block/entity/CrafterBlockEntity.java b/net/minecraft/world/level/block/entity/CrafterBlockEntity.java
-index eb970f1003d0c7a631e9a14c5417852441f40d55..e66b3c02cd8432e0b7104f2221c50822a156d249 100644
+index eb970f1003d0c7a631e9a14c5417852441f40d55..e4a0f06a167fb379787a8e9602176771d22ddcd3 100644
 --- a/net/minecraft/world/level/block/entity/CrafterBlockEntity.java
 +++ b/net/minecraft/world/level/block/entity/CrafterBlockEntity.java
 @@ -24,7 +24,7 @@ import net.minecraft.world.level.block.state.BlockState;
@@ -1215,7 +1215,7 @@ index eb970f1003d0c7a631e9a14c5417852441f40d55..e66b3c02cd8432e0b7104f2221c50822
                  level.setBlock(blockPos, blockState.setValue(CrafterBlock.CRAFTING, false), Block.UPDATE_ALL);
              }
          }
-+        if (org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.sleepingBlockEntity && i < 0) crafter.checkSleep(); // DivineMC - lithium: sleeping_block_entity
++        if (org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.sleepingBlockEntity && craftingTicksRemaining < 0) entity.checkSleep(); // DivineMC - lithium: sleeping_block_entity
      }
  
      public void setCraftingTicksRemaining(final int maxCraftingTicks) {
@@ -1369,7 +1369,7 @@ index 751625124a87de63d933d9c7809e46361e3136a5..b8129cf6ae1c936aa998a3eaec7b7fd2
 +    // DivineMC end - lithium: sleeping_block_entity
  }
 diff --git a/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index a2ced87093a4ad61beefe3ccb63f9f12fa37ea55..47d7c48fb1b5c927782f4fe0cfb42d2d686e017b 100644
+index a2ced87093a4ad61beefe3ccb63f9f12fa37ea55..cb2bbce1fc4162178936e5ddcb73a87494642d25 100644
 --- a/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 @@ -28,7 +28,13 @@ import net.minecraft.world.level.storage.ValueOutput;
@@ -1407,7 +1407,7 @@ index a2ced87093a4ad61beefe3ccb63f9f12fa37ea55..47d7c48fb1b5c927782f4fe0cfb42d2d
                  if (changed) {
                      entity.setCooldown(level.spigotConfig.hopperTransfer); // Spigot
                      setChanged(level, pos, state);
-+                    if (org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.sleepingBlockEntity && !blockEntity.isOnCooldown() && !blockEntity.isSleeping() && !state.getValue(HopperBlock.ENABLED)) blockEntity.lithium$startSleeping(); // DivineMC - lithium: sleeping_block_entity
++                    if (org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.sleepingBlockEntity && !entity.isOnCooldown() && !entity.isSleeping() && !state.getValue(HopperBlock.ENABLED)) entity.lithium$startSleeping(); // DivineMC - lithium: sleeping_block_entity
                      return true;
                  }
              }
@@ -1942,7 +1942,7 @@ index a2ced87093a4ad61beefe3ccb63f9f12fa37ea55..47d7c48fb1b5c927782f4fe0cfb42d2d
 +            //Remember failed entity search timestamp. This allows shortcutting if no entity movement happens.
 +            return null;
 +        }
-+        Container inventory = inventoryEntities.get(world.random.nextInt(inventoryEntities.size()));
++        Container inventory = inventoryEntities.get(world.getRandom().nextInt(inventoryEntities.size()));
 +        if (inventory instanceof net.caffeinemc.mods.lithium.api.inventory.LithiumInventory optimizedInventory) {
 +            net.caffeinemc.mods.lithium.common.hopper.LithiumStackList insertInventoryStackList = net.caffeinemc.mods.lithium.common.hopper.InventoryHelper.getLithiumStackList(optimizedInventory);
 +            if (inventory != this.insertInventory || this.insertStackList != insertInventoryStackList) {
@@ -2008,7 +2008,7 @@ index a2ced87093a4ad61beefe3ccb63f9f12fa37ea55..47d7c48fb1b5c927782f4fe0cfb42d2d
 +            //shortcutting the entity present case requires checking its change counter
 +            return null;
 +        }
-+        Container inventory = inventoryEntities.get(world.random.nextInt(inventoryEntities.size()));
++        Container inventory = inventoryEntities.get(world.getRandom().nextInt(inventoryEntities.size()));
 +        if (inventory instanceof net.caffeinemc.mods.lithium.api.inventory.LithiumInventory optimizedInventory) {
 +            net.caffeinemc.mods.lithium.common.hopper.LithiumStackList extractInventoryStackList = net.caffeinemc.mods.lithium.common.hopper.InventoryHelper.getLithiumStackList(optimizedInventory);
 +            if (inventory != this.extractInventory || this.extractStackList != extractInventoryStackList) {
@@ -2335,7 +2335,7 @@ index 5f6078e4cc06c059c01c7a20421f2f3a364a058b..2d032ef44a92145438b63d0dea5e497e
 +    // DivineMC end - lithium: sleeping_block_entity
  }
 diff --git a/net/minecraft/world/level/block/state/BlockBehaviour.java b/net/minecraft/world/level/block/state/BlockBehaviour.java
-index 2263649d7e4a2f46ddbbeadd63fd8f05ae9b0a36..1c692c845521df51966f04372f76776719d4f6c3 100644
+index 2263649d7e4a2f46ddbbeadd63fd8f05ae9b0a36..2785263f5cfdd54afdd79eef97221366f83a2947 100644
 --- a/net/minecraft/world/level/block/state/BlockBehaviour.java
 +++ b/net/minecraft/world/level/block/state/BlockBehaviour.java
 @@ -83,7 +83,7 @@ import net.minecraft.world.phys.shapes.Shapes;
@@ -2351,7 +2351,7 @@ index 2263649d7e4a2f46ddbbeadd63fd8f05ae9b0a36..1c692c845521df51966f04372f767767
          final BlockState neighbourState,
          final RandomSource random
      ) {
-+        if (org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.sleepingBlockEntity) this.lithium$handleShapeUpdate(level, state, pos, neighborPos, neighborState); // DivineMC - lithium: sleeping_block_entity
++        if (org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.sleepingBlockEntity) this.lithium$handleShapeUpdate(level, state, pos, neighbourPos, neighbourState); // DivineMC - lithium: sleeping_block_entity
          return state;
      }
  
