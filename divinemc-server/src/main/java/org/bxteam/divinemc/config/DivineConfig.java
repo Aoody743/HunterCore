@@ -42,7 +42,7 @@ public class DivineConfig {
         
         Discord: https://discord.gg/qNyybSSPm5
         Docs: https://bxteam.org/docs/divinemc
-        Downloads: https://github.com/BX-Team/DivineMC/releases""";
+        Downloads: https://bxteam.org/downloads/divinemc""";
 
     public static final Logger LOGGER = LogManager.getLogger(DivineConfig.class.getSimpleName());
     public static final int CONFIG_VERSION = 8;

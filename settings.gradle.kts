@@ -22,7 +22,7 @@ if (!file(".git").exists()) {
          zip from GitHub.
          
          Built DivineMC jars are available for download at
-         https://github.com/BX-Team/DivineMC/releases or 
+         https://bxteam.org/downloads/divinemc or 
          at https://mcjars.app/DIVINEMC/versions
          
          See https://bxteam.org/docs/divinemc/development/contributing
