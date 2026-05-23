@@ -1,5 +1,14 @@
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
+@@ -263,7 +_,7 @@
+     private static double viewScale = 1.0;
+     private final EntityType<?> type;
+     private boolean requiresPrecisePosition;
+-    private int id = ENTITY_COUNTER.incrementAndGet();
++    private int id = Entity.nextEntityId(); // DivineMC - Prevent Entity ID counter overflow
+     public boolean blocksBuilding;
+     public ImmutableList<Entity> passengers = ImmutableList.of();
+     protected int boardingCooldown;
 @@ -390,6 +_,7 @@
      public long activatedTick = Integer.MIN_VALUE;
      public boolean isTemporarilyActive;
@@ -48,3 +57,19 @@
          // CraftBukkit start - block invalid bounding boxes
          double minX = bb.minX,
                  minY = bb.minY,
+@@ -5440,7 +_,14 @@
+ 
+     // Paper start - Expose entity id counter
+     public static int nextEntityId() {
+-        return ENTITY_COUNTER.incrementAndGet();
++        // DivineMC start - Prevent Entity ID counter overflow
++        int next = ENTITY_COUNTER.incrementAndGet();
++        if (next <= 0) {
++            ENTITY_COUNTER.set(1);
++            return 1;
++        }
++        return next;
++        // DivineMC end - Prevent Entity ID counter overflow
+     }
+ 
+     public boolean isTicking() {
