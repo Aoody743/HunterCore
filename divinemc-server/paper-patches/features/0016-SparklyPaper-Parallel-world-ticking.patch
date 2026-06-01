@@ -576,10 +576,10 @@ index f117b5fdb0d158fb0754a11fbf4fc4ddf19ff050..4fd4c4a42e1b00f242ac56fdebf91bae
          } else {
              this.snapshot = this.createSnapshot(blockEntity);
 diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlockState.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlockState.java
-index 88524015e15cbd58d7f4a095c1cfc00fad61e4f6..1e0a02b4e8cec7cd5e036f07d500656065e7a440 100644
+index b8a3660a13b9bcfccabd572d353bfe8611a8d172..81e1b9159f760b9d727ae1c185d4fb8375d34d06 100644
 --- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlockState.java
 +++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlockState.java
-@@ -218,6 +218,12 @@ public class CraftBlockState implements BlockState {
+@@ -217,6 +217,12 @@ public class CraftBlockState implements BlockState {
          LevelAccessor access = this.getWorldHandle();
          CraftBlock block = this.getBlock();
  
@@ -592,7 +592,7 @@ index 88524015e15cbd58d7f4a095c1cfc00fad61e4f6..1e0a02b4e8cec7cd5e036f07d5006560
          if (block.getType() != this.getType()) {
              if (!force) {
                  return false;
-@@ -362,6 +368,7 @@ public class CraftBlockState implements BlockState {
+@@ -361,6 +367,7 @@ public class CraftBlockState implements BlockState {
  
      @Override
      public java.util.Collection<org.bukkit.inventory.ItemStack> getDrops(org.bukkit.inventory.ItemStack tool, org.bukkit.entity.Entity entity) {

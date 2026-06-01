@@ -11,7 +11,7 @@ As part of: C2ME (https://github.com/RelativityMC/C2ME-fabric)
 Licensed under: MIT (https://opensource.org/licenses/MIT)
 
 diff --git a/net/minecraft/world/level/levelgen/Aquifer.java b/net/minecraft/world/level/levelgen/Aquifer.java
-index c35cb50ca2413b06fc291aa81eb7149187393d71..443f6877185cc5d8416087ad6f569bdc7ec7e7a3 100644
+index 49b6cb4835365baba15e2fcdad02807042a4767c..4325c9e1744f066168cd9a7db7d4c2df918b11b0 100644
 --- a/net/minecraft/world/level/levelgen/Aquifer.java
 +++ b/net/minecraft/world/level/levelgen/Aquifer.java
 @@ -96,6 +96,13 @@ public interface Aquifer {
@@ -70,220 +70,198 @@ index c35cb50ca2413b06fc291aa81eb7149187393d71..443f6877185cc5d8416087ad6f569bdc
              int maxAdjustedSurfaceLevel = this.adjustSurfaceLevel(
                  noiseChunk.maxPreliminarySurfaceLevel(fromGridX(this.minGridX, 0), fromGridZ(this.minGridZ, 0), fromGridX(maxGridX, 9), fromGridZ(maxGridZ, 9))
              );
-@@ -151,6 +193,7 @@ public interface Aquifer {
-                 this.shouldScheduleFluidUpdate = false;
-                 return null;
-             } else {
-+                // DivineMC start - C2ME: Optimize Aquifer
-                 int posX = context.blockX();
-                 int posY = context.blockY();
-                 int posZ = context.blockZ();
-@@ -162,134 +205,10 @@ public interface Aquifer {
-                     this.shouldScheduleFluidUpdate = false;
-                     return SharedConstants.DEBUG_DISABLE_FLUID_GENERATION ? Blocks.AIR.defaultBlockState() : Blocks.LAVA.defaultBlockState();
-                 } else {
--                    int xAnchor = gridX(posX + -5);
--                    int yAnchor = gridY(posY + 1);
--                    int zAnchor = gridZ(posZ + -5);
--                    int distanceSqr1 = Integer.MAX_VALUE;
--                    int distanceSqr2 = Integer.MAX_VALUE;
--                    int distanceSqr3 = Integer.MAX_VALUE;
--                    int distanceSqr4 = Integer.MAX_VALUE;
--                    int closestIndex1 = 0;
--                    int closestIndex2 = 0;
--                    int closestIndex3 = 0;
--                    int closestIndex4 = 0;
--
--                    for (int x1 = 0; x1 <= 1; x1++) {
--                        for (int y1 = -1; y1 <= 1; y1++) {
--                            for (int z1 = 0; z1 <= 1; z1++) {
--                                int spacedGridX = xAnchor + x1;
--                                int spacedGridY = yAnchor + y1;
--                                int spacedGridZ = zAnchor + z1;
--                                int index = this.getIndex(spacedGridX, spacedGridY, spacedGridZ);
--                                long existingLocation = this.aquiferLocationCache[index];
--                                long location;
--                                if (existingLocation != Long.MAX_VALUE) {
--                                    location = existingLocation;
--                                } else {
--                                    RandomSource random = this.positionalRandomFactory.at(spacedGridX, spacedGridY, spacedGridZ);
--                                    location = BlockPos.asLong(
--                                        fromGridX(spacedGridX, random.nextInt(10)),
--                                        fromGridY(spacedGridY, random.nextInt(9)),
--                                        fromGridZ(spacedGridZ, random.nextInt(10))
--                                    );
--                                    this.aquiferLocationCache[index] = location;
--                                }
--
--                                int dx = BlockPos.getX(location) - posX;
--                                int dy = BlockPos.getY(location) - posY;
--                                int dz = BlockPos.getZ(location) - posZ;
--                                int newDistance = dx * dx + dy * dy + dz * dz;
--                                if (distanceSqr1 >= newDistance) {
--                                    closestIndex4 = closestIndex3;
--                                    closestIndex3 = closestIndex2;
--                                    closestIndex2 = closestIndex1;
--                                    closestIndex1 = index;
--                                    distanceSqr4 = distanceSqr3;
--                                    distanceSqr3 = distanceSqr2;
--                                    distanceSqr2 = distanceSqr1;
--                                    distanceSqr1 = newDistance;
--                                } else if (distanceSqr2 >= newDistance) {
--                                    closestIndex4 = closestIndex3;
--                                    closestIndex3 = closestIndex2;
--                                    closestIndex2 = index;
--                                    distanceSqr4 = distanceSqr3;
--                                    distanceSqr3 = distanceSqr2;
--                                    distanceSqr2 = newDistance;
--                                } else if (distanceSqr3 >= newDistance) {
--                                    closestIndex4 = closestIndex3;
--                                    closestIndex3 = index;
--                                    distanceSqr4 = distanceSqr3;
--                                    distanceSqr3 = newDistance;
--                                } else if (distanceSqr4 >= newDistance) {
--                                    closestIndex4 = index;
--                                    distanceSqr4 = newDistance;
--                                }
--                            }
--                        }
--                    }
--
--                    Aquifer.FluidStatus closestStatus1 = this.getAquiferStatus(closestIndex1);
--                    double similarity12 = similarity(distanceSqr1, distanceSqr2);
--                    BlockState fluidState = closestStatus1.at(posY);
--                    BlockState actualFluidState = SharedConstants.DEBUG_DISABLE_FLUID_GENERATION ? Blocks.AIR.defaultBlockState() : fluidState;
--                    if (similarity12 <= 0.0) {
--                        if (similarity12 >= FLOWING_UPDATE_SIMULARITY) {
--                            Aquifer.FluidStatus closestStatus2 = this.getAquiferStatus(closestIndex2);
--                            this.shouldScheduleFluidUpdate = !closestStatus1.equals(closestStatus2);
--                        } else {
--                            this.shouldScheduleFluidUpdate = false;
--                        }
--
--                        return actualFluidState;
--                    } else if (fluidState.is(Blocks.WATER) && this.globalFluidPicker.computeFluid(posX, posY - 1, posZ).at(posY - 1).is(Blocks.LAVA)) {
--                        this.shouldScheduleFluidUpdate = true;
--                        return actualFluidState;
--                    } else {
--                        MutableDouble barrierNoiseValue = new MutableDouble(Double.NaN);
--                        Aquifer.FluidStatus closestStatus2 = this.getAquiferStatus(closestIndex2);
--                        double barrier12 = similarity12 * this.calculatePressure(context, barrierNoiseValue, closestStatus1, closestStatus2);
--                        if (density + barrier12 > 0.0) {
--                            this.shouldScheduleFluidUpdate = false;
--                            return null;
--                        } else {
--                            Aquifer.FluidStatus closestStatus3 = this.getAquiferStatus(closestIndex3);
--                            double similarity13 = similarity(distanceSqr1, distanceSqr3);
--                            if (similarity13 > 0.0) {
--                                double barrier13 = similarity12
--                                    * similarity13
--                                    * this.calculatePressure(context, barrierNoiseValue, closestStatus1, closestStatus3);
--                                if (density + barrier13 > 0.0) {
--                                    this.shouldScheduleFluidUpdate = false;
--                                    return null;
--                                }
--                            }
--
--                            double similarity23 = similarity(distanceSqr2, distanceSqr3);
--                            if (similarity23 > 0.0) {
--                                double barrier23 = similarity12
--                                    * similarity23
--                                    * this.calculatePressure(context, barrierNoiseValue, closestStatus2, closestStatus3);
--                                if (density + barrier23 > 0.0) {
--                                    this.shouldScheduleFluidUpdate = false;
--                                    return null;
--                                }
--                            }
--
--                            boolean mayFlow12 = !closestStatus1.equals(closestStatus2);
--                            boolean mayFlow23 = similarity23 >= FLOWING_UPDATE_SIMULARITY && !closestStatus2.equals(closestStatus3);
--                            boolean mayFlow13 = similarity13 >= FLOWING_UPDATE_SIMULARITY && !closestStatus1.equals(closestStatus3);
--                            if (!mayFlow12 && !mayFlow23 && !mayFlow13) {
--                                this.shouldScheduleFluidUpdate = similarity13 >= FLOWING_UPDATE_SIMULARITY
--                                    && similarity(distanceSqr1, distanceSqr4) >= FLOWING_UPDATE_SIMULARITY
--                                    && !closestStatus1.equals(this.getAquiferStatus(closestIndex4));
--                            } else {
--                                this.shouldScheduleFluidUpdate = true;
--                            }
--
--                            return actualFluidState;
--                        }
--                    }
-+                    aquiferExtracted$refreshDistPosIdx(posX, posY, posZ);
-+                    return aquiferExtracted$applyPost(context, density, posX, posY, posZ);
-                 }
-+                // DivineMC end - C2ME: Optimize Aquifer
+@@ -166,131 +208,10 @@ public interface Aquifer {
+                 return SharedConstants.DEBUG_DISABLE_FLUID_GENERATION ? Blocks.AIR.defaultBlockState() : Blocks.LAVA.defaultBlockState();
              }
-         }
  
-@@ -303,6 +222,7 @@ public interface Aquifer {
-             return 1.0 - (distanceSqr2 - distanceSqr1) / 25.0;
-         }
- 
-+        // DivineMC start - C2ME: Optimize Aquifer
-         private double calculatePressure(
-             final DensityFunction.FunctionContext context,
-             final MutableDouble barrierNoiseValue,
-@@ -317,54 +237,16 @@ public interface Aquifer {
-                 if (fluidYDiff == 0) {
-                     return 0.0;
-                 } else {
--                    double averageFluidY = 0.5 * (statusClosest1.fluidLevel + statusClosest2.fluidLevel);
--                    double howFarAboveAverageFluidPoint = posY + 0.5 - averageFluidY;
--                    double baseValue = fluidYDiff / 2.0;
--                    double topBias = 0.0;
--                    double furthestRocksFromTopBias = 2.5;
--                    double furthestHolesFromTopBias = 1.5;
--                    double bottomBias = 3.0;
--                    double furthestRocksFromBottomBias = 10.0;
--                    double furthestHolesFromBottomBias = 3.0;
--                    double distanceFromBarrierEdgeTowardsMiddle = baseValue - Math.abs(howFarAboveAverageFluidPoint);
--                    double gradient;
--                    if (howFarAboveAverageFluidPoint > 0.0) {
--                        double centerPoint = 0.0 + distanceFromBarrierEdgeTowardsMiddle;
--                        if (centerPoint > 0.0) {
--                            gradient = centerPoint / 1.5;
--                        } else {
--                            gradient = centerPoint / 2.5;
--                        }
--                    } else {
--                        double centerPoint = 3.0 + distanceFromBarrierEdgeTowardsMiddle;
--                        if (centerPoint > 0.0) {
--                            gradient = centerPoint / 3.0;
--                        } else {
--                            gradient = centerPoint / 10.0;
--                        }
--                    }
+-            int xAnchor = gridX(posX + -5);
+-            int yAnchor = gridY(posY + 1);
+-            int zAnchor = gridZ(posZ + -5);
+-            int distanceSqr1 = Integer.MAX_VALUE;
+-            int distanceSqr2 = Integer.MAX_VALUE;
+-            int distanceSqr3 = Integer.MAX_VALUE;
+-            int distanceSqr4 = Integer.MAX_VALUE;
+-            int closestIndex1 = 0;
+-            int closestIndex2 = 0;
+-            int closestIndex3 = 0;
+-            int closestIndex4 = 0;
 -
--                    double amplitude = 2.0;
--                    double noiseValue;
--                    if (!(gradient < -2.0) && !(gradient > 2.0)) {
--                        double currentNoiseValue = barrierNoiseValue.doubleValue();
--                        if (Double.isNaN(currentNoiseValue)) {
--                            double barrierNoise = this.barrierNoise.compute(context);
--                            barrierNoiseValue.setValue(barrierNoise);
--                            noiseValue = barrierNoise;
+-            for (int x1 = 0; x1 <= 1; x1++) {
+-                for (int y1 = -1; y1 <= 1; y1++) {
+-                    for (int z1 = 0; z1 <= 1; z1++) {
+-                        int spacedGridX = xAnchor + x1;
+-                        int spacedGridY = yAnchor + y1;
+-                        int spacedGridZ = zAnchor + z1;
+-                        int index = this.getIndex(spacedGridX, spacedGridY, spacedGridZ);
+-                        long existingLocation = this.aquiferLocationCache[index];
+-                        long location;
+-                        if (existingLocation != Long.MAX_VALUE) {
+-                            location = existingLocation;
 -                        } else {
--                            noiseValue = currentNoiseValue;
+-                            RandomSource random = this.positionalRandomFactory.at(spacedGridX, spacedGridY, spacedGridZ);
+-                            location = BlockPos.asLong(
+-                                fromGridX(spacedGridX, random.nextInt(10)),
+-                                fromGridY(spacedGridY, random.nextInt(9)),
+-                                fromGridZ(spacedGridZ, random.nextInt(10))
+-                            );
+-                            this.aquiferLocationCache[index] = location;
 -                        }
--                    } else {
--                        noiseValue = 0.0;
+-
+-                        int dx = BlockPos.getX(location) - posX;
+-                        int dy = BlockPos.getY(location) - posY;
+-                        int dz = BlockPos.getZ(location) - posZ;
+-                        int newDistance = dx * dx + dy * dy + dz * dz;
+-                        if (distanceSqr1 >= newDistance) {
+-                            closestIndex4 = closestIndex3;
+-                            closestIndex3 = closestIndex2;
+-                            closestIndex2 = closestIndex1;
+-                            closestIndex1 = index;
+-                            distanceSqr4 = distanceSqr3;
+-                            distanceSqr3 = distanceSqr2;
+-                            distanceSqr2 = distanceSqr1;
+-                            distanceSqr1 = newDistance;
+-                        } else if (distanceSqr2 >= newDistance) {
+-                            closestIndex4 = closestIndex3;
+-                            closestIndex3 = closestIndex2;
+-                            closestIndex2 = index;
+-                            distanceSqr4 = distanceSqr3;
+-                            distanceSqr3 = distanceSqr2;
+-                            distanceSqr2 = newDistance;
+-                        } else if (distanceSqr3 >= newDistance) {
+-                            closestIndex4 = closestIndex3;
+-                            closestIndex3 = index;
+-                            distanceSqr4 = distanceSqr3;
+-                            distanceSqr3 = newDistance;
+-                        } else if (distanceSqr4 >= newDistance) {
+-                            closestIndex4 = index;
+-                            distanceSqr4 = newDistance;
+-                        }
 -                    }
-+                    double averageFluidY = 0.5 * (double)(statusClosest1.fluidLevel + statusClosest2.fluidLevel);
-+                    final double q = aquiferExtracted$getQ(posY, averageFluidY, fluidYDiff);
+-                }
+-            }
+-
+-            Aquifer.FluidStatus closestStatus1 = this.getAquiferStatus(closestIndex1);
+-            double similarity12 = similarity(distanceSqr1, distanceSqr2);
+-            BlockState fluidState = closestStatus1.at(posY);
+-            BlockState actualFluidState = SharedConstants.DEBUG_DISABLE_FLUID_GENERATION ? Blocks.AIR.defaultBlockState() : fluidState;
+-            if (similarity12 <= 0.0) {
+-                if (similarity12 >= FLOWING_UPDATE_SIMULARITY) {
+-                    Aquifer.FluidStatus closestStatus2 = this.getAquiferStatus(closestIndex2);
+-                    this.shouldScheduleFluidUpdate = !closestStatus1.equals(closestStatus2);
+-                } else {
+-                    this.shouldScheduleFluidUpdate = false;
+-                }
+-
+-                return actualFluidState;
+-            } else {
+-                if (fluidState.is(Blocks.WATER) && this.globalFluidPicker.computeFluid(posX, posY - 1, posZ).at(posY - 1).is(Blocks.LAVA)) {
+-                    this.shouldScheduleFluidUpdate = true;
+-                    return actualFluidState;
+-                }
+-
+-                MutableDouble barrierNoiseValue = new MutableDouble(Double.NaN);
+-                Aquifer.FluidStatus closestStatus2 = this.getAquiferStatus(closestIndex2);
+-                double barrier12 = similarity12 * this.calculatePressure(context, barrierNoiseValue, closestStatus1, closestStatus2);
+-                if (density + barrier12 > 0.0) {
+-                    this.shouldScheduleFluidUpdate = false;
+-                    return null;
+-                }
+-
+-                Aquifer.FluidStatus closestStatus3 = this.getAquiferStatus(closestIndex3);
+-                double similarity13 = similarity(distanceSqr1, distanceSqr3);
+-                if (similarity13 > 0.0) {
+-                    double barrier13 = similarity12 * similarity13 * this.calculatePressure(context, barrierNoiseValue, closestStatus1, closestStatus3);
+-                    if (density + barrier13 > 0.0) {
+-                        this.shouldScheduleFluidUpdate = false;
+-                        return null;
+-                    }
+-                }
+-
+-                double similarity23 = similarity(distanceSqr2, distanceSqr3);
+-                if (similarity23 > 0.0) {
+-                    double barrier23 = similarity12 * similarity23 * this.calculatePressure(context, barrierNoiseValue, closestStatus2, closestStatus3);
+-                    if (density + barrier23 > 0.0) {
+-                        this.shouldScheduleFluidUpdate = false;
+-                        return null;
+-                    }
+-                }
+-
+-                boolean mayFlow12 = !closestStatus1.equals(closestStatus2);
+-                boolean mayFlow23 = similarity23 >= FLOWING_UPDATE_SIMULARITY && !closestStatus2.equals(closestStatus3);
+-                boolean mayFlow13 = similarity13 >= FLOWING_UPDATE_SIMULARITY && !closestStatus1.equals(closestStatus3);
+-                if (!mayFlow12 && !mayFlow23 && !mayFlow13) {
+-                    this.shouldScheduleFluidUpdate = similarity13 >= FLOWING_UPDATE_SIMULARITY
+-                        && similarity(distanceSqr1, distanceSqr4) >= FLOWING_UPDATE_SIMULARITY
+-                        && !closestStatus1.equals(this.getAquiferStatus(closestIndex4));
+-                } else {
+-                    this.shouldScheduleFluidUpdate = true;
+-                }
+-
+-                return actualFluidState;
+-            }
++            // DivineMC start - C2ME: Optimize Aquifer
++            aquiferExtracted$refreshDistPosIdx(posX, posY, posZ);
++            return aquiferExtracted$applyPost(context, density, posX, posY, posZ);
++            // DivineMC end - C2ME: Optimize Aquifer
+         }
  
--                    return 2.0 * (noiseValue + gradient);
-+                    return aquiferExtracted$postCalculateDensity(context, barrierNoiseValue, q);
+         @Override
+@@ -318,49 +239,12 @@ public interface Aquifer {
+                     return 0.0;
                  }
+ 
+-                double averageFluidY = 0.5 * (statusClosest1.fluidLevel + statusClosest2.fluidLevel);
+-                double howFarAboveAverageFluidPoint = posY + 0.5 - averageFluidY;
+-                double baseValue = fluidYDiff / 2.0;
+-                double topBias = 0.0;
+-                double furthestRocksFromTopBias = 2.5;
+-                double furthestHolesFromTopBias = 1.5;
+-                double bottomBias = 3.0;
+-                double furthestRocksFromBottomBias = 10.0;
+-                double furthestHolesFromBottomBias = 3.0;
+-                double distanceFromBarrierEdgeTowardsMiddle = baseValue - Math.abs(howFarAboveAverageFluidPoint);
+-                double gradient;
+-                if (howFarAboveAverageFluidPoint > 0.0) {
+-                    double centerPoint = 0.0 + distanceFromBarrierEdgeTowardsMiddle;
+-                    if (centerPoint > 0.0) {
+-                        gradient = centerPoint / 1.5;
+-                    } else {
+-                        gradient = centerPoint / 2.5;
+-                    }
+-                } else {
+-                    double centerPoint = 3.0 + distanceFromBarrierEdgeTowardsMiddle;
+-                    if (centerPoint > 0.0) {
+-                        gradient = centerPoint / 3.0;
+-                    } else {
+-                        gradient = centerPoint / 10.0;
+-                    }
+-                }
++                // DivineMC start - C2ME: Optimize Aquifer
++                double averageFluidY = 0.5 * (double)(statusClosest1.fluidLevel + statusClosest2.fluidLevel);
++                final double q = aquiferExtracted$getQ(posY, averageFluidY, fluidYDiff);
+ 
+-                double amplitude = 2.0;
+-                double noiseValue;
+-                if (!(gradient < -2.0) && !(gradient > 2.0)) {
+-                    double currentNoiseValue = barrierNoiseValue.doubleValue();
+-                    if (Double.isNaN(currentNoiseValue)) {
+-                        double barrierNoise = this.barrierNoise.compute(context);
+-                        barrierNoiseValue.setValue(barrierNoise);
+-                        noiseValue = barrierNoise;
+-                    } else {
+-                        noiseValue = currentNoiseValue;
+-                    }
+-                } else {
+-                    noiseValue = 0.0;
+-                }
+-
+-                return 2.0 * (noiseValue + gradient);
++                return aquiferExtracted$postCalculateDensity(context, barrierNoiseValue, q);
++                // DivineMC end - C2ME: Optimize Aquifer
              } else {
                  return 2.0;
              }
-         }
-+        // DivineMC end - C2ME: Optimize Aquifer
- 
-         private static int gridX(final int blockCoord) {
-             return blockCoord >> 4;
-@@ -452,6 +334,7 @@ public interface Aquifer {
+@@ -452,6 +336,7 @@ public interface Aquifer {
              final int lowestPreliminarySurface,
              final boolean surfaceAtCenterIsUnderGlobalFluidLevel
          ) {
@@ -291,12 +269,12 @@ index c35cb50ca2413b06fc291aa81eb7149187393d71..443f6877185cc5d8416087ad6f569bdc
              DensityFunction.SinglePointContext context = new DensityFunction.SinglePointContext(x, y, z);
              double partiallyFloodedness;
              double fullyFloodidness;
-@@ -460,14 +343,12 @@ public interface Aquifer {
+@@ -460,14 +345,12 @@ public interface Aquifer {
                  fullyFloodidness = -1.0;
              } else {
                  int distanceBelowSurface = lowestPreliminarySurface + 8 - y;
 -                int floodednessMaxDepth = 64;
--                double floodednessFactor = surfaceAtCenterIsUnderGlobalFluidLevel ? Mth.clampedMap((double)distanceBelowSurface, 0.0, 64.0, 1.0, 0.0) : 0.0;
+-                double floodednessFactor = surfaceAtCenterIsUnderGlobalFluidLevel ? Mth.clampedMap(distanceBelowSurface, 0.0, 64.0, 1.0, 0.0) : 0.0;
 +                double floodednessFactor = surfaceAtCenterIsUnderGlobalFluidLevel ? Mth.clampedLerp(1.0, 0.0, ((double) distanceBelowSurface) / 64.0) : 0.0; // inline Mth.clampedMap
                  double floodednessNoiseValue = Mth.clamp(this.fluidLevelFloodednessNoise.compute(context), -1.0, 1.0);
 -                double fullyFloodedThreshold = Mth.map(floodednessFactor, 1.0, 0.0, -0.3, 0.8);
@@ -310,7 +288,7 @@ index c35cb50ca2413b06fc291aa81eb7149187393d71..443f6877185cc5d8416087ad6f569bdc
  
              int fluidSurfaceLevel;
              if (fullyFloodidness > 0.0) {
-@@ -500,11 +381,11 @@ public interface Aquifer {
+@@ -500,11 +383,11 @@ public interface Aquifer {
          private BlockState computeFluidType(final int x, final int y, final int z, final Aquifer.FluidStatus globalFluid, final int fluidSurfaceLevel) {
              BlockState fluidType = globalFluid.fluidType;
              if (fluidSurfaceLevel <= -10 && fluidSurfaceLevel != DimensionType.WAY_BELOW_MIN_Y && globalFluid.fluidType != Blocks.LAVA.defaultBlockState()) {
@@ -326,7 +304,7 @@ index c35cb50ca2413b06fc291aa81eb7149187393d71..443f6877185cc5d8416087ad6f569bdc
                  double lavaNoiseValue = this.lavaNoise.compute(new DensityFunction.SinglePointContext(fluidTypeCellX, fluidTypeCellY, fluidTypeCellZ));
                  if (Math.abs(lavaNoiseValue) > 0.3) {
                      fluidType = Blocks.LAVA.defaultBlockState();
-@@ -513,5 +394,218 @@ public interface Aquifer {
+@@ -513,5 +396,218 @@ public interface Aquifer {
  
              return fluidType;
          }
@@ -546,7 +524,7 @@ index c35cb50ca2413b06fc291aa81eb7149187393d71..443f6877185cc5d8416087ad6f569bdc
      }
  }
 diff --git a/net/minecraft/world/level/levelgen/Beardifier.java b/net/minecraft/world/level/levelgen/Beardifier.java
-index b49371604db8eff38738dc2bd7a5f231a3f1c259..80cabe227ba1f2b134936b0f00a83b581395b572 100644
+index e9b049e0c1f41962d481c44c568a92f21ffa1c51..806a7f886216c28f2cbeaba028505ba3dbb1648f 100644
 --- a/net/minecraft/world/level/levelgen/Beardifier.java
 +++ b/net/minecraft/world/level/levelgen/Beardifier.java
 @@ -34,6 +34,15 @@ public class Beardifier implements DensityFunctions.BeardifierOrMarker {
@@ -565,59 +543,58 @@ index b49371604db8eff38738dc2bd7a5f231a3f1c259..80cabe227ba1f2b134936b0f00a83b58
  
      public static Beardifier forStructuresInChunk(final StructureManager structureManager, final ChunkPos chunkPos) {
          List<StructureStart> structureStarts = structureManager.startsForStructure(chunkPos, s -> s.terrainAdaptation() != TerrainAdjustment.NONE);
-@@ -118,32 +127,28 @@ public class Beardifier implements DensityFunctions.BeardifierOrMarker {
-             if (!this.affectedBox.isInside(blockX, blockY, blockZ)) {
-                 return 0.0;
-             } else {
-+                // DivineMC start - C2ME: Optimize Beardifier
-+                if (this.c2me$pieceArray == null || this.c2me$junctionArray == null) this.c2me$initArrays();
-+
-                 double noiseValue = 0.0;
- 
--                for (Beardifier.Rigid rigid : this.pieces) {
-+                for (Beardifier.Rigid rigid : this.c2me$pieceArray) {
-                     BoundingBox box = rigid.box();
-                     int groundLevelDelta = rigid.groundLevelDelta();
-                     int dx = Math.max(0, Math.max(box.minX() - blockX, blockX - box.maxX()));
-                     int dz = Math.max(0, Math.max(box.minZ() - blockZ, blockZ - box.maxZ()));
-                     int groundY = box.minY() + groundLevelDelta;
-                     int dyToGround = blockY - groundY;
--
--                    int dy = switch (rigid.terrainAdjustment()) {
--                        case NONE -> 0;
--                        case BURY, BEARD_THIN -> dyToGround;
--                        case BEARD_BOX -> Math.max(0, Math.max(groundY - blockY, blockY - box.maxY()));
--                        case ENCAPSULATE -> Math.max(0, Math.max(box.minY() - blockY, blockY - box.maxY()));
--                    };
--
--                    noiseValue += switch (rigid.terrainAdjustment()) {
-+                    noiseValue += switch (rigid.terrainAdjustment()) { // 2 switch statements merged
-                         case NONE -> 0.0;
--                        case BURY -> getBuryContribution(dx, dy / 2.0, dz);
--                        case BEARD_THIN, BEARD_BOX -> getBeardContribution(dx, dy, dz, dyToGround) * 0.8;
--                        case ENCAPSULATE -> getBuryContribution(dx / 2.0, dy / 2.0, dz / 2.0) * 0.8;
-+                        case BURY -> getBuryContribution(dx, dyToGround / 2.0, dz);
-+                        case BEARD_THIN -> getBeardContribution(dx, dyToGround, dz, dyToGround) * 0.8;
-+                        case BEARD_BOX -> getBeardContribution(dx, Math.max(0, Math.max(groundY - blockY, blockY - box.maxY())), dz, dyToGround) * 0.8;
-+                        case ENCAPSULATE -> getBuryContribution(dx / 2.0, Math.max(0, Math.max(box.minY() - blockY, blockY - box.maxY())) / 2.0, dz / 2.0) * 0.8;
-                     };
-                 }
- 
--                for (JigsawJunction junction : this.junctions) {
-+                for (JigsawJunction junction : this.c2me$junctionArray) {
-                     int dx = blockX - junction.getSourceX();
-                     int dy = blockY - junction.getSourceGroundY();
-                     int dz = blockZ - junction.getSourceZ();
-@@ -151,6 +156,7 @@ public class Beardifier implements DensityFunctions.BeardifierOrMarker {
-                 }
- 
-                 return noiseValue;
-+                // DivineMC end - C2ME: Optimize Beardifier
-             }
+@@ -120,9 +129,12 @@ public class Beardifier implements DensityFunctions.BeardifierOrMarker {
+             return 0.0;
          }
+ 
++        // DivineMC start - C2ME: Optimize Beardifier
++        if (this.c2me$pieceArray == null || this.c2me$junctionArray == null) this.c2me$initArrays();
++
+         double noiseValue = 0.0;
+ 
+-        for (Beardifier.Rigid rigid : this.pieces) {
++        for (Beardifier.Rigid rigid : this.c2me$pieceArray) {
+             BoundingBox box = rigid.box();
+             int groundLevelDelta = rigid.groundLevelDelta();
+             int dx = Math.max(0, Math.max(box.minX() - blockX, blockX - box.maxX()));
+@@ -130,22 +142,16 @@ public class Beardifier implements DensityFunctions.BeardifierOrMarker {
+             int groundY = box.minY() + groundLevelDelta;
+             int dyToGround = blockY - groundY;
+ 
+-            int dy = switch (rigid.terrainAdjustment()) {
+-                case NONE -> 0;
+-                case BURY, BEARD_THIN -> dyToGround;
+-                case BEARD_BOX -> Math.max(0, Math.max(groundY - blockY, blockY - box.maxY()));
+-                case ENCAPSULATE -> Math.max(0, Math.max(box.minY() - blockY, blockY - box.maxY()));
+-            };
+-
+             noiseValue += switch (rigid.terrainAdjustment()) {
+                 case NONE -> 0.0;
+-                case BURY -> getBuryContribution(dx, dy / 2.0, dz);
+-                case BEARD_THIN, BEARD_BOX -> getBeardContribution(dx, dy, dz, dyToGround) * 0.8;
+-                case ENCAPSULATE -> getBuryContribution(dx / 2.0, dy / 2.0, dz / 2.0) * 0.8;
++                case BURY -> getBuryContribution(dx, dyToGround / 2.0, dz);
++                case BEARD_THIN -> getBeardContribution(dx, dyToGround, dz, dyToGround) * 0.8;
++                case BEARD_BOX -> getBeardContribution(dx, Math.max(0, Math.max(groundY - blockY, blockY - box.maxY())), dz, dyToGround) * 0.8;
++                case ENCAPSULATE -> getBuryContribution(dx / 2.0, Math.max(0, Math.max(box.minY() - blockY, blockY - box.maxY())) / 2.0, dz / 2.0) * 0.8;
+             };
+         }
+ 
+-        for (JigsawJunction junction : this.junctions) {
++        for (JigsawJunction junction : this.c2me$junctionArray) {
+             int dx = blockX - junction.getSourceX();
+             int dy = blockY - junction.getSourceGroundY();
+             int dz = blockZ - junction.getSourceZ();
+@@ -153,6 +159,7 @@ public class Beardifier implements DensityFunctions.BeardifierOrMarker {
+         }
+ 
+         return noiseValue;
++        // DivineMC end - C2ME: Optimize Beardifier
      }
+ 
+     @Override
 diff --git a/net/minecraft/world/level/levelgen/LegacyRandomSource.java b/net/minecraft/world/level/levelgen/LegacyRandomSource.java
-index d7fa5baf1d64f7ac3714d7342b4c29640f5ef75c..f445aa1620b05dcdeba8cb34efe65bcbd3352a8a 100644
+index 81e02ed613d8122074be7893d7ba33241e6137b2..957bd83dc66e8b93b1172e29bef32220d34d4201 100644
 --- a/net/minecraft/world/level/levelgen/LegacyRandomSource.java
 +++ b/net/minecraft/world/level/levelgen/LegacyRandomSource.java
 @@ -53,13 +53,7 @@ public class LegacyRandomSource implements BitRandomSource {
@@ -636,7 +613,7 @@ index d7fa5baf1d64f7ac3714d7342b4c29640f5ef75c..f445aa1620b05dcdeba8cb34efe65bcb
          public RandomSource at(final int x, final int y, final int z) {
              long positionalSeed = Mth.getSeed(x, y, z);
 diff --git a/net/minecraft/world/level/levelgen/XoroshiroRandomSource.java b/net/minecraft/world/level/levelgen/XoroshiroRandomSource.java
-index 5f260674334a503f20fb6523d2501551304589e1..61e4a1357b528027cc33e31ca15ebd189bbc6c27 100644
+index e3acb8578ebcd1a533d7b65331cf6e5da0714481..bfad38d70138a526bdfe866e9d4ee527e63d16d4 100644
 --- a/net/minecraft/world/level/levelgen/XoroshiroRandomSource.java
 +++ b/net/minecraft/world/level/levelgen/XoroshiroRandomSource.java
 @@ -109,15 +109,7 @@ public class XoroshiroRandomSource implements RandomSource {

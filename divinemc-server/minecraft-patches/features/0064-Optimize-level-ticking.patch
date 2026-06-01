@@ -5,7 +5,7 @@ Subject: [PATCH] Optimize level ticking
 
 
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index b7ba54068f8d9aa796c8f134113041ceeba31467..1a16652100cea49d77bf1ca5f4b1f3f787bffbef 100644
+index 0284a07fafbf69c799b570af35b1b263f8dd5ca7..cab60df4c826ca72944d98adce88f2c86d20bb93 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -1034,9 +1034,10 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -73,10 +73,10 @@ index b7ba54068f8d9aa796c8f134113041ceeba31467..1a16652100cea49d77bf1ca5f4b1f3f7
  
      public void tickChunk(final LevelChunk chunk, final int tickSpeed) {
 diff --git a/net/minecraft/world/level/chunk/LevelChunk.java b/net/minecraft/world/level/chunk/LevelChunk.java
-index ae302fb52effe914c73b19e768543e846edbc56a..107200840034a541935fee922609676e94b410d6 100644
+index 5a11b9eac4938585ef5fa77f2d338ec0490c319c..3f5c67a84de77045c72dfefc655af86e8d03a911 100644
 --- a/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/net/minecraft/world/level/chunk/LevelChunk.java
-@@ -86,7 +86,7 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
+@@ -85,7 +85,7 @@ public class LevelChunk extends ChunkAccess implements DebugValueSource, ca.spot
              return "<null>";
          }
      };

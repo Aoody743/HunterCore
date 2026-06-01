@@ -17,10 +17,10 @@ index d735fb016fec424aab2d5082e4b1b4f33f6cbebe..daafab2d679b623ea07d0f5b16e7f240
                      }
                      // CraftBukkit end
 diff --git a/net/minecraft/world/level/material/FlowingFluid.java b/net/minecraft/world/level/material/FlowingFluid.java
-index c65d31a38755ecf8aca772bb2ab0fc84d8fc1493..a5a450808d14a2e301c54147085d7907d7f7f766 100644
+index 91db225ebf22e801b4c831159f96c08bba490305..1a541d9b73c9149250d59fcfb09c10922f1478b0 100644
 --- a/net/minecraft/world/level/material/FlowingFluid.java
 +++ b/net/minecraft/world/level/material/FlowingFluid.java
-@@ -202,6 +202,7 @@ public abstract class FlowingFluid extends Fluid {
+@@ -201,6 +201,7 @@ public abstract class FlowingFluid extends Fluid {
                  BlockPos neighborPos = pos.relative(spread);
                  final BlockState neighborState = level.getBlockStateIfLoaded(neighborPos); // Paper - Prevent chunk loading from fluid flowing
                  if (neighborState == null) continue; // Paper - Prevent chunk loading from fluid flowing
@@ -28,7 +28,7 @@ index c65d31a38755ecf8aca772bb2ab0fc84d8fc1493..a5a450808d14a2e301c54147085d7907
                  // CraftBukkit start
                  org.bukkit.block.Block source = org.bukkit.craftbukkit.block.CraftBlock.at(level, pos);
                  org.bukkit.event.block.BlockFromToEvent event = new org.bukkit.event.block.BlockFromToEvent(source, org.bukkit.craftbukkit.block.CraftBlock.notchToBlockFace(spread));
-@@ -216,6 +217,39 @@ public abstract class FlowingFluid extends Fluid {
+@@ -215,6 +216,39 @@ public abstract class FlowingFluid extends Fluid {
          }
      }
  
@@ -68,7 +68,7 @@ index c65d31a38755ecf8aca772bb2ab0fc84d8fc1493..a5a450808d14a2e301c54147085d7907
      protected FluidState getNewLiquid(final ServerLevel level, final BlockPos pos, final BlockState state) {
          int highestNeighbor = 0;
          int neighbourSources = 0;
-@@ -344,35 +378,48 @@ public abstract class FlowingFluid extends Fluid {
+@@ -343,35 +377,48 @@ public abstract class FlowingFluid extends Fluid {
  
      protected abstract void beforeDestroyingBlock(LevelAccessor level, BlockPos pos, BlockState state);
  

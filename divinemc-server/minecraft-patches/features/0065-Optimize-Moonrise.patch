@@ -412,10 +412,10 @@ index 5c7b3804cdbcb0a873a0d195325c2658760a8914..4bb64bc5a31951a83d29d0c88919b1fa
              return false;
          }
 diff --git a/net/minecraft/server/level/DistanceManager.java b/net/minecraft/server/level/DistanceManager.java
-index f1fa6c7169635724e202c10adafe7d70e14ac7de..be676525f288705375d1d71d995e4c339cfdb4b3 100644
+index 63cc7970b9df5e84743084ca99650bc3d13b970e..14d0afdb35f889693423a00b22aa407403774cd7 100644
 --- a/net/minecraft/server/level/DistanceManager.java
 +++ b/net/minecraft/server/level/DistanceManager.java
-@@ -127,15 +127,13 @@ public abstract class DistanceManager implements ca.spottedleaf.moonrise.patches
+@@ -126,15 +126,13 @@ public abstract class DistanceManager implements ca.spottedleaf.moonrise.patches
  
      public boolean inEntityTickingRange(final long key) {
          // Paper start - rewrite chunk system
@@ -434,10 +434,10 @@ index f1fa6c7169635724e202c10adafe7d70e14ac7de..be676525f288705375d1d71d995e4c33
      }
  
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index a43c1b709787f68d78eae7d6f7536bdb8b81ceb0..cbf38a968fe4003c6e68d14ef48b38284ef76ae1 100644
+index 9487bb3f88aacb0e2527245d9b426b70ae45cb2e..74f26761336bd8ff64083059a8af5450c5e9a86a 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
-@@ -454,8 +454,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -452,8 +452,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
  
      public boolean isPositionTicking(final long chunkKey) {
          // Paper start - rewrite chunk system
@@ -448,7 +448,7 @@ index a43c1b709787f68d78eae7d6f7536bdb8b81ceb0..cbf38a968fe4003c6e68d14ef48b3828
      }
  
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 1a16652100cea49d77bf1ca5f4b1f3f787bffbef..4a2ec734d245516442c4cdf34f55590b696f4c05 100644
+index cab60df4c826ca72944d98adce88f2c86d20bb93..9b6dffd60cba592494f3d61a9f59903ebbbcd481 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -195,6 +195,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet

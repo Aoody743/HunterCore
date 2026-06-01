@@ -7,7 +7,7 @@ Original project: https://github.com/TelepathicGrunt/StructureLayoutOptimizer
 Original license: MIT
 
 diff --git a/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java b/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
-index 499e1c76a8ff6fdff2f1f95a50fbc22c1c750556..467e03d7df2b24192f3f7bd5e213eb33423eee5b 100644
+index b92da7acae0789d955a9f71072b95ed030b879e2..232ef01f83efd00c4fee2a149b2c5643946792f8 100644
 --- a/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
 +++ b/net/minecraft/world/level/levelgen/structure/pools/JigsawPlacement.java
 @@ -290,6 +290,108 @@ public class JigsawPlacement {
@@ -189,7 +189,7 @@ index 499e1c76a8ff6fdff2f1f95a50fbc22c1c750556..467e03d7df2b24192f3f7bd5e213eb33
                                                      Shapes.joinUnoptimized(childrenFree.get(), Shapes.create(AABB.of(targetBB)), BooleanOp.ONLY_FIRST)
                                                  );
 diff --git a/net/minecraft/world/level/levelgen/structure/pools/SinglePoolElement.java b/net/minecraft/world/level/levelgen/structure/pools/SinglePoolElement.java
-index 80319e8548bab23827667a91072cd751006632d5..5b373c84a5f643b4e2b2358f97096c7dc28d6340 100644
+index 7a352bf170c5f004d35c3de89b152129c1124be0..e1d21dbb8a3e90d7cb7f2b25bb5e40daf36b54bb 100644
 --- a/net/minecraft/world/level/levelgen/structure/pools/SinglePoolElement.java
 +++ b/net/minecraft/world/level/levelgen/structure/pools/SinglePoolElement.java
 @@ -117,8 +117,15 @@ public class SinglePoolElement extends StructurePoolElement {
@@ -224,10 +224,10 @@ index 80319e8548bab23827667a91072cd751006632d5..5b373c84a5f643b4e2b2358f97096c7d
 +    // DivineMC end - Optimize Structure Generation
  }
 diff --git a/net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate.java b/net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate.java
-index b8e6c84f633778d4023fe4b31475b10e61b67ce4..798065d604a515d066cfbdfa5010c917e45939da 100644
+index 17293eeda23265ca7b0b607576737fbd1c5d52eb..db1efbf5081e4c66c2ac35b80458643f403ad963 100644
 --- a/net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate.java
 +++ b/net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate.java
-@@ -254,6 +254,12 @@ public class StructureTemplate {
+@@ -252,6 +252,12 @@ public class StructureTemplate {
          return transform(pos, settings.getMirror(), settings.getRotation(), settings.getRotationPivot());
      }
  
@@ -240,20 +240,20 @@ index b8e6c84f633778d4023fe4b31475b10e61b67ce4..798065d604a515d066cfbdfa5010c917
      public boolean placeInWorld(
          ServerLevelAccessor level, // Paper - make non-final
          final BlockPos position,
-@@ -278,7 +284,11 @@ public class StructureTemplate {
-                 }
+@@ -277,7 +283,11 @@ public class StructureTemplate {
              }
-             // CraftBukkit end
--            List<StructureTemplate.StructureBlockInfo> blockInfoList = settings.getRandomPalette(this.palettes, position).blocks();
+         }
+         // CraftBukkit end
+-        List<StructureTemplate.StructureBlockInfo> blockInfoList = settings.getRandomPalette(this.palettes, position).blocks();
 +            // DivineMC start - Optimize Structure Generation
 +            List<StructureTemplate.StructureBlockInfo> blockInfoList = org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.enableStructureLayoutOptimizer
 +                ? structureLayoutOptimizer$shrinkStructureTemplateBlocksList(settings.getRandomPalette(this.palettes, position), position, settings)
 +                : settings.getRandomPalette(this.palettes, position).blocks();
 +            // DivineMC end - Optimize Structure Generation
-             if ((!blockInfoList.isEmpty() || !settings.isIgnoreEntities() && !this.entityInfoList.isEmpty())
-                 && this.size.getX() >= 1
-                 && this.size.getY() >= 1
-@@ -886,7 +896,11 @@ public class StructureTemplate {
+         if ((!blockInfoList.isEmpty() || !settings.isIgnoreEntities() && !this.entityInfoList.isEmpty())
+             && this.size.getX() >= 1
+             && this.size.getY() >= 1
+@@ -882,7 +892,11 @@ public class StructureTemplate {
          private @Nullable List<StructureTemplate.JigsawBlockInfo> cachedJigsaws;
  
          private Palette(final List<StructureTemplate.StructureBlockInfo> blocks) {

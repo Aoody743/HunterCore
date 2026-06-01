@@ -5,10 +5,10 @@ Subject: [PATCH] Cleanup dead code from Paper
 
 
 diff --git a/net/minecraft/network/Connection.java b/net/minecraft/network/Connection.java
-index bab61bfa771b5956b381126a423ce55333bc6faf..ec8272b7b341a290c4f292aa25fba054607febfc 100644
+index 0271f56757e1be25d973ec1470f71ba23e58e00a..a4db3035430195c36fd3559805fc628556651ef0 100644
 --- a/net/minecraft/network/Connection.java
 +++ b/net/minecraft/network/Connection.java
-@@ -584,13 +584,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -582,13 +582,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
              if (!(this.packetListener instanceof net.minecraft.server.network.ServerLoginPacketListenerImpl loginPacketListener)
                  || loginPacketListener.state != net.minecraft.server.network.ServerLoginPacketListenerImpl.State.VERIFYING
                  || Connection.joinAttemptsThisTick++ < MAX_PER_TICK) {
@@ -23,10 +23,10 @@ index bab61bfa771b5956b381126a423ce55333bc6faf..ec8272b7b341a290c4f292aa25fba054
          }
  
 diff --git a/net/minecraft/network/PacketProcessor.java b/net/minecraft/network/PacketProcessor.java
-index 2b58aebbf8bdf80d41b157916488848f0d1dafd0..d32b20d351845472de29969ebd2e57475bbae9e1 100644
+index f398d48910dff89c41d1344ebf7b793c27dcb6aa..aa5989ed22b3b72137c5d037c7e1315a0e18b2d7 100644
 --- a/net/minecraft/network/PacketProcessor.java
 +++ b/net/minecraft/network/PacketProcessor.java
-@@ -71,28 +71,8 @@ public class PacketProcessor implements AutoCloseable {
+@@ -70,28 +70,8 @@ public class PacketProcessor implements AutoCloseable {
          this.closed = true;
      }
  
@@ -55,7 +55,7 @@ index 2b58aebbf8bdf80d41b157916488848f0d1dafd0..d32b20d351845472de29969ebd2e5747
              if (this.listener.shouldHandleMessage(this.packet)) {
                  try {
                      this.packet.handle(this.listener);
-@@ -110,12 +90,6 @@ public class PacketProcessor implements AutoCloseable {
+@@ -109,12 +89,6 @@ public class PacketProcessor implements AutoCloseable {
              } else {
                  PacketProcessor.LOGGER.debug("Ignoring packet due to disconnection: {}", this.packet);
              }
@@ -69,7 +69,7 @@ index 2b58aebbf8bdf80d41b157916488848f0d1dafd0..d32b20d351845472de29969ebd2e5747
      }
  }
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 3a200b078179ed6f2bb63ba4587c7ef283135d65..b7ba54068f8d9aa796c8f134113041ceeba31467 100644
+index bcd3d60afb709a23c3256d06ba9fb316b032db18..0284a07fafbf69c799b570af35b1b263f8dd5ca7 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -1515,11 +1515,6 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -99,7 +99,7 @@ index 3a200b078179ed6f2bb63ba4587c7ef283135d65..b7ba54068f8d9aa796c8f134113041ce
  
      private void tickPassenger(final Entity vehicle, final Entity entity, final boolean isActive) { // Paper - EAR 2
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 5a64bebee964de1734f02478b98fca380433c93a..058cacc34b804a90d62d49bf9229768632675cfb 100644
+index 43c5670129322c667494ae96c50595746b581c9d..608b27fc7b59b4024b4e45944e3bd45f11fe0c80 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -1154,29 +1154,10 @@ public abstract class Entity
@@ -146,7 +146,7 @@ index 5a64bebee964de1734f02478b98fca380433c93a..058cacc34b804a90d62d49bf92297686
      }
  
      private void applyMovementEmissionAndPlaySound(
-@@ -4965,9 +4939,7 @@ public abstract class Entity
+@@ -4967,9 +4941,7 @@ public abstract class Entity
  
      public void setDeltaMovement(final Vec3 deltaMovement) {
          if (deltaMovement.isFinite()) {
@@ -156,7 +156,7 @@ index 5a64bebee964de1734f02478b98fca380433c93a..058cacc34b804a90d62d49bf92297686
          }
      }
  
-@@ -5072,9 +5044,7 @@ public abstract class Entity
+@@ -5074,9 +5046,7 @@ public abstract class Entity
          }
          // Paper end - Block invalid positions and bounding box
          if (this.position.x != x || this.position.y != y || this.position.z != z) {

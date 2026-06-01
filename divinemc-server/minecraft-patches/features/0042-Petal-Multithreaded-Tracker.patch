@@ -66,7 +66,7 @@ index 344260d191e4c80671062cd29ce0146a16ea7f1d..8d4264ab3e12aa898374f52811735676
          }
      }
 diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
-index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02e02c0cd2 100644
+index 5d636b392c87044678a92d86e0199a3200f26b13..7fe76cc5de38a4b63f5cb0044762ac24be801494 100644
 --- a/net/minecraft/server/level/ChunkMap.java
 +++ b/net/minecraft/server/level/ChunkMap.java
 @@ -252,9 +252,19 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
@@ -105,11 +105,11 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
          // Paper start - optimise entity tracker
          if (true) {
              this.newTrackerTick();
-@@ -1209,7 +1226,44 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1208,7 +1225,44 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
          private final Entity entity;
          private final int range;
          private SectionPos lastSectionPos;
--        public final Set<ServerPlayerConnection> seenBy;
+-        public final Set<ServerPlayerConnection> seenBy = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>(); // Paper - Perf: optimise map impl
 +        // DivineMC start - Multithreaded tracker
 +        public static final ServerPlayerConnection[] EMPTY_OBJECT_ARRAY = new ServerPlayerConnection[0];
 +        private final it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<ServerPlayerConnection> nonSyncSeenBy = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>() {
@@ -151,7 +151,7 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
  
          // Paper start - optimise entity tracker
          private long lastChunkUpdate = -1L;
-@@ -1236,23 +1290,93 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1235,23 +1289,93 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
              this.lastTrackedChunk = chunk;
  
              final ServerPlayer[] playersRaw = players.getRawDataUnchecked();
@@ -248,7 +248,7 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
          @Override
          public final void moonrise$removeNonTickThreadPlayers() {
              boolean foundToRemove = false;
-@@ -1267,12 +1391,13 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1266,12 +1390,13 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
                  return;
              }
  
@@ -264,7 +264,7 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
          }
  
          @Override
-@@ -1282,10 +1407,11 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1281,10 +1406,11 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
              if (this.seenBy.isEmpty()) {
                  return;
              }
@@ -278,15 +278,7 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
          }
  
          @Override
-@@ -1297,7 +1423,6 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
-         public TrackedEntity(final Entity entity, final int range, final int updateInterval, final boolean trackDelta) {
-             Objects.requireNonNull(ChunkMap.this);
-             super();
--            this.seenBy = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>(); // Paper - Perf: optimise map impl
-             this.serverEntity = new ServerEntity(ChunkMap.this.level, entity, updateInterval, trackDelta, this, this.seenBy); // Paper
-             this.entity = entity;
-             this.range = range;
-@@ -1316,7 +1441,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1312,7 +1438,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
  
          @Override
          public void sendToTrackingPlayers(final Packet<? super ClientGamePacketListener> packet) {
@@ -295,7 +287,7 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
                  connection.send(packet);
              }
          }
-@@ -1331,7 +1456,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1327,7 +1453,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
  
          @Override
          public void sendToTrackingPlayersFiltered(final Packet<? super ClientGamePacketListener> packet, final Predicate<ServerPlayer> targetPredicate) {
@@ -304,7 +296,7 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
                  if (targetPredicate.test(connection.getPlayer())) {
                      connection.send(packet);
                  }
-@@ -1339,24 +1464,35 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1335,24 +1461,35 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
          }
  
          public void broadcastRemoved() {
@@ -343,7 +335,7 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
                  // Paper start - remove allocation of Vec3D here
                  // Vec3 deltaToPlayer = player.position().subtract(this.entity.position());
                  double deltaToPlayerX = player.getX() - this.entity.getX();
-@@ -1386,6 +1522,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1382,6 +1519,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
                  // CraftBukkit end
                  if (visibleToPlayer) {
                      if (this.seenBy.add(player.connection)) {
@@ -351,7 +343,7 @@ index 7dbb8e8947270c9c1a0a9c5a9a9893995e66c0d6..d6641018bac731dc4bd512d819020f02
                          // Paper start - entity tracking events
                          if (io.papermc.paper.event.player.PlayerTrackEntityEvent.getHandlerList().getRegisteredListeners().length == 0 || new io.papermc.paper.event.player.PlayerTrackEntityEvent(player.getBukkitEntity(), this.entity.getBukkitEntity()).callEvent()) {
                          this.serverEntity.addPairing(player);
-@@ -1399,6 +1536,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+@@ -1395,6 +1533,7 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
                          this.serverEntity.onPlayerAdd(); // Paper - fix desync when a player is added to the tracker
                      }
                  } else {
@@ -377,7 +369,7 @@ index 3b996666ff183ba8f8a48306af7d2f9272eb30bf..182e87611cae6d6de6cf3c717cec6c40
      public boolean visible = true;
  
 diff --git a/net/minecraft/server/level/ServerEntity.java b/net/minecraft/server/level/ServerEntity.java
-index fcd5df18a628fbb4e5608378bd1f344455b4672b..76dad2741f4da47ef870c5529b459b3986a4d261 100644
+index d237d4246b3e291c589a52aa8bf746fbd7a11485..401a27faa0a9ca9f9da096fd35e33ad4318ff4b4 100644
 --- a/net/minecraft/server/level/ServerEntity.java
 +++ b/net/minecraft/server/level/ServerEntity.java
 @@ -123,7 +123,7 @@ public class ServerEntity {
@@ -399,7 +391,7 @@ index fcd5df18a628fbb4e5608378bd1f344455b4672b..76dad2741f4da47ef870c5529b459b39
      }
  
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 5c59b33b57ab2c82bc6cdf71792d23df34fa2f21..8f17c80fc5f95e5f647980444de8bde132cafa55 100644
+index f0a43753d191cd9eabefe9e7a927e049f00144fe..3a648ba62298b7eb2dd82802b068e29bf3f2b6db 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -2681,7 +2681,6 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -410,7 +402,7 @@ index 5c59b33b57ab2c82bc6cdf71792d23df34fa2f21..8f17c80fc5f95e5f647980444de8bde1
          return this.moonrise$getEntityLookup(); // Paper - rewrite chunk system
      }
  
-@@ -2992,7 +2991,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -2987,7 +2986,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
                          }
  
                          map.carriedByPlayers.remove(player);
@@ -420,10 +412,10 @@ index 5c59b33b57ab2c82bc6cdf71792d23df34fa2f21..8f17c80fc5f95e5f647980444de8bde1
                          }
                      }
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 4bffdb04fb9309bb901e4007aad5575ad6225cc2..cfea57ffa69c0174aa8cbe968542b3bb5d4e58d8 100644
+index 30448b0a265642c9475189df9785871b163adcfe..5d8f2cf7f3609694cdf31ca62961e6d2674bd377 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -2011,7 +2011,6 @@ public class ServerGamePacketListenerImpl
+@@ -2013,7 +2013,6 @@ public class ServerGamePacketListenerImpl
      }
  
      public void internalTeleport(PositionMoveRotation destination, Set<Relative> relatives) {
@@ -432,10 +424,10 @@ index 4bffdb04fb9309bb901e4007aad5575ad6225cc2..cfea57ffa69c0174aa8cbe968542b3bb
          if (this.player.isRemoved()) {
              LOGGER.info("Attempt to teleport removed player {} restricted", this.player.getScoreboardName());
 diff --git a/net/minecraft/world/entity/LivingEntity.java b/net/minecraft/world/entity/LivingEntity.java
-index dfcd49b44820c2dafd8dd80d209b010401125f5a..a442afaf71e92dbff2acce33f2bac414ef48fda8 100644
+index 6c55796a5ff6f5fa833bb92743a4c46b44868ea2..ca1bb152589e4122d3237aab56dc2bcc9fd28738 100644
 --- a/net/minecraft/world/entity/LivingEntity.java
 +++ b/net/minecraft/world/entity/LivingEntity.java
-@@ -1374,13 +1374,13 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
+@@ -1375,13 +1375,13 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
      }
  
      private void refreshDirtyAttributes() {
@@ -455,7 +447,7 @@ index dfcd49b44820c2dafd8dd80d209b010401125f5a..a442afaf71e92dbff2acce33f2bac414
  
      protected void onAttributeUpdated(final Holder<Attribute> attribute) {
 diff --git a/net/minecraft/world/entity/ai/attributes/Attribute.java b/net/minecraft/world/entity/ai/attributes/Attribute.java
-index ea0f9d28cd348ba51a38ab59c31a2a156bfb6554..b3306cc5155ad5ed9af40b2931ef16a61bb02e41 100644
+index ad3dc7f69eb6e5a167118c4fe16c2fe4083522dd..31e67965efd62dcf39c5d4bac26eb36cafd477c5 100644
 --- a/net/minecraft/world/entity/ai/attributes/Attribute.java
 +++ b/net/minecraft/world/entity/ai/attributes/Attribute.java
 @@ -16,10 +16,15 @@ public class Attribute {
@@ -475,7 +467,7 @@ index ea0f9d28cd348ba51a38ab59c31a2a156bfb6554..b3306cc5155ad5ed9af40b2931ef16a6
  
      public double getDefaultValue() {
 diff --git a/net/minecraft/world/entity/ai/attributes/AttributeInstance.java b/net/minecraft/world/entity/ai/attributes/AttributeInstance.java
-index 57cf93806c666d2605960d673e5bbee497da35ea..e861f2dc1fdbc6dd3e8a4bad212338865a23bf46 100644
+index 0ed3fea287c65da82a8823d1949828b0c55d29b2..11bb22171e9d217eca3e74095e409d1b7c64fad1 100644
 --- a/net/minecraft/world/entity/ai/attributes/AttributeInstance.java
 +++ b/net/minecraft/world/entity/ai/attributes/AttributeInstance.java
 @@ -20,8 +20,24 @@ import org.jspecify.annotations.Nullable;
@@ -552,7 +544,7 @@ index 57cf93806c666d2605960d673e5bbee497da35ea..e861f2dc1fdbc6dd3e8a4bad21233886
  
      public void apply(final AttributeInstance.Packed packed) {
 diff --git a/net/minecraft/world/entity/ai/attributes/AttributeMap.java b/net/minecraft/world/entity/ai/attributes/AttributeMap.java
-index a3a1a5562e4940c96c688820c0fba4cf53fbcd48..a349e64199887e813eedbf958aa71312b2ac7b68 100644
+index fe5f4f79e5a1b091d15fa3bfd876b831e493655c..1a01e1af10132be1877cc5efdcd9c6d53f7386a1 100644
 --- a/net/minecraft/world/entity/ai/attributes/AttributeMap.java
 +++ b/net/minecraft/world/entity/ai/attributes/AttributeMap.java
 @@ -14,9 +14,11 @@ import net.minecraft.resources.Identifier;
@@ -629,7 +621,7 @@ index a3a1a5562e4940c96c688820c0fba4cf53fbcd48..a349e64199887e813eedbf958aa71312
  
      public boolean hasAttribute(final Holder<Attribute> attribute) {
 diff --git a/net/minecraft/world/entity/ai/attributes/AttributeSupplier.java b/net/minecraft/world/entity/ai/attributes/AttributeSupplier.java
-index 0ba3ffa21df0ca55adffd76318ad3554559fb39e..23f239fb022341482e358bf3a603a76e9bd61a52 100644
+index 5d2c1cfbdd20c5c195790b5241c3a607c51aa72c..ca34c9ffc315dfb5578d068a6b0c40a2e31644e2 100644
 --- a/net/minecraft/world/entity/ai/attributes/AttributeSupplier.java
 +++ b/net/minecraft/world/entity/ai/attributes/AttributeSupplier.java
 @@ -11,7 +11,7 @@ public class AttributeSupplier {
@@ -642,7 +634,7 @@ index 0ba3ffa21df0ca55adffd76318ad3554559fb39e..23f239fb022341482e358bf3a603a76e
  
      public AttributeInstance getAttributeInstance(final Holder<Attribute> attribute) {
 diff --git a/net/minecraft/world/entity/vehicle/minecart/NewMinecartBehavior.java b/net/minecraft/world/entity/vehicle/minecart/NewMinecartBehavior.java
-index e78ca5df8c341ca45795c240fa227728e37ab97c..03a025051b3c6ab6b0e9b3b44261a65efded0a46 100644
+index 4a8bbb06e0cbb8974fa4f2e509eafe38b7d38173..bbda82a4da28223e7d122c86c23bc968f098a30c 100644
 --- a/net/minecraft/world/entity/vehicle/minecart/NewMinecartBehavior.java
 +++ b/net/minecraft/world/entity/vehicle/minecart/NewMinecartBehavior.java
 @@ -34,13 +34,20 @@ public class NewMinecartBehavior extends MinecartBehavior {
@@ -668,7 +660,7 @@ index e78ca5df8c341ca45795c240fa227728e37ab97c..03a025051b3c6ab6b0e9b3b44261a65e
  
      @Override
 diff --git a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index 95aa3747cb5feade85051e3db6d918fe8ad4fdbb..13233adb738043820d9c35d0181f1cebd9cd6e6a 100644
+index 6ae51d0dc5e44e0900f4311d32cea70ec4ad5e94..5c77c9e531e5c36b5370501438048185745c77ab 100644
 --- a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 @@ -216,6 +216,7 @@ public class MapItemSavedData extends SavedData {

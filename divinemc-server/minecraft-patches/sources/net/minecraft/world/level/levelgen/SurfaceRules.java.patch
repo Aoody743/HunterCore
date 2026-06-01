@@ -1,6 +1,6 @@
 --- a/net/minecraft/world/level/levelgen/SurfaceRules.java
 +++ b/net/minecraft/world/level/levelgen/SurfaceRules.java
-@@ -418,6 +_,22 @@
+@@ -411,6 +_,22 @@
  
              @Override
              protected boolean compute() {

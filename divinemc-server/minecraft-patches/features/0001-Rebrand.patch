@@ -5,7 +5,7 @@ Subject: [PATCH] Rebrand
 
 
 diff --git a/net/minecraft/CrashReport.java b/net/minecraft/CrashReport.java
-index c239edddec50792b14b2c8163f18cb3dc0c05e63..6fb25081e7aa12feb62f64c086f82a38508eda4d 100644
+index ec86add7479c379ce06d05bacd1ec2cc8c660131..d88c9bb5570562cb095b7768fb7d1436f2c40523 100644
 --- a/net/minecraft/CrashReport.java
 +++ b/net/minecraft/CrashReport.java
 @@ -30,7 +30,7 @@ public class CrashReport {
@@ -31,7 +31,7 @@ index 439e2663a297029efc77adef9e8d99a0d8c02f41..b2a42bf642d80df6fb02e2e2e72da585
  
      @Override
 diff --git a/net/minecraft/server/Main.java b/net/minecraft/server/Main.java
-index bcbb780c82fdb3283925359a04d8706087f86501..3d5b7fd67d203b09cb68a14b062d24d11daab19f 100644
+index eb45a226c1b4d09e6e58114b5b3cf2db95a7d14b..a4f33218fb2f698db984b48faf39822b26555671 100644
 --- a/net/minecraft/server/Main.java
 +++ b/net/minecraft/server/Main.java
 @@ -64,36 +64,31 @@ public class Main {
@@ -123,10 +123,10 @@ index bcbb780c82fdb3283925359a04d8706087f86501..3d5b7fd67d203b09cb68a14b062d24d1
              }
  
 diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
-index 593c5d75b2f17b5df566ff945389cf6062d36679..67a13040a9e21af14d0832a83e6ad27c1eec4f01 100644
+index 5865c863938d2f72527605d521e447bdae574761..d483bcd450dcfe9d58cde804030ded570af6e25a 100644
 --- a/net/minecraft/server/MinecraftServer.java
 +++ b/net/minecraft/server/MinecraftServer.java
-@@ -1321,6 +1321,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1311,6 +1311,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      protected void runServer() {
          try {
@@ -135,10 +135,10 @@ index 593c5d75b2f17b5df566ff945389cf6062d36679..67a13040a9e21af14d0832a83e6ad27c
                  throw new IllegalStateException("Failed to initialize server");
              }
 diff --git a/net/minecraft/server/gui/MinecraftServerGui.java b/net/minecraft/server/gui/MinecraftServerGui.java
-index 2612c6dfb9c9605a4bdd1da6d0d44d2013728089..1410e6777f553e56bc6adab7a5ea734e541c02a2 100644
+index f5c52f0aa85d8ae66215fbbe94773b16e06a72a5..4ae26dded0cc50d7066dd9dbe563f71822dc4d47 100644
 --- a/net/minecraft/server/gui/MinecraftServerGui.java
 +++ b/net/minecraft/server/gui/MinecraftServerGui.java
-@@ -52,7 +52,7 @@ public class MinecraftServerGui extends JComponent {
+@@ -51,7 +51,7 @@ public class MinecraftServerGui extends JComponent {
          } catch (Exception var3) {
          }
  
@@ -147,7 +147,7 @@ index 2612c6dfb9c9605a4bdd1da6d0d44d2013728089..1410e6777f553e56bc6adab7a5ea734e
          final MinecraftServerGui gui = new MinecraftServerGui(server);
          frame.setDefaultCloseOperation(2);
          frame.add(gui);
-@@ -60,7 +60,7 @@ public class MinecraftServerGui extends JComponent {
+@@ -59,7 +59,7 @@ public class MinecraftServerGui extends JComponent {
          frame.setLocationRelativeTo(null);
          frame.setVisible(true);
          // Paper start - Improve ServerGUI
@@ -156,7 +156,7 @@ index 2612c6dfb9c9605a4bdd1da6d0d44d2013728089..1410e6777f553e56bc6adab7a5ea734e
          try {
              frame.setIconImage(javax.imageio.ImageIO.read(java.util.Objects.requireNonNull(MinecraftServerGui.class.getClassLoader().getResourceAsStream("logo.png"))));
          } catch (java.io.IOException ignore) {
-@@ -70,7 +70,7 @@ public class MinecraftServerGui extends JComponent {
+@@ -69,7 +69,7 @@ public class MinecraftServerGui extends JComponent {
              @Override
              public void windowClosing(final WindowEvent event) {
                  if (!gui.isClosing.getAndSet(true)) {
@@ -166,15 +166,15 @@ index 2612c6dfb9c9605a4bdd1da6d0d44d2013728089..1410e6777f553e56bc6adab7a5ea734e
                      gui.runFinalizers();
                  }
 diff --git a/net/minecraft/world/level/chunk/storage/RegionFileStorage.java b/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
-index 9004b010d9fbdf0a2d786481293c5c0b0d896e4a..09591f54fbb7f12488713a50f29d188155b15184 100644
+index 76174967cc80e8b7024b4d8cf48289c5e14bc6f2..51dbf4a8172c5550adec1159583619412a8237bb 100644
 --- a/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
 +++ b/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
 @@ -309,7 +309,7 @@ public class RegionFileStorage implements AutoCloseable, ca.spottedleaf.moonrise
  
      // Paper start
      private static void printOversizedLog(String msg, Path file, int x, int z) {
--        org.apache.logging.log4j.LogManager.getLogger().fatal(msg + " (" + file.toString().replaceAll(".+[\\\\/]", "") + " - " + x + "," + z + ") Go clean it up to remove this message. /minecraft:tp " + (x<<4)+" 128 "+(z<<4) + " - DO NOT REPORT THIS TO PURPUR - You may ask for help on Discord, but do not file an issue. These error messages can not be removed."); // Purpur - Rebrand
-+        org.apache.logging.log4j.LogManager.getLogger().fatal(msg + " (" + file.toString().replaceAll(".+[\\\\/]", "") + " - " + x + "," + z + ") Go clean it up to remove this message. /minecraft:tp " + (x<<4)+" 128 "+(z<<4) + " - DO NOT REPORT THIS TO DIVINEMC - You may ask for help on Discord, but do not file an issue. These error messages can not be removed."); // DivineMC - Rebrand
+-        LOGGER.error("{} ({} - {},{}) Go clean it up to remove this message. /minecraft:tp {} 128 {} - DO NOT REPORT THIS TO PURPUR - You may ask for help on Discord, but do not file an issue. These error messages can not be removed.", msg, file.toString().replaceAll(".+[\\\\/]", ""), x, z, x << 4, z << 4); // Purpur - Rebrand
++        LOGGER.error("{} ({} - {},{}) Go clean it up to remove this message. /minecraft:tp {} 128 {} - DO NOT REPORT THIS TO DIVINEMC - You may ask for help on Discord, but do not file an issue. These error messages can not be removed.", msg, file.toString().replaceAll(".+[\\\\/]", ""), x, z, x << 4, z << 4); // DivineMC - Rebrand
      }
  
      private static CompoundTag readOversizedChunk(RegionFile regionfile, ChunkPos chunkCoordinate) throws IOException {

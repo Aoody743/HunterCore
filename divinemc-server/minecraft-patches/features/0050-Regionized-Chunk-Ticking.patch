@@ -8,20 +8,20 @@ This patch adds regionized chunk ticking feature, by grouping adjacent chunks in
 Original idea by Dueris, modified by NONPLAYT and heavily optimized by dan28000
 
 diff --git a/net/minecraft/network/Connection.java b/net/minecraft/network/Connection.java
-index ed9f0c65b2823f05f5608f66187e4b885c16287b..f0f7cd236d62884cee188f8ded21d70a44cceec0 100644
+index 297a4a96beec0512b2fe7aa5cd87a63b91f415ef..24a9fcbc7516143bffa4edac7769aa686d81e102 100644
 --- a/net/minecraft/network/Connection.java
 +++ b/net/minecraft/network/Connection.java
-@@ -304,7 +304,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -302,7 +302,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
  
      private static void syncAfterConfigurationChange(final ChannelFuture future) {
          try {
 -            future.syncUninterruptibly();
 +            future.awaitUninterruptibly(5000L); // DivineMC - In rare cases this can get stuck, so we time out instead in worst case 5s of lag
-         } catch (Exception var2) {
-             if (var2 instanceof ClosedChannelException) {
+         } catch (Exception e) {
+             if (e instanceof ClosedChannelException) {
                  LOGGER.info("Connection closed during protocol change");
 diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
-index d6641018bac731dc4bd512d819020f02e02c0cd2..21547939d76df480d05ff501a66605a07b006865 100644
+index 7fe76cc5de38a4b63f5cb0044762ac24be801494..8d5ead87d61e3a7817c68ce0713ee7c27e5585f2 100644
 --- a/net/minecraft/server/level/ChunkMap.java
 +++ b/net/minecraft/server/level/ChunkMap.java
 @@ -748,25 +748,28 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
@@ -84,7 +84,7 @@ index d6641018bac731dc4bd512d819020f02e02c0cd2..21547939d76df480d05ff501a66605a0
          return false;
      }
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index c9ff57459142abdc45dd2948b075e198ee9044df..f5af5d2001f91d65096202eb0a06c9e527865ea2 100644
+index 1cea4229db11113aab6f8d96004708b17604b1ca..9487bb3f88aacb0e2527245d9b426b70ae45cb2e 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
 @@ -55,9 +55,9 @@ import org.jspecify.annotations.Nullable;
@@ -144,7 +144,7 @@ index c9ff57459142abdc45dd2948b075e198ee9044df..f5af5d2001f91d65096202eb0a06c9e5
      }
      // Paper end - chunk tick iteration optimisations
  
-@@ -514,19 +518,27 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -512,19 +516,27 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
          long time = this.level.getGameTime();
          long timeDiff = time - this.lastInhabitedUpdate;
          this.lastInhabitedUpdate = time;
@@ -180,7 +180,7 @@ index c9ff57459142abdc45dd2948b075e198ee9044df..f5af5d2001f91d65096202eb0a06c9e5
          // DivineMC start - Pufferfish: Optimize mob spawning
          if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableAsyncSpawning) {
              for (ServerPlayer player : this.level.players()) {
-@@ -572,14 +584,18 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -570,14 +582,18 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
      private void broadcastChangedChunks(final ProfilerFiller profiler) {
          profiler.push("broadcast");
  
@@ -205,7 +205,7 @@ index c9ff57459142abdc45dd2948b075e198ee9044df..f5af5d2001f91d65096202eb0a06c9e5
          profiler.pop();
      }
  
-@@ -630,6 +646,28 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -628,6 +644,28 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
              spawningCategories = List.of();
          }
  
@@ -234,7 +234,7 @@ index c9ff57459142abdc45dd2948b075e198ee9044df..f5af5d2001f91d65096202eb0a06c9e5
          List<LevelChunk> spawningChunks = this.spawningChunks;
  
          try {
-@@ -650,16 +688,12 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+@@ -648,16 +686,12 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
          } finally {
              spawningChunks.clear();
          }
@@ -255,25 +255,26 @@ index c9ff57459142abdc45dd2948b075e198ee9044df..f5af5d2001f91d65096202eb0a06c9e5
  
      private void tickSpawningChunk(
          final LevelChunk chunk, final long timeDiff, final List<MobCategory> spawningCategories, final NaturalSpawner.SpawnState spawnCookie
-@@ -888,7 +922,15 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
-             if (serverChunkCache.runDistanceManagerUpdates()) {
+@@ -884,8 +918,15 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
                  return true;
-             } else {
--                return super.pollTask() | ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)serverChunkCache.level).moonrise$getChunkTaskScheduler().executeMainThreadTask();
-+                // DivineMC start - Regionized Chunk Ticking - "crash fix" start
-+                boolean mainPolled = false;
-+                try {
-+                    mainPolled = super.pollTask();
-+                } catch (java.util.NoSuchElementException ex) {
-+                    // Queue was empty; ignore and continue to scheduler execution.
-+                }
-+                return mainPolled | ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)serverChunkCache.level).moonrise$getChunkTaskScheduler().executeMainThreadTask();
-+                // DivineMC end - Regionized Chunk Ticking - "crash fix" start
              }
-             // Paper end - rewrite chunk system
+ 
+-            // Paper - rewrite chunk system
+-            return super.pollTask() | ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)ServerChunkCache.this.level).moonrise$getChunkTaskScheduler().executeMainThreadTask(); // Paper - rewrite chunk system
++            // DivineMC start - Regionized Chunk Ticking - "crash fix" start
++            boolean mainPolled = false;
++            try {
++                mainPolled = super.pollTask();
++            } catch (java.util.NoSuchElementException ex) {
++                // Queue was empty; ignore and continue to scheduler execution.
++            }
++            return mainPolled | ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)ServerChunkCache.this.level).moonrise$getChunkTaskScheduler().executeMainThreadTask();
++            // DivineMC end - Regionized Chunk Ticking - "crash fix" start
          }
+     }
+ }
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index e591ba2d21c3f8dcad10b12aad1613a30c3ce928..3a200b078179ed6f2bb63ba4587c7ef283135d65 100644
+index b41ac21683a97dd9a43060e41e5344f5ac2deb1f..bcd3d60afb709a23c3256d06ba9fb316b032db18 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -207,7 +207,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -584,10 +585,10 @@ index e591ba2d21c3f8dcad10b12aad1613a30c3ce928..3a200b078179ed6f2bb63ba4587c7ef2
              try {
                  this.isUpdatingNavigations = true;
 diff --git a/net/minecraft/server/level/ServerPlayer.java b/net/minecraft/server/level/ServerPlayer.java
-index 849a132610b2da96fa475cf624008e217967b472..c0d5e4f23bd6cbb95679e56fdb46d341d36f697a 100644
+index 89294af580c17ee86a259d1fed658281240522b9..aa6254349847a2238e6c322e5c2a3474c0ca230e 100644
 --- a/net/minecraft/server/level/ServerPlayer.java
 +++ b/net/minecraft/server/level/ServerPlayer.java
-@@ -458,6 +458,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
+@@ -439,6 +439,7 @@ public class ServerPlayer extends Player implements ca.spottedleaf.moonrise.patc
      private boolean compassBar = false; // Purpur - Add compass command
      private boolean ramBar = false; // Purpur - Implement rambar commands
      public boolean hasTickedAtLeastOnceInNewWorld = false; // DivineMC - Parallel world ticking
@@ -596,7 +597,7 @@ index 849a132610b2da96fa475cf624008e217967b472..c0d5e4f23bd6cbb95679e56fdb46d341
      // Paper start - rewrite chunk system
      private ca.spottedleaf.moonrise.patches.chunk_system.player.RegionizedPlayerChunkLoader.PlayerChunkLoaderData chunkLoader;
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index d001f2680d6da37d7800f04ef47940fde667c156..549b76e6abf33c4f130b9b46be9eb6a34bf63dc1 100644
+index b07defffda218d15d988869a249884be73b547e5..cd0211dd142e30542f4aa9098e8da05647ec07ce 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -120,7 +120,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
@@ -617,7 +618,7 @@ index d001f2680d6da37d7800f04ef47940fde667c156..549b76e6abf33c4f130b9b46be9eb6a3
      public Map<BlockPos, BlockEntity> capturedTileEntities = new java.util.LinkedHashMap<>(); // Paper - Retain block place order when capturing blockstates
      @Nullable
      public List<net.minecraft.world.entity.item.ItemEntity> captureDrops;
-@@ -1546,10 +1546,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1545,10 +1545,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
      public void tickBlockEntities() {
          this.tickingBlockEntities = true;

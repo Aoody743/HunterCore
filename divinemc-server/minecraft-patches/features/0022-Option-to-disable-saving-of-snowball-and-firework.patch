@@ -24,10 +24,10 @@ index c9f7e68abccbc6b894a66b675952c973e22af8e6..0c67e8e23945a94de6bd1af9188ff66c
 +    // DivineMC end - Option to disable saving firework
  }
 diff --git a/net/minecraft/world/entity/projectile/throwableitemprojectile/Snowball.java b/net/minecraft/world/entity/projectile/throwableitemprojectile/Snowball.java
-index 79e4f2a648a8b8cb03ecee77fc8e237aa88195f6..8b7c91e21392750b7c08cbef80a9d02439aa4a13 100644
+index f8ca088ab75e6bfdfc566c97879c12beaeefcda0..8136f8dd6bf0fc9ad8f013804ee1a017e454cc2d 100644
 --- a/net/minecraft/world/entity/projectile/throwableitemprojectile/Snowball.java
 +++ b/net/minecraft/world/entity/projectile/throwableitemprojectile/Snowball.java
-@@ -98,4 +98,14 @@ public class Snowball extends ThrowableItemProjectile {
+@@ -96,4 +96,14 @@ public class Snowball extends ThrowableItemProjectile {
              this.discard(org.bukkit.event.entity.EntityRemoveEvent.Cause.HIT); // CraftBukkit - add Bukkit remove cause
          }
      }

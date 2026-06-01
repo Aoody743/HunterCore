@@ -5,7 +5,7 @@ Subject: [PATCH] Optimize entities
 
 
 diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
-index 5946ed73f9a6511d91ac81c591d20bc44d6fc0cb..551dad79688456726edbfcb4caed2d1bfeeecbaa 100644
+index b47f13e37598153c4c47bf2a53ecb50e158bb518..e9032b1ba09a676ac969c773b800d374d038abe5 100644
 --- a/net/minecraft/world/entity/Entity.java
 +++ b/net/minecraft/world/entity/Entity.java
 @@ -1784,6 +1784,10 @@ public abstract class Entity
@@ -19,36 +19,36 @@ index 5946ed73f9a6511d91ac81c591d20bc44d6fc0cb..551dad79688456726edbfcb4caed2d1b
          boolean movedFar = from.distanceToSqr(to) > Mth.square(0.9999900000002526);
          boolean debugEntityBlockIntersections = this.level instanceof ServerLevel serverLevel
              && serverLevel.getServer().debugSubscribers().hasAnySubscriberFor(DebugSubscriptions.ENTITY_BLOCK_INTERSECTIONS);
-@@ -1799,7 +1803,21 @@ public abstract class Entity
-                     return false;
-                 } else {
-                     iterations.set(iteration);
--                    BlockState state = this.level().getBlockState(blockIntersection);
-+                    // DivineMC start - Optimize entities
-+                    final int chunkX = blockIntersection.getX() >> 4;
-+                    final int chunkZ = blockIntersection.getZ() >> 4;
-+                    final long chunkLongPos = ((long) chunkZ << 32) | (chunkX & 0xFFFFFFFFL);
-+                    if (lastChunkPos[0] != chunkLongPos) {
-+                        // update cache, this is a different chunk than previous
-+                        lastChunkPos[0] = chunkLongPos;
-+                        cachedChunk[0] = this.level.getChunkIfLoaded(chunkX, chunkZ);
-+                    }
-+                    net.minecraft.world.level.chunk.ChunkAccess chunk = cachedChunk[0];
-+                    if (chunk == null) {
-+                        return true;
-+                    }
-+                    BlockState state = chunk.getBlockState(blockIntersection);
-+                    // DivineMC end - Optimize entities
-                     if (state.isAir()) {
-                         if (debugEntityBlockIntersections) {
-                             this.debugBlockIntersection((ServerLevel)this.level(), blockIntersection.immutable(), false, false);
+@@ -1802,7 +1806,21 @@ public abstract class Entity
+                 }
+ 
+                 iterations.set(iteration);
+-                BlockState state = this.level().getBlockState(blockIntersection);
++                // DivineMC start - Optimize entities
++                final int chunkX = blockIntersection.getX() >> 4;
++                final int chunkZ = blockIntersection.getZ() >> 4;
++                final long chunkLongPos = ((long) chunkZ << 32) | (chunkX & 0xFFFFFFFFL);
++                if (lastChunkPos[0] != chunkLongPos) {
++                    // update cache, this is a different chunk than previous
++                    lastChunkPos[0] = chunkLongPos;
++                    cachedChunk[0] = this.level.getChunkIfLoaded(chunkX, chunkZ);
++                }
++                net.minecraft.world.level.chunk.ChunkAccess chunk = cachedChunk[0];
++                if (chunk == null) {
++                    return true;
++                }
++                BlockState state = chunk.getBlockState(blockIntersection);
++                // DivineMC end - Optimize entities
+                 if (state.isAir()) {
+                     if (debugEntityBlockIntersections) {
+                         this.debugBlockIntersection((ServerLevel)this.level(), blockIntersection.immutable(), false, false);
 diff --git a/net/minecraft/world/entity/InsideBlockEffectApplier.java b/net/minecraft/world/entity/InsideBlockEffectApplier.java
-index fa7ae9b80fe0035aca42d18c5983b7f3861bc098..2b02c6b100cfcdfa350781185f2b0e3a34978b68 100644
+index fc7cfc75e3e5c274f01498e4afd8693236b4e394..6a919fe1016c5f73b81c8a46531e20b15483a812 100644
 --- a/net/minecraft/world/entity/InsideBlockEffectApplier.java
 +++ b/net/minecraft/world/entity/InsideBlockEffectApplier.java
 @@ -31,68 +31,115 @@ public interface InsideBlockEffectApplier {
  
-     public static class StepBasedCollector implements InsideBlockEffectApplier {
+     class StepBasedCollector implements InsideBlockEffectApplier {
          private static final InsideBlockEffectType[] APPLY_ORDER = InsideBlockEffectType.values();
 -        private static final int NO_STEP = -1;
 -        private final Map<InsideBlockEffectType, Consumer<Entity>> effectsInStep = new java.util.EnumMap<>(InsideBlockEffectType.class); // Paper - track position inside effect was triggered on
@@ -189,7 +189,7 @@ index fa7ae9b80fe0035aca42d18c5983b7f3861bc098..2b02c6b100cfcdfa350781185f2b0e3a
  
          // Paper start - track position inside effect was triggered on
 diff --git a/net/minecraft/world/entity/ai/Brain.java b/net/minecraft/world/entity/ai/Brain.java
-index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1c06fc113 100644
+index f3b32c1bbe993d051699fe65d9979cc784d4717c..84d3d4d1d24f43ec277eb56c57f7f099519300cc 100644
 --- a/net/minecraft/world/entity/ai/Brain.java
 +++ b/net/minecraft/world/entity/ai/Brain.java
 @@ -37,16 +37,80 @@ import org.jspecify.annotations.Nullable;
@@ -276,7 +276,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
  
      public static <E extends LivingEntity> Brain.Provider<E> provider(final Collection<? extends SensorType<? extends Sensor<? super E>>> sensorTypes) {
          return new Brain.Provider<>(ImmutableList.of(), sensorTypes, var0 -> List.of());
-@@ -162,6 +226,7 @@ public class Brain<E extends LivingEntity> {
+@@ -158,6 +222,7 @@ public class Brain<E extends LivingEntity> {
      public <U> void eraseMemory(final MemoryModuleType<U> type) {
          MemorySlot<U> slot = this.getMemorySlotIfPresent(type);
          if (slot != null) {
@@ -284,7 +284,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
              slot.clear();
          }
      }
-@@ -195,8 +260,10 @@ public class Brain<E extends LivingEntity> {
+@@ -191,8 +256,10 @@ public class Brain<E extends LivingEntity> {
              }
  
              if (value == null) {
@@ -295,7 +295,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
                  slot.set(value, tileToLive);
              }
          }
-@@ -210,8 +277,10 @@ public class Brain<E extends LivingEntity> {
+@@ -206,8 +273,10 @@ public class Brain<E extends LivingEntity> {
              }
  
              if (value == null) {
@@ -306,7 +306,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
                  slot.set(value);
              }
          }
-@@ -270,19 +339,7 @@ public class Brain<E extends LivingEntity> {
+@@ -266,19 +335,7 @@ public class Brain<E extends LivingEntity> {
      @Deprecated
      @VisibleForDebug
      public List<BehaviorControl<? super E>> getRunningBehaviors() {
@@ -327,7 +327,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
      }
  
      public void useDefaultActivity() {
-@@ -313,6 +370,7 @@ public class Brain<E extends LivingEntity> {
+@@ -309,6 +366,7 @@ public class Brain<E extends LivingEntity> {
              this.activeActivities.clear();
              this.activeActivities.addAll(this.coreActivities);
              this.activeActivities.add(activity);
@@ -335,7 +335,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
          }
      }
  
-@@ -375,11 +433,13 @@ public class Brain<E extends LivingEntity> {
+@@ -371,11 +429,13 @@ public class Brain<E extends LivingEntity> {
                  .computeIfAbsent(activity, key -> Sets.newLinkedHashSet())
                  .add(behavior);
          }
@@ -349,7 +349,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
      }
  
      public boolean isActive(final Activity activity) {
-@@ -400,7 +460,15 @@ public class Brain<E extends LivingEntity> {
+@@ -396,7 +456,15 @@ public class Brain<E extends LivingEntity> {
      }
  
      private void forgetOutdatedMemories() {
@@ -366,7 +366,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
      }
  
      public void stopAll(final ServerLevel level, final E body) {
-@@ -408,31 +476,38 @@ public class Brain<E extends LivingEntity> {
+@@ -404,31 +472,38 @@ public class Brain<E extends LivingEntity> {
  
          for (BehaviorControl<? super E> behavior : this.getRunningBehaviors()) {
              behavior.doStop(level, body, timestamp);
@@ -416,7 +416,7 @@ index 521ab979b8af3360daccea9236a49a343998da4f..931a78fd4c7c9290e5849c1f222c2df1
      }
  
 diff --git a/net/minecraft/world/entity/ai/behavior/Behavior.java b/net/minecraft/world/entity/ai/behavior/Behavior.java
-index b620d38e61ae560074b551a92afefe4022d5078e..50d4234fb066e683ccdfc35ffc8430f90a2c20d9 100644
+index f78464bcbf82fdc7cbf43c2ee586586b2cdfa552..98b777bfe850952829cdb0fd584222bcb7504970 100644
 --- a/net/minecraft/world/entity/ai/behavior/Behavior.java
 +++ b/net/minecraft/world/entity/ai/behavior/Behavior.java
 @@ -15,6 +15,10 @@ public abstract class Behavior<E extends LivingEntity> implements BehaviorContro
@@ -470,7 +470,7 @@ index b620d38e61ae560074b551a92afefe4022d5078e..50d4234fb066e683ccdfc35ffc8430f9
      }
 +    // DivineMC end - Optimize entities
  
-     public static enum Status {
+     public enum Status {
          STOPPED,
 diff --git a/net/minecraft/world/entity/ai/behavior/LongJumpToRandomPos.java b/net/minecraft/world/entity/ai/behavior/LongJumpToRandomPos.java
 index fe7403770b6c117cc2b9e5a3ab9f8554deed703c..eb8c1ed37d5133099d6fc75b1d4105a1aa2ddd45 100644
@@ -566,7 +566,7 @@ index e3b2089e74d57ae8a15e9e5d29f43054ec6ec295..d69dbed3607561681c4a46d5c0700d2f
      private boolean isVillagerBaby(final LivingEntity entity) {
          return entity.is(EntityType.VILLAGER) && entity.isBaby();
 diff --git a/net/minecraft/world/entity/animal/goat/Goat.java b/net/minecraft/world/entity/animal/goat/Goat.java
-index 667056c6c70b95b0a39f157220215979a285b5b9..4aa3fbdda02eefdd2dde858d1bc3cde66d6f1a3b 100644
+index 88e672d51a8b7b74e7760529ed3fdb8835be795e..c793b06d8ed73fd8aef740dd87451e20402ca41e 100644
 --- a/net/minecraft/world/entity/animal/goat/Goat.java
 +++ b/net/minecraft/world/entity/animal/goat/Goat.java
 @@ -87,6 +87,13 @@ public class Goat extends Animal {

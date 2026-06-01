@@ -5,10 +5,10 @@ Subject: [PATCH] Configurable Files Locations
 
 
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index a5907781c193897ce81dcf64b1dfddca4c5578ac..6c015c73a4c9b763da8fd93f285c57ba0a47b036 100644
+index 749e1f87df954ade323aa36d82f106e8b6d3bb9c..f08a735cec3c095ffedf4b424536664d0cb71f69 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
-@@ -104,10 +104,12 @@ import org.jspecify.annotations.Nullable;
+@@ -103,10 +103,12 @@ import org.jspecify.annotations.Nullable;
  import org.slf4j.Logger;
  
  public abstract class PlayerList {
@@ -25,7 +25,7 @@ index a5907781c193897ce81dcf64b1dfddca4c5578ac..6c015c73a4c9b763da8fd93f285c57ba
      public static final Component CHAT_FILTERED_FULL = Component.translatable("chat.filtered_full");
      public static final Component DUPLICATE_LOGIN_DISCONNECT_MESSAGE = Component.translatable("multiplayer.disconnect.duplicate_login");
      private static final Logger LOGGER = LogUtils.getLogger();
-@@ -148,10 +150,17 @@ public abstract class PlayerList {
+@@ -147,10 +149,17 @@ public abstract class PlayerList {
          this.server = server;
          this.registries = registries;
          this.playerIo = playerIo;

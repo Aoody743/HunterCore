@@ -5,7 +5,7 @@ Subject: [PATCH] Optimize Raids
 
 
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 1072da2fa0138d42769749cc98c6ec0f97fd6f09..09926cf5afb837689c9eef42a87989e3f17136ec 100644
+index a993b195bcc60552b478424d3f3c69374dba04ba..27ff114d0f888a8f40ab246ff6063aaf079ed03d 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -237,6 +237,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -25,7 +25,7 @@ index 1072da2fa0138d42769749cc98c6ec0f97fd6f09..09926cf5afb837689c9eef42a87989e3
  
      // Paper start
 diff --git a/net/minecraft/world/entity/raid/Raid.java b/net/minecraft/world/entity/raid/Raid.java
-index 130cc6769c8a21ea0a0eabacacf77d9ef5e0dbb4..fcd173c03bbe1ac3eff1997ba1dcc8edc6ff4ebd 100644
+index 7382dbc587ad18de56b1d10af4f4e558bcd91fd3..54fcb7cbfeedbd10c65f0ec3ed7751ba7016823e 100644
 --- a/net/minecraft/world/entity/raid/Raid.java
 +++ b/net/minecraft/world/entity/raid/Raid.java
 @@ -131,6 +131,7 @@ public class Raid {
@@ -59,7 +59,7 @@ index 130cc6769c8a21ea0a0eabacacf77d9ef5e0dbb4..fcd173c03bbe1ac3eff1997ba1dcc8ed
  
      public float getHealthOfLivingRaiders() {
 diff --git a/net/minecraft/world/entity/raid/Raider.java b/net/minecraft/world/entity/raid/Raider.java
-index 0942992a5036458e98233450f465fe3bab523663..4ead924be59cce58df2e2d0fa4175eeed8293e04 100644
+index 7eeb25f068d77095dbd35e5f9c079a78f24538fe..eb40ea899ffa771d40922a16ba95fad5839cc1ac 100644
 --- a/net/minecraft/world/entity/raid/Raider.java
 +++ b/net/minecraft/world/entity/raid/Raider.java
 @@ -44,9 +44,25 @@ import org.jspecify.annotations.Nullable;
@@ -109,7 +109,7 @@ index 0942992a5036458e98233450f465fe3bab523663..4ead924be59cce58df2e2d0fa4175eee
              // Paper start - EntityPickupItemEvent fixes
              if (org.bukkit.craftbukkit.event.CraftEventFactory.callEntityPickupItemEvent(this, entity, 0).isCancelled()) {
                  return;
-@@ -399,6 +415,16 @@ public abstract class Raider extends PatrollingMonster {
+@@ -396,6 +412,16 @@ public abstract class Raider extends PatrollingMonster {
                  && !this.cannotPickUpBanner();
          }
  
@@ -126,12 +126,12 @@ index 0942992a5036458e98233450f465fe3bab523663..4ead924be59cce58df2e2d0fa4175eee
          private boolean cannotPickUpBanner() {
              if (!getServerLevel(this.mob).getGameRules().get(net.minecraft.world.level.gamerules.GameRules.MOB_GRIEFING, this.mob.level().purpurConfig.pillagerCanPickUpLoot)) return true; // Paper - respect game and entity rules for picking up items // Purpur - Check mobGriefing Overrides
              if (!this.mob.hasActiveRaid()) {
-@@ -408,7 +434,7 @@ public abstract class Raider extends PatrollingMonster {
-             } else if (!this.mob.canBeLeader()) {
-                 return true;
-             } else if (ItemStack.matches(
+@@ -411,7 +437,7 @@ public abstract class Raider extends PatrollingMonster {
+             }
+ 
+             if (ItemStack.matches(
 -                this.mob.getItemBySlot(EquipmentSlot.HEAD), Raid.getOminousBannerInstance(this.mob.registryAccess().lookupOrThrow(Registries.BANNER_PATTERN))
 +                this.mob.getItemBySlot(EquipmentSlot.HEAD), getOminousBanner(this.mob.registryAccess().lookupOrThrow(Registries.BANNER_PATTERN)) // DivineMC - Optimize Raids
              )) {
                  return true;
-             } else {
+             }

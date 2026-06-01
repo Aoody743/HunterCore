@@ -5,10 +5,10 @@ Subject: [PATCH] Configuration
 
 
 diff --git a/net/minecraft/server/dedicated/DedicatedServer.java b/net/minecraft/server/dedicated/DedicatedServer.java
-index d4c88cc35140cec61c2e9fd66e5126e80b083f3b..ce3bf0e4b0fc6bb9f7266f65dcf7a4bbaa894b4e 100644
+index 891df1e27e6f7d6c8b331eb446bb80ceb8f853e0..b85a6ce9029b45a749e0ad8eff39abd4c4886669 100644
 --- a/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/net/minecraft/server/dedicated/DedicatedServer.java
-@@ -274,6 +274,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+@@ -269,6 +269,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
              this.setLocalIp(properties.serverIp);
          }
  
@@ -17,7 +17,7 @@ index d4c88cc35140cec61c2e9fd66e5126e80b083f3b..ce3bf0e4b0fc6bb9f7266f65dcf7a4bb
          // Spigot start
          this.setPlayerList(new DedicatedPlayerList(this, this.registries(), this.playerDataStorage));
          org.spigotmc.SpigotConfig.init((java.io.File) this.options.valueOf("spigot-settings"));
-@@ -288,6 +290,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+@@ -283,6 +285,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
          }
          org.purpurmc.purpur.PurpurConfig.registerCommands();
          // Purpur end - Migrate Setting to reintroduce end void rings
@@ -26,7 +26,7 @@ index d4c88cc35140cec61c2e9fd66e5126e80b083f3b..ce3bf0e4b0fc6bb9f7266f65dcf7a4bb
          this.paperConfigurations.initializeGlobalConfiguration(this.registryAccess());
          this.paperConfigurations.initializeWorldDefaultsConfiguration(this.registryAccess());
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 50925a1cf69b96e49a8feb9a0c4853ebc5de0f97..c6cfead9e582bdac99020cc978486af9894d2453 100644
+index 4464428c9163fa33ea6f750af4d14a030fcbcf20..8db987b78010688e76fda817650e29eb1019f7e8 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -172,6 +172,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl

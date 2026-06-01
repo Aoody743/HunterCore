@@ -11,52 +11,49 @@ All functions provided by vanilla are implemented.
 About Density function: https://minecraft.wiki/w/Density_function
 
 diff --git a/net/minecraft/util/CubicSpline.java b/net/minecraft/util/CubicSpline.java
-index d7881babc3824d0315101a8be3ff620d4a50b0a6..265235a67bff1d904b4631ec588c802922afe9a0 100644
+index 2343f63a244841587552f03aeaecba9584241752..84eb0ed0335d04a2f736fc7c5de7f988ffe9903b 100644
 --- a/net/minecraft/util/CubicSpline.java
 +++ b/net/minecraft/util/CubicSpline.java
-@@ -254,31 +254,47 @@ public interface CubicSpline<C, I extends BoundedFloatFunction<C>> extends Bound
+@@ -250,33 +250,47 @@ public interface CubicSpline<C, I extends BoundedFloatFunction<C>> extends Bound
  
          @Override
          public float apply(final C c) {
--            float input = this.coordinate.apply(c);
--            int start = findIntervalStart(this.locations, input);
--            int lastIndex = this.locations.length - 1;
--            if (start < 0) {
--                return linearExtend(input, this.locations, this.values.get(0).apply(c), this.derivatives, 0);
--            } else if (start == lastIndex) {
--                return linearExtend(input, this.locations, this.values.get(lastIndex).apply(c), this.derivatives, lastIndex);
 +            // DivineMC start - Density Function Compiler
-+            float point = this.coordinate.apply(c);
-+            int rangeForLocation = findIntervalStart(this.locations, point);
-+            int last = this.locations.length - 1;
-+            if (rangeForLocation < 0) {
-+                return linearExtend(point, this.locations, this.values.get(0).apply(c), this.derivatives, 0);
-+            } else if (rangeForLocation == last) {
-+                return linearExtend(point, this.locations, this.values.get(last).apply(c), this.derivatives, last);
-             } else {
--                float x1 = this.locations[start];
--                float x2 = this.locations[start + 1];
--                float t = (input - x1) / (x2 - x1);
--                BoundedFloatFunction<C> f1 = (BoundedFloatFunction<C>)this.values.get(start);
--                BoundedFloatFunction<C> f2 = (BoundedFloatFunction<C>)this.values.get(start + 1);
--                float d1 = this.derivatives[start];
--                float d2 = this.derivatives[start + 1];
--                float y1 = f1.apply(c);
--                float y2 = f2.apply(c);
--                float a = d1 * (x2 - x1) - (y2 - y1);
--                float b = -d2 * (x2 - x1) + (y2 - y1);
--                return Mth.lerp(t, y1, y2) + t * (1.0F - t) * Mth.lerp(t, a, b);
-+                float loc0 = this.locations[rangeForLocation];
-+                float loc1 = this.locations[rangeForLocation + 1];
+             float input = this.coordinate.apply(c);
+             int start = findIntervalStart(this.locations, input);
+             int lastIndex = this.locations.length - 1;
+             if (start < 0) {
+                 return linearExtend(input, this.locations, this.values.get(0).apply(c), this.derivatives, 0);
+-            }
+-
+-            if (start == lastIndex) {
++            } else if (start == lastIndex) {
+                 return linearExtend(input, this.locations, this.values.get(lastIndex).apply(c), this.derivatives, lastIndex);
++            } else {
++                float loc0 = this.locations[start];
++                float loc1 = this.locations[start + 1];
 +                float locDist = loc1 - loc0;
-+                float k = (point - loc0) / locDist;
-+                float n = this.values.get(rangeForLocation).apply(c);
-+                float o = this.values.get(rangeForLocation + 1).apply(c);
++                float k = (input - loc0) / locDist;
++                float n = this.values.get(start).apply(c);
++                float o = this.values.get(start + 1).apply(c);
 +                float onDist = o - n;
-+                float p = this.derivatives[rangeForLocation] * locDist - onDist;
-+                float q = -this.derivatives[rangeForLocation + 1] * locDist + onDist;
++                float p = this.derivatives[start] * locDist - onDist;
++                float q = -this.derivatives[start + 1] * locDist + onDist;
 +                return Mth.lerp(k, n, o) + k * (1.0F - k) * Mth.lerp(k, p, q);
              }
+-
+-            float x1 = this.locations[start];
+-            float x2 = this.locations[start + 1];
+-            float t = (input - x1) / (x2 - x1);
+-            BoundedFloatFunction<C> f1 = (BoundedFloatFunction<C>)this.values.get(start);
+-            BoundedFloatFunction<C> f2 = (BoundedFloatFunction<C>)this.values.get(start + 1);
+-            float d1 = this.derivatives[start];
+-            float d2 = this.derivatives[start + 1];
+-            float y1 = f1.apply(c);
+-            float y2 = f2.apply(c);
+-            float a = d1 * (x2 - x1) - (y2 - y1);
+-            float b = -d2 * (x2 - x1) + (y2 - y1);
+-            return Mth.lerp(t, y1, y2) + t * (1.0F - t) * Mth.lerp(t, a, b);
 +            // DivineMC end - Density Function Compiler
          }
  
@@ -82,7 +79,7 @@ index d7881babc3824d0315101a8be3ff620d4a50b0a6..265235a67bff1d904b4631ec588c8029
          }
  
          @VisibleForTesting
-@@ -308,5 +324,27 @@ public interface CubicSpline<C, I extends BoundedFloatFunction<C>> extends Bound
+@@ -306,5 +320,27 @@ public interface CubicSpline<C, I extends BoundedFloatFunction<C>> extends Bound
          public CubicSpline<C, I> mapAll(final CubicSpline.CoordinateVisitor<I> visitor) {
              return create(visitor.visit(this.coordinate), this.locations, this.values().stream().map(v -> v.mapAll(visitor)).toList(), this.derivatives);
          }
@@ -111,7 +108,7 @@ index d7881babc3824d0315101a8be3ff620d4a50b0a6..265235a67bff1d904b4631ec588c8029
      }
  }
 diff --git a/net/minecraft/world/level/levelgen/DensityFunctions.java b/net/minecraft/world/level/levelgen/DensityFunctions.java
-index faaadcc18f3854b2b207cf5fb5f64999c5977b06..48f76bd82baddcff5b3be1e768f2540db8ed96ef 100644
+index baa1da8fad8113624a1c85beb08a6d411f9000f8..8c41263d3953ab5a906ea241455a04ed916d0662 100644
 --- a/net/minecraft/world/level/levelgen/DensityFunctions.java
 +++ b/net/minecraft/world/level/levelgen/DensityFunctions.java
 @@ -301,38 +301,66 @@ public final class DensityFunctions {
@@ -321,7 +318,7 @@ index faaadcc18f3854b2b207cf5fb5f64999c5977b06..48f76bd82baddcff5b3be1e768f2540d
              return this.wrapped.maxValue();
          }
  
--        static enum Type implements StringRepresentable {
+-        enum Type implements StringRepresentable {
 +        // DivineMC start - Density Function Compiler
 +        @Override
 +        public Type type() {
@@ -334,15 +331,15 @@ index faaadcc18f3854b2b207cf5fb5f64999c5977b06..48f76bd82baddcff5b3be1e768f2540d
 +        }
 +        // DivineMC end - Density Function Compiler
 +
-+        public static enum Type implements StringRepresentable { // DivineMC - Density Function Compiler - make this public
++        public enum Type implements StringRepresentable { // DivineMC - Density Function Compiler - make this public
              Interpolated("interpolated"),
              FlatCache("flat_cache"),
              Cache2D("cache_2d"),
 diff --git a/net/minecraft/world/level/levelgen/NoiseChunk.java b/net/minecraft/world/level/levelgen/NoiseChunk.java
-index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42b4573351 100644
+index 1b86f6833eed345052b3d12a2cf3a19caff991db..45b95a5012b2450f882114b759c03b378b721b3d 100644
 --- a/net/minecraft/world/level/levelgen/NoiseChunk.java
 +++ b/net/minecraft/world/level/levelgen/NoiseChunk.java
-@@ -21,8 +21,18 @@ import net.minecraft.world.level.chunk.ChunkAccess;
+@@ -20,8 +20,18 @@ import net.minecraft.world.level.chunk.ChunkAccess;
  import net.minecraft.world.level.levelgen.blending.Blender;
  import net.minecraft.world.level.levelgen.material.MaterialRuleList;
  import org.jspecify.annotations.Nullable;
@@ -363,7 +360,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
      private final int cellCountXZ;
      private final int cellCountY;
      private final int cellNoiseMinY;
-@@ -58,7 +68,47 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -57,7 +67,47 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
      private long interpolationCounter;
      private long arrayInterpolationCounter;
      private int arrayIndex;
@@ -409,10 +406,10 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +    }
 +
 +    public class NoiseChunkSliceFillingContextProvider implements DensityFunction.ContextProvider, IArrayCacheCapable, ICoordinatesFilling {
-         {
-             Objects.requireNonNull(NoiseChunk.this);
-         }
-@@ -82,7 +132,23 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+         @Override
+         public DensityFunction.FunctionContext forIndex(final int cellYIndex) {
+             NoiseChunk.this.cellStartBlockY = (cellYIndex + NoiseChunk.this.cellNoiseMinY) * NoiseChunk.this.cellHeight;
+@@ -77,7 +127,23 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
                  output[cellYIndex] = function.compute(NoiseChunk.this);
              }
          }
@@ -437,7 +434,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
  
      public static NoiseChunk forChunk(
          final ChunkAccess chunk,
-@@ -144,7 +210,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -139,7 +205,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
  
          NoiseRouter router = randomState.router();
@@ -446,7 +443,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
          this.preliminarySurfaceLevel = wrappedRouter.preliminarySurfaceLevel();
          if (!settings.isAquifersEnabled()) {
              this.aquifer = Aquifer.createDisabled(globalFluidPicker);
-@@ -160,7 +226,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -155,7 +221,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          DensityFunction fullNoiseValue = DensityFunctions.cacheAllInCell(
                  DensityFunctions.add(wrappedRouter.finalDensity(), DensityFunctions.BeardifierMarker.INSTANCE)
              )
@@ -455,7 +452,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
          this.fullNoiseDensity = fullNoiseValue;
          builder.add(context -> this.aquifer.computeSubstance(context, fullNoiseValue.compute(context)));
          if (settings.oreVeinsEnabled()) {
-@@ -172,12 +238,14 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -167,12 +233,14 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
  
      protected Climate.Sampler cachedClimateSampler(final NoiseRouter noises, final List<Climate.ParameterPoint> spawnTarget) {
          return new Climate.Sampler(
@@ -476,7 +473,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
              spawnTarget
          );
      }
-@@ -386,6 +454,13 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -381,6 +449,13 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
      }
  
      private DensityFunction wrapNew(final DensityFunction function) {
@@ -488,9 +485,9 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +        }
 +        // DivineMC end - Density Function Compiler
          if (function instanceof DensityFunctions.Marker marker) {
-             return (DensityFunction)(switch (marker.type()) {
+             return switch (marker.type()) {
                  case Interpolated -> new NoiseChunk.NoiseInterpolator(marker.wrapped());
-@@ -502,10 +577,48 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -489,10 +564,48 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          @Nullable BlockState calculate(final DensityFunction.FunctionContext context);
      }
  
@@ -540,7 +537,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
  
          private Cache2D(final DensityFunction function) {
              this.function = function;
-@@ -542,9 +655,92 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -529,9 +642,92 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
      }
  
@@ -634,21 +631,13 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +        // DivineMC end - Density Function Compiler
  
          private CacheAllInCell(final DensityFunction noiseFiller) {
-             Objects.requireNonNull(NoiseChunk.this);
-@@ -556,18 +752,51 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+             this.noiseFiller = noiseFiller;
+@@ -541,20 +737,66 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
  
          @Override
          public double compute(final DensityFunction.FunctionContext context) {
 -            if (context != NoiseChunk.this) {
 -                return this.noiseFiller.compute(context);
--            } else if (!NoiseChunk.this.interpolating) {
--                throw new IllegalStateException("Trying to sample interpolator outside the interpolation loop");
--            } else {
--                int x = NoiseChunk.this.inCellX;
--                int y = NoiseChunk.this.inCellY;
--                int z = NoiseChunk.this.inCellZ;
--                return x >= 0 && y >= 0 && z >= 0 && x < NoiseChunk.this.cellWidth && y < NoiseChunk.this.cellHeight && z < NoiseChunk.this.cellWidth
--                    ? this.values[((NoiseChunk.this.cellHeight - 1 - y) * NoiseChunk.this.cellWidth + x) * NoiseChunk.this.cellWidth + z]
 +            // DivineMC start - Density Function Compiler
 +            java.util.function.Supplier<Double> run = () -> {
 +                if (context != NoiseChunk.this) {
@@ -659,27 +648,45 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +                    int x = NoiseChunk.this.inCellX;
 +                    int y = NoiseChunk.this.inCellY;
 +                    int z = NoiseChunk.this.inCellZ;
-+                    return x >= 0 && y >= 0 && z >= 0 && x < NoiseChunk.this.cellWidth && y < NoiseChunk.this.cellHeight && z < NoiseChunk.this.cellWidth
-+                        ? this.values[((NoiseChunk.this.cellHeight - 1 - y) * NoiseChunk.this.cellWidth + x) * NoiseChunk.this.cellWidth + z]
++
++                    return x >= 0
++                        && y >= 0
++                        && z >= 0
++                        && x < NoiseChunk.this.cellWidth
++                        && y < NoiseChunk.this.cellHeight
++                        && z < NoiseChunk.this.cellWidth
++                        ? this.values[((NoiseChunk.this.cellHeight - 1 - y) * NoiseChunk.this.cellWidth + x)
++                                      * NoiseChunk.this.cellWidth + z]
 +                        : this.noiseFiller.compute(context);
 +                }
 +            };
-+            if (!org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.enableDensityFunctionCompiler || context instanceof NoiseChunk) {
++
++            if (!org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.enableDensityFunctionCompiler
++                || context instanceof NoiseChunk) {
 +                return run.get();
-+            }
-+            if (context instanceof NoisePosVanillaInterface vif && vif.getType() == EvalType.INTERPOLATION) {
-+                boolean isInInterpolationLoop = (NoiseChunk.this).interpolating;
+             }
+ 
+-            if (!NoiseChunk.this.interpolating) {
+-                throw new IllegalStateException("Trying to sample interpolator outside the interpolation loop");
++            if (context instanceof NoisePosVanillaInterface vif
++                && vif.getType() == EvalType.INTERPOLATION) {
++
++                boolean isInInterpolationLoop = NoiseChunk.this.interpolating;
 +                if (!isInInterpolationLoop) {
 +                    return run.get();
 +                }
-+                int startBlockX = (NoiseChunk.this).cellStartBlockX;
-+                int startBlockY = (NoiseChunk.this).cellStartBlockY;
-+                int startBlockZ = (NoiseChunk.this).cellStartBlockZ;
-+                int horizontalCellBlockCount = (NoiseChunk.this).cellWidth;
-+                int verticalCellBlockCount = (NoiseChunk.this).cellHeight;
++
++                int startBlockX = NoiseChunk.this.cellStartBlockX;
++                int startBlockY = NoiseChunk.this.cellStartBlockY;
++                int startBlockZ = NoiseChunk.this.cellStartBlockZ;
++
++                int horizontalCellBlockCount = NoiseChunk.this.cellWidth;
++                int verticalCellBlockCount = NoiseChunk.this.cellHeight;
++
 +                int cellBlockX = context.blockX() - startBlockX;
 +                int cellBlockY = context.blockY() - startBlockY;
 +                int cellBlockZ = context.blockZ() - startBlockZ;
++
 +                return cellBlockX >= 0
 +                    && cellBlockY >= 0
 +                    && cellBlockZ >= 0
@@ -687,17 +694,22 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +                    && cellBlockY < verticalCellBlockCount
 +                    && cellBlockZ < horizontalCellBlockCount
 +                    ? this.values[((verticalCellBlockCount - 1 - cellBlockY) * horizontalCellBlockCount + cellBlockX)
-+                    * horizontalCellBlockCount
-+                    + cellBlockZ]
-                     : this.noiseFiller.compute(context);
++                                  * horizontalCellBlockCount + cellBlockZ]
++                    : this.noiseFiller.compute(context);
              }
-+
+ 
+-            int x = NoiseChunk.this.inCellX;
+-            int y = NoiseChunk.this.inCellY;
+-            int z = NoiseChunk.this.inCellZ;
+-            return x >= 0 && y >= 0 && z >= 0 && x < NoiseChunk.this.cellWidth && y < NoiseChunk.this.cellHeight && z < NoiseChunk.this.cellWidth
+-                ? this.values[((NoiseChunk.this.cellHeight - 1 - y) * NoiseChunk.this.cellWidth + x) * NoiseChunk.this.cellWidth + z]
+-                : this.noiseFiller.compute(context);
 +            return run.get();
 +            // DivineMC end - Density Function Compiler
          }
  
          @Override
-@@ -586,12 +815,83 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -573,12 +815,83 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
      }
  
@@ -781,54 +793,70 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +        // DivineMC end - Density Function Compiler
  
          private CacheOnce(final DensityFunction function) {
-             Objects.requireNonNull(NoiseChunk.this);
-@@ -601,34 +901,82 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+             this.function = function;
+@@ -586,38 +899,99 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
  
          @Override
          public double compute(final DensityFunction.FunctionContext context) {
 -            if (context != NoiseChunk.this) {
 -                return this.function.compute(context);
--            } else if (this.lastArray != null && this.lastArrayCounter == NoiseChunk.this.arrayInterpolationCounter) {
--                return this.lastArray[NoiseChunk.this.arrayIndex];
--            } else if (this.lastCounter == NoiseChunk.this.interpolationCounter) {
--                return this.lastValue;
--            } else {
--                this.lastCounter = NoiseChunk.this.interpolationCounter;
--                double value = this.function.compute(context);
--                this.lastValue = value;
--                return value;
 +            // DivineMC start - Density Function Compiler
 +            java.util.function.Supplier<Double> run = () -> {
 +                if (context != NoiseChunk.this) {
 +                    return this.function.compute(context);
-+                } else if (this.lastArray != null && this.lastArrayCounter == NoiseChunk.this.arrayInterpolationCounter) {
-+                    return this.lastArray[NoiseChunk.this.arrayIndex];
-+                } else if (this.lastCounter == NoiseChunk.this.interpolationCounter) {
-+                    return this.lastValue;
-+                } else {
-+                    this.lastCounter = NoiseChunk.this.interpolationCounter;
-+                    double value = this.function.compute(context);
-+                    this.lastValue = value;
-+                    return value;
 +                }
++
++                if (this.lastArray != null
++                    && this.lastArrayCounter == NoiseChunk.this.arrayInterpolationCounter) {
++                    return this.lastArray[NoiseChunk.this.arrayIndex];
++                }
++
++                if (this.lastCounter == NoiseChunk.this.interpolationCounter) {
++                    return this.lastValue;
++                }
++
++                this.lastCounter = NoiseChunk.this.interpolationCounter;
++                double value = this.function.compute(context);
++                this.lastValue = value;
++                return value;
 +            };
-+            if (!org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.enableDensityFunctionCompiler || context instanceof NoiseChunk) {
++
++            if (!org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.enableDensityFunctionCompiler
++                || context instanceof NoiseChunk) {
 +                return run.get();
              }
+ 
+-            if (this.lastArray != null && this.lastArrayCounter == NoiseChunk.this.arrayInterpolationCounter) {
+-                return this.lastArray[NoiseChunk.this.arrayIndex];
 +            int blockX = context.blockX();
 +            int blockY = context.blockY();
 +            int blockZ = context.blockZ();
++
 +            if (c2me$lastValuea != null) {
-+                for (int i = 0; i < this.c2me$lastValuea.length; i ++) {
-+                    if (c2me$lastXa[i] == blockX && c2me$lastYa[i] == blockY && c2me$lastZa[i] == blockZ) {
++                for (int i = 0; i < this.c2me$lastValuea.length; i++) {
++                    if (c2me$lastXa[i] == blockX
++                        && c2me$lastYa[i] == blockY
++                        && c2me$lastZa[i] == blockZ) {
 +                        return c2me$lastValuea[i];
 +                    }
 +                }
-+            }
-+            if (!Double.isNaN(c2me$lastValue) && c2me$lastX == blockX && c2me$lastY == blockY && c2me$lastZ == blockZ) {
+             }
+ 
+-            if (this.lastCounter == NoiseChunk.this.interpolationCounter) {
+-                return this.lastValue;
++            if (!Double.isNaN(c2me$lastValue)
++                && c2me$lastX == blockX
++                && c2me$lastY == blockY
++                && c2me$lastZ == blockZ) {
 +                return c2me$lastValue;
-+            }
+             }
+ 
+-            this.lastCounter = NoiseChunk.this.interpolationCounter;
+-            double value = this.function.compute(context);
+-            this.lastValue = value;
+-            return value;
 +            double sample = this.function.compute(context);
++
 +            c2me$lastValue = sample;
 +            c2me$lastX = blockX;
 +            c2me$lastY = blockY;
@@ -885,7 +913,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
          }
  
          @Override
-@@ -642,10 +990,64 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -631,10 +1005,64 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
      }
  
@@ -950,8 +978,8 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +        // DivineMC end - Density Function Compiler
  
          private FlatCache(final DensityFunction noiseFiller, final boolean fill) {
-             Objects.requireNonNull(NoiseChunk.this);
-@@ -706,7 +1108,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+             this.noiseFiller = noiseFiller;
+@@ -693,7 +1121,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
      }
  
@@ -960,7 +988,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
          private double[][] slice0;
          private double[][] slice1;
          private DensityFunction noiseFiller;
-@@ -725,6 +1127,104 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -712,6 +1140,104 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          private double valueZ0;
          private double valueZ1;
          private double value;
@@ -1064,8 +1092,8 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +        // DivineMC end - Density Function Compiler
  
          private NoiseInterpolator(final DensityFunction noiseFiller) {
-             Objects.requireNonNull(NoiseChunk.this);
-@@ -776,16 +1276,18 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+             this.noiseFiller = noiseFiller;
+@@ -761,16 +1287,18 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
  
          @Override
          public double compute(final DensityFunction.FunctionContext context) {
@@ -1094,7 +1122,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
                          this.noise000,
                          this.noise100,
                          this.noise010,
-@@ -795,8 +1297,45 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -780,8 +1308,45 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
                          this.noise011,
                          this.noise111
                      )
@@ -1104,7 +1132,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +            };
 +            if (!org.bxteam.divinemc.config.DivineConfig.PerformanceCategory.enableDensityFunctionCompiler || context instanceof NoiseChunk) {
 +                return original.get();
-             }
++            }
 +            if (context instanceof NoisePosVanillaInterface vif && vif.getType() == EvalType.INTERPOLATION) {
 +                NoiseChunk field = NoiseChunk.this;
 +                boolean isInInterpolationLoop = field.interpolating;
@@ -1134,7 +1162,7 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
 +                    this.noise011,
 +                    this.noise111
 +                ) : this.value;
-+            }
+             }
 +
 +            return original.get();
 +            // DivineMC end - Density Function Compiler
@@ -1142,10 +1170,10 @@ index e6e94b69a92af66d1d09580f9585a5ce58463f1c..363af927bf8376d20d4cda654318be42
  
          @Override
 diff --git a/net/minecraft/world/level/levelgen/RandomState.java b/net/minecraft/world/level/levelgen/RandomState.java
-index d2f33496d4685ae433768a1f477557c0b243d1c6..b192b8c3c58d6d8f432f4ae9ee8391b863042138 100644
+index e0c84dc7364e3a068f1325a45dee8880e4091fbe..1b830644c61467c85c6bec1a4896c3225d2afa75 100644
 --- a/net/minecraft/world/level/levelgen/RandomState.java
 +++ b/net/minecraft/world/level/levelgen/RandomState.java
-@@ -121,6 +121,41 @@ public final class RandomState {
+@@ -107,6 +107,41 @@ public final class RandomState {
              this.router.ridges().mapAll(noiseFlattener),
              settings.spawnTarget()
          );

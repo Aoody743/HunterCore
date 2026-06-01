@@ -25,7 +25,7 @@
          final Vec3 originalMovement = delta; // Paper - Expose pre-collision velocity
          // Paper start - detailed watchdog information
          ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread("Cannot move an entity off-main");
-@@ -2667,6 +_,7 @@
+@@ -2669,6 +_,7 @@
              }
  
              this.addAdditionalSaveData(output, includeAll); // CraftBukkit - pass on includeAll
@@ -33,7 +33,7 @@
              if (this.isVehicle()) {
                  ValueOutput.ValueOutputList passengersList = output.childrenList("Passengers");
  
-@@ -2777,6 +_,7 @@
+@@ -2780,6 +_,7 @@
                  this.tags.clear();
                  input.read("Tags", TAG_LIST_CODEC).ifPresent(this.tags::addAll);
                  this.readAdditionalSaveData(input);
@@ -41,7 +41,7 @@
                  if (this.repositionEntityAfterLoad()) {
                      this.reapplyPosition();
                  }
-@@ -4298,6 +_,7 @@
+@@ -4300,6 +_,7 @@
      }
  
      public boolean canTeleport(final Level from, final Level to) {
@@ -49,7 +49,7 @@
          if (!this.isAlive() || !this.valid) return false; // Paper - Fix item duplication and teleport issues
          if (from.dimension() == Level.END && to.dimension() == Level.OVERWORLD) {
              for (Entity passenger : this.getPassengers()) {
-@@ -4561,6 +_,7 @@
+@@ -4563,6 +_,7 @@
      }
  
      public final void setBoundingBox(final AABB bb) {
@@ -57,7 +57,7 @@
          // CraftBukkit start - block invalid bounding boxes
          double minX = bb.minX,
                  minY = bb.minY,
-@@ -5440,7 +_,14 @@
+@@ -5442,7 +_,14 @@
  
      // Paper start - Expose entity id counter
      public static int nextEntityId() {

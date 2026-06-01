@@ -5,7 +5,7 @@ Subject: [PATCH] Configurable movement speed for entities
 
 
 diff --git a/net/minecraft/world/entity/monster/zombie/Drowned.java b/net/minecraft/world/entity/monster/zombie/Drowned.java
-index 3a1152e07b2cc0ee4cf84651ada3c987dc704e91..d2032326c6387f932efecb710d0e843d6c00ce2d 100644
+index 4801c6987740f846a3049bfa0fcac547183e3f13..90fe0a841c893ec542b203605cdef6f1b89d7182 100644
 --- a/net/minecraft/world/entity/monster/zombie/Drowned.java
 +++ b/net/minecraft/world/entity/monster/zombie/Drowned.java
 @@ -108,6 +108,7 @@ public class Drowned extends Zombie implements RangedAttackMob {
@@ -29,10 +29,10 @@ index 55b2bd676f2e9633fc8250bcd984424e8c37e2ee..0775982f7bf202bb79d43bfe8413e98b
  
      @Override
 diff --git a/net/minecraft/world/entity/monster/zombie/Zombie.java b/net/minecraft/world/entity/monster/zombie/Zombie.java
-index a0b1399d8ea3aeb583dd0c0f1b5ec6300eacf28d..2b2aea8cb74981a95919def23fa841872b15545d 100644
+index 04ba29b8864804899e19b08b1952df781c96a23e..3c710ea446dbb7275b331651150609eb0d946054 100644
 --- a/net/minecraft/world/entity/monster/zombie/Zombie.java
 +++ b/net/minecraft/world/entity/monster/zombie/Zombie.java
-@@ -136,6 +136,7 @@ public class Zombie extends Monster {
+@@ -135,6 +135,7 @@ public class Zombie extends Monster {
      public void initAttributes() {
          this.getAttribute(Attributes.MAX_HEALTH).setBaseValue(this.level().purpurConfig.zombieMaxHealth);
          this.getAttribute(Attributes.SCALE).setBaseValue(this.level().purpurConfig.zombieScale);
@@ -40,7 +40,7 @@ index a0b1399d8ea3aeb583dd0c0f1b5ec6300eacf28d..2b2aea8cb74981a95919def23fa84187
      }
      // Purpur end - Configurable entity base attributes
  
-@@ -211,7 +212,6 @@ public class Zombie extends Monster {
+@@ -210,7 +211,6 @@ public class Zombie extends Monster {
      public static AttributeSupplier.Builder createAttributes() {
          return Monster.createMonsterAttributes()
              .add(Attributes.FOLLOW_RANGE, 35.0)
@@ -49,7 +49,7 @@ index a0b1399d8ea3aeb583dd0c0f1b5ec6300eacf28d..2b2aea8cb74981a95919def23fa84187
              .add(Attributes.ARMOR, 2.0)
              .add(Attributes.SPAWN_REINFORCEMENTS_CHANCE);
 diff --git a/net/minecraft/world/entity/monster/zombie/ZombieVillager.java b/net/minecraft/world/entity/monster/zombie/ZombieVillager.java
-index e5eb30d3620937af3cd294bdd6b985fbb61df534..ecc68c76b8a752c4ed418987ac243ed0d57ba166 100644
+index 127c917e1a068af6a6f8f46bafc608f30e9df487..470416bac8b83661aa350f810e1ea4463a4e3d0f 100644
 --- a/net/minecraft/world/entity/monster/zombie/ZombieVillager.java
 +++ b/net/minecraft/world/entity/monster/zombie/ZombieVillager.java
 @@ -106,6 +106,7 @@ public class ZombieVillager extends Zombie implements VillagerDataHolder {
