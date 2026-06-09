@@ -151,6 +151,17 @@ modules:
     require-csrf: true
     command-output-lines: 80
     command-output-chars: 12000
+    health:
+      enabled: true
+      low-tps-warning: 18.0
+      low-tps-critical: 15.0
+      high-mspt-warning: 50.0
+      high-mspt-critical: 75.0
+      memory-warning-percent: 85.0
+      memory-critical-percent: 95.0
+      loaded-chunks-warning: 12000
+      entities-warning: 4000
+      disabled-plugins-warning: true
     users:
       steve:
         role: player
@@ -160,7 +171,7 @@ modules:
         - spawn
 ```
 
-游客可以查看基础状态和 BlueMap 地图链接；登录后的普通用户可以查看更完整的玩家/插件信息，并只能执行全局 `player-allowed-commands` 或该用户 `allowed-commands` 白名单中的指令；管理员默认可以执行控制台指令，也可以按用户限制为指定指令。网页命令会尽量捕获命令输出并显示在面板里，输出长度由 `command-output-lines` 和 `command-output-chars` 控制。面板对登录后的 POST 请求默认启用 CSRF token 校验。首次启动不会写入明文默认密码，需要在控制台创建账号：
+游客可以查看基础状态、健康告警和 BlueMap 地图链接；登录后的普通用户可以查看更完整的玩家/插件信息，并只能执行全局 `player-allowed-commands` 或该用户 `allowed-commands` 白名单中的指令；管理员默认可以执行控制台指令，也可以按用户限制为指定指令。网页命令会尽量捕获命令输出并显示在面板里，输出长度由 `command-output-lines` 和 `command-output-chars` 控制。面板对登录后的 POST 请求默认启用 CSRF token 校验。首次启动不会写入明文默认密码，需要在控制台创建账号：
 
 ```text
 /hunteradmin web user admin admin <password>
@@ -194,7 +205,7 @@ optimizations.cpu.netty-io-threads
 optimizations.cpu.common-pool-parallelism
 ```
 
-内置插件安装阶段会并行校验/写入不同 jar。HunterTools 的 sidebar 文本渲染、假人/NPC 配置加载、网页面板请求处理、GC 请求和配置保存会移出主线程，最终 Bukkit 状态修改仍回到主线程执行，避免破坏 Bukkit/Paper 线程安全规则。网页面板的游客状态接口默认有 1 秒缓存，降低公开面板刷新对主线程的压力。
+内置插件安装阶段会并行校验/写入不同 jar。HunterTools 的 sidebar 文本渲染、假人/NPC 配置加载、网页面板请求处理、GC 请求和配置保存会移出主线程，最终 Bukkit 状态修改仍回到 Bukkit 主线程执行，避免破坏 Bukkit/Paper 线程安全规则。网页面板的游客状态接口默认有 1 秒缓存，降低公开面板刷新对主线程的压力。面板健康告警会按可配置阈值提示低 TPS、高 MSPT、堆内存压力、单世界区块/实体负载和禁用插件数量。
 
 HunterCore 还会在启动时按 CPU 核心数设置保守的多线程默认值，包括 Paper/DivineMC worker threads、Netty IO threads 和 ForkJoin common pool parallelism。你通过 JVM 参数显式设置过的值不会被覆盖。网页面板也会显示 CPU、worker、Netty、ForkJoin 和 HunterTools web worker 设置，便于远程检查当前优化状态。
 

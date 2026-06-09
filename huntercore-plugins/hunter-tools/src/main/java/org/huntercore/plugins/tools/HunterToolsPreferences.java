@@ -78,6 +78,12 @@ final class HunterToolsPreferences {
         }
     }
 
+    double doubleValue(final String path, final double fallback) {
+        synchronized (this.lock) {
+            return this.config.getDouble(path, fallback);
+        }
+    }
+
     String stringValue(final String path, final String fallback) {
         synchronized (this.lock) {
             return this.config.getString(path, fallback);
@@ -338,6 +344,16 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.web-panel.command-timeout-seconds", 10);
         changed |= this.setDefault("modules.web-panel.command-output-lines", 80);
         changed |= this.setDefault("modules.web-panel.command-output-chars", 12000);
+        changed |= this.setDefault("modules.web-panel.health.enabled", true);
+        changed |= this.setDefault("modules.web-panel.health.low-tps-warning", 18.0D);
+        changed |= this.setDefault("modules.web-panel.health.low-tps-critical", 15.0D);
+        changed |= this.setDefault("modules.web-panel.health.high-mspt-warning", 50.0D);
+        changed |= this.setDefault("modules.web-panel.health.high-mspt-critical", 75.0D);
+        changed |= this.setDefault("modules.web-panel.health.memory-warning-percent", 85.0D);
+        changed |= this.setDefault("modules.web-panel.health.memory-critical-percent", 95.0D);
+        changed |= this.setDefault("modules.web-panel.health.loaded-chunks-warning", 12000);
+        changed |= this.setDefault("modules.web-panel.health.entities-warning", 4000);
+        changed |= this.setDefault("modules.web-panel.health.disabled-plugins-warning", true);
         changed |= this.setDefault("modules.web-panel.admin-command-execution", true);
         changed |= this.setDefault("modules.web-panel.player-command-execution", true);
         changed |= this.setDefault("modules.web-panel.player-allowed-commands", defaultWebPlayerCommands());

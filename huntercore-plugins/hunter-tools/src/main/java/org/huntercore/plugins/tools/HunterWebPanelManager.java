@@ -233,6 +233,17 @@ final class HunterWebPanelManager {
 
     private String buildStatusJson(final WebSession session, final boolean detailed) {
         final MetricsSnapshot snapshot = this.plugin.metricsSnapshot();
+        final List<WorldPanelStats> worlds = new ArrayList<>();
+        for (final World world : Bukkit.getWorlds()) {
+            worlds.add(new WorldPanelStats(
+                world.getName(),
+                world.getPlayers().size(),
+                world.getLoadedChunks().length,
+                world.getEntityCount(),
+                world.getTime()
+            ));
+        }
+
         final StringBuilder json = new StringBuilder(2048);
         json.append("{\"ok\":true");
         json.append(",\"session\":").append(session == null ? "null" : sessionJson(session));
@@ -267,19 +278,21 @@ final class HunterWebPanelManager {
         numberField(json, "bundledPluginInstallWorkers", this.preferences.intValue("optimizations.bundled-plugin-parallel-install.max-workers", 4));
         json.append('}');
 
+        json.append(",\"health\":").append(this.healthJson(snapshot, worlds, detailed));
+
         json.append(",\"worlds\":[");
         boolean first = true;
-        for (final World world : Bukkit.getWorlds()) {
+        for (final WorldPanelStats world : worlds) {
             if (!first) {
                 json.append(',');
             }
             first = false;
             json.append('{');
-            field(json, "name", world.getName()).append(',');
-            numberField(json, "players", world.getPlayers().size()).append(',');
-            numberField(json, "loadedChunks", world.getLoadedChunks().length).append(',');
-            numberField(json, "entities", world.getEntityCount()).append(',');
-            numberField(json, "time", world.getTime());
+            field(json, "name", world.name()).append(',');
+            numberField(json, "players", world.players()).append(',');
+            numberField(json, "loadedChunks", world.loadedChunks()).append(',');
+            numberField(json, "entities", world.entities()).append(',');
+            numberField(json, "time", world.time());
             json.append('}');
         }
         json.append(']');
@@ -317,6 +330,104 @@ final class HunterWebPanelManager {
         }
         json.append('}');
         return json.toString();
+    }
+
+    private String healthJson(final MetricsSnapshot snapshot, final List<WorldPanelStats> worlds, final boolean detailed) {
+        final StringBuilder json = new StringBuilder(768);
+        final double memoryPercent = memoryUsagePercent(snapshot);
+        if (!this.preferences.booleanValue("modules.web-panel.health.enabled", true)) {
+            return "{\"status\":\"disabled\",\"memoryUsagePercent\":" + String.format(Locale.ROOT, "%.3f", memoryPercent) + ",\"alerts\":[]}";
+        }
+
+        final List<HealthAlert> alerts = this.healthAlerts(snapshot, worlds, memoryPercent, detailed);
+        final String status = alerts.stream().anyMatch(alert -> alert.severity().equals("critical"))
+            ? "critical"
+            : alerts.isEmpty() ? "ok" : "warning";
+        json.append('{');
+        field(json, "status", status).append(',');
+        numberField(json, "memoryUsagePercent", memoryPercent).append(',');
+        json.append("\"alerts\":[");
+        boolean first = true;
+        for (final HealthAlert alert : alerts) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('{');
+            field(json, "severity", alert.severity()).append(',');
+            field(json, "label", alert.label()).append(',');
+            field(json, "detail", alert.detail());
+            json.append('}');
+        }
+        json.append("]}");
+        return json.toString();
+    }
+
+    private List<HealthAlert> healthAlerts(
+        final MetricsSnapshot snapshot,
+        final List<WorldPanelStats> worlds,
+        final double memoryPercent,
+        final boolean detailed
+    ) {
+        final List<HealthAlert> alerts = new ArrayList<>();
+        final double lowTpsWarning = this.preferences.doubleValue("modules.web-panel.health.low-tps-warning", 18.0D);
+        final double lowTpsCritical = this.preferences.doubleValue("modules.web-panel.health.low-tps-critical", 15.0D);
+        final double highMsptWarning = this.preferences.doubleValue("modules.web-panel.health.high-mspt-warning", 50.0D);
+        final double highMsptCritical = this.preferences.doubleValue("modules.web-panel.health.high-mspt-critical", 75.0D);
+        final double memoryWarning = this.preferences.doubleValue("modules.web-panel.health.memory-warning-percent", 85.0D);
+        final double memoryCritical = this.preferences.doubleValue("modules.web-panel.health.memory-critical-percent", 95.0D);
+        final int chunkWarning = Math.max(1, this.preferences.intValue("modules.web-panel.health.loaded-chunks-warning", 12_000));
+        final int entityWarning = Math.max(1, this.preferences.intValue("modules.web-panel.health.entities-warning", 4_000));
+
+        if (snapshot.tps1() <= lowTpsCritical) {
+            alerts.add(new HealthAlert("critical", "Low TPS", "1m TPS is " + MetricsSnapshot.formatTps(snapshot.tps1()) + "."));
+        } else if (snapshot.tps1() <= lowTpsWarning) {
+            alerts.add(new HealthAlert("warning", "Low TPS", "1m TPS is " + MetricsSnapshot.formatTps(snapshot.tps1()) + "."));
+        }
+
+        if (snapshot.mspt() >= highMsptCritical) {
+            alerts.add(new HealthAlert("critical", "High MSPT", String.format(Locale.ROOT, "Average tick time is %.1f ms.", snapshot.mspt())));
+        } else if (snapshot.mspt() >= highMsptWarning) {
+            alerts.add(new HealthAlert("warning", "High MSPT", String.format(Locale.ROOT, "Average tick time is %.1f ms.", snapshot.mspt())));
+        }
+
+        if (memoryPercent >= memoryCritical) {
+            alerts.add(new HealthAlert("critical", "Memory pressure", String.format(Locale.ROOT, "%.1f%% of max heap is in use.", memoryPercent)));
+        } else if (memoryPercent >= memoryWarning) {
+            alerts.add(new HealthAlert("warning", "Memory pressure", String.format(Locale.ROOT, "%.1f%% of max heap is in use.", memoryPercent)));
+        }
+
+        for (final WorldPanelStats world : worlds) {
+            if (world.loadedChunks() >= chunkWarning) {
+                alerts.add(new HealthAlert("warning", "World chunks", world.name() + " has " + world.loadedChunks() + " loaded chunks."));
+            }
+            if (world.entities() >= entityWarning) {
+                alerts.add(new HealthAlert("warning", "World entities", world.name() + " has " + world.entities() + " entities."));
+            }
+        }
+
+        if (this.preferences.booleanValue("modules.web-panel.health.disabled-plugins-warning", true)) {
+            final List<String> disabled = new ArrayList<>();
+            for (final Plugin plugin : Bukkit.getPluginManager().getPlugins()) {
+                if (!plugin.isEnabled()) {
+                    disabled.add(plugin.getName());
+                }
+            }
+            if (!disabled.isEmpty()) {
+                final String detail = detailed
+                    ? String.join(", ", disabled)
+                    : disabled.size() + " plugin(s) are disabled.";
+                alerts.add(new HealthAlert("warning", "Disabled plugins", detail));
+            }
+        }
+        return alerts;
+    }
+
+    private static double memoryUsagePercent(final MetricsSnapshot snapshot) {
+        if (snapshot.maxMemory() <= 0L) {
+            return 0.0D;
+        }
+        return Math.min(100.0D, snapshot.usedMemory() * 100.0D / snapshot.maxMemory());
     }
 
     private String mapJson(final HttpExchange exchange) {
@@ -707,6 +818,12 @@ final class HunterWebPanelManager {
     private record CommandResult(boolean dispatched, String message, String output) {
     }
 
+    private record WorldPanelStats(String name, int players, int loadedChunks, int entities, long time) {
+    }
+
+    private record HealthAlert(String severity, String label, String detail) {
+    }
+
     @SuppressWarnings({"deprecation", "removal"})
     private static final class CapturingConsoleCommandSender implements ConsoleCommandSender {
         private final ConsoleCommandSender delegate;
@@ -956,6 +1073,13 @@ final class HunterWebPanelManager {
             </section>
             <section class="grid">
               <article>
+                <div class="sectionTitle">
+                  <h2>Health</h2>
+                  <strong id="healthStatus" class="healthBadge">--</strong>
+                </div>
+                <div id="healthList" class="list"></div>
+              </article>
+              <article>
                 <h2>Worlds</h2>
                 <div id="worlds" class="list"></div>
               </article>
@@ -994,7 +1118,7 @@ final class HunterWebPanelManager {
         """;
 
     private static final String APP_CSS = """
-        :root { color-scheme: dark; --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#2f81f7; --good:#3fb950; --bad:#f85149; }
+        :root { color-scheme: dark; --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#2f81f7; --good:#3fb950; --warn:#d29922; --bad:#f85149; }
         * { box-sizing: border-box; }
         body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
         .shell { width:min(1280px, calc(100% - 32px)); margin:0 auto; padding:24px 0 32px; }
@@ -1011,9 +1135,18 @@ final class HunterWebPanelManager {
         .metrics span { display:block; color:var(--muted); font-size:12px; }
         .metrics strong { display:block; margin-top:4px; font-size:22px; }
         .grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+        .sectionTitle { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+        .sectionTitle h2 { margin-bottom:0; }
         .list { display:grid; gap:8px; }
         .item { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-top:1px solid var(--line); }
         .item:first-child { border-top:0; }
+        .healthBadge { border:1px solid var(--line); border-radius:999px; padding:2px 8px; font-size:12px; text-transform:uppercase; }
+        .healthBadge.ok { color:var(--good); border-color:color-mix(in srgb, var(--good) 55%, var(--line)); }
+        .healthBadge.warning { color:var(--warn); border-color:color-mix(in srgb, var(--warn) 55%, var(--line)); }
+        .healthBadge.critical { color:var(--bad); border-color:color-mix(in srgb, var(--bad) 55%, var(--line)); }
+        .healthBadge.disabled { color:var(--muted); }
+        .alert.warning strong { color:var(--warn); }
+        .alert.critical strong { color:var(--bad); }
         pre { min-height:72px; white-space:pre-wrap; color:var(--muted); }
         .mapPanel { margin-top:12px; padding:0; overflow:hidden; }
         .mapHeader { display:flex; justify-content:space-between; align-items:center; padding:14px; border-bottom:1px solid var(--line); }
@@ -1036,6 +1169,8 @@ final class HunterWebPanelManager {
           "'": '&#39;'
         })[char]);
         const item = (left, right = '') => `<div class="item"><span>${esc(left)}</span><strong>${esc(right)}</strong></div>`;
+        const severityClass = (value) => ['ok', 'warning', 'critical', 'disabled'].includes(value) ? value : 'ok';
+        const alertItem = (alert) => `<div class="item alert ${severityClass(alert.severity)}"><span>${esc(alert.label)}</span><strong>${esc(alert.detail)}</strong></div>`;
 
         async function json(url, options = {}) {
           const headers = { ...(options.headers || {}) };
@@ -1054,7 +1189,13 @@ final class HunterWebPanelManager {
           $('mspt').textContent = Number(data.server.mspt).toFixed(1);
           $('players').textContent = `${data.server.online}/${data.server.maxPlayers}`;
           $('memory').textContent = data.server.memory;
-          $('worlds').innerHTML = data.worlds.map(w => item(w.name, `${w.players} players · ${w.loadedChunks} chunks`)).join('');
+          const health = data.health || { status: 'unknown', alerts: [] };
+          $('healthStatus').textContent = health.status;
+          $('healthStatus').className = `healthBadge ${severityClass(health.status)}`;
+          $('healthList').innerHTML = health.alerts.length
+            ? health.alerts.map(alertItem).join('')
+            : `<p class="muted">No health alerts · Heap ${Number(health.memoryUsagePercent || 0).toFixed(1)}%</p>`;
+          $('worlds').innerHTML = data.worlds.map(w => item(w.name, `${w.players} players · ${w.loadedChunks} chunks · ${w.entities} entities`)).join('');
           $('optimizationList').innerHTML = [
             item('CPU threads', data.optimization.cpuThreads),
             item('Paper workers', data.optimization.paperWorkers),

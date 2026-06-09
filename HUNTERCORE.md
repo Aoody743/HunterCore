@@ -110,7 +110,7 @@ HunterTools provides TPS actionbar/sidebar display plus essentials-style command
 
 HunterTools includes a lightweight built-in web panel. It defaults to `http://127.0.0.1:8088/`; set `modules.web-panel.bind-address` to `0.0.0.0` and change `modules.web-panel.port` to expose it.
 
-Guests can view public status and the configured BlueMap URL. Logged-in player users can view detailed player/plugin data and run only `modules.web-panel.player-allowed-commands` or their per-user `allowed-commands`; admin users can run console commands when `modules.web-panel.admin-command-execution` is enabled, and can also be restricted with per-user command lists. Web commands capture command output when possible, capped by `modules.web-panel.command-output-lines` and `modules.web-panel.command-output-chars`. Logged-in POST requests require a session CSRF token by default.
+Guests can view public status, health alerts, and the configured BlueMap URL. Logged-in player users can view detailed player/plugin data and run only `modules.web-panel.player-allowed-commands` or their per-user `allowed-commands`; admin users can run console commands when `modules.web-panel.admin-command-execution` is enabled, and can also be restricted with per-user command lists. Web commands capture command output when possible, capped by `modules.web-panel.command-output-lines` and `modules.web-panel.command-output-chars`. Logged-in POST requests require a session CSRF token by default.
 
 Create web users from console or an op account:
 
@@ -146,7 +146,7 @@ optimizations.cpu.netty-io-threads
 optimizations.cpu.common-pool-parallelism
 ```
 
-Bundled plugin install work is parallelized across different jar files. HunterTools renders sidebar text, loads fake player/NPC definitions, serves the web panel, saves preferences, and requests GC off the main thread, then returns to the Bukkit main thread for player/server mutations. Public guest status responses are cached for 1 second by default with `modules.web-panel.status-cache-millis`.
+Bundled plugin install work is parallelized across different jar files. HunterTools renders sidebar text, loads fake player/NPC definitions, serves the web panel, saves preferences, and requests GC off the main thread, then returns to the Bukkit main thread for player/server mutations. Public guest status responses are cached for 1 second by default with `modules.web-panel.status-cache-millis`. Web panel health alerts expose configurable thresholds for low TPS, high MSPT, heap pressure, per-world chunk/entity load, and disabled plugins.
 
 HunterCore also applies CPU-aware startup defaults for Paper/DivineMC worker threads, Netty IO threads, and ForkJoin common pool parallelism. Existing JVM flags are preserved by default. The web panel exposes the same CPU, worker, Netty, ForkJoin, and HunterTools web worker settings for remote status checks.
 
