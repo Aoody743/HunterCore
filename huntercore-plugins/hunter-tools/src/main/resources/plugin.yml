@@ -1,0 +1,128 @@
+name: HunterTools
+version: ${version}
+main: org.huntercore.plugins.tools.HunterToolsPlugin
+api-version: '1.21'
+author: HunterCore
+description: Built-in HunterCore management, TPS display, sidebar, and essentials-style tools.
+commands:
+  htps:
+    description: Show HunterCore TPS and MSPT information.
+    usage: /htps
+    aliases: [tps]
+    permission: huntertools.command.tps
+  hunteradmin:
+    description: Manage HunterCore runtime modules.
+    usage: /hunteradmin <reload|modules|module|command|plugins|memory|gc|threads>
+    aliases: [ha, htools]
+    permission: huntertools.command.admin
+  heal:
+    description: Heal yourself or another player.
+    usage: /heal [player]
+    permission: huntertools.command.heal
+  feed:
+    description: Feed yourself or another player.
+    usage: /feed [player]
+    permission: huntertools.command.feed
+  fly:
+    description: Toggle flight.
+    usage: /fly [player] [on|off]
+    permission: huntertools.command.fly
+  gm:
+    description: Change game mode.
+    usage: /gm <survival|creative|adventure|spectator> [player]
+    permission: huntertools.command.gamemode
+  gms:
+    description: Switch to survival mode.
+    usage: /gms [player]
+    permission: huntertools.command.gamemode
+  gmc:
+    description: Switch to creative mode.
+    usage: /gmc [player]
+    permission: huntertools.command.gamemode
+  gma:
+    description: Switch to adventure mode.
+    usage: /gma [player]
+    permission: huntertools.command.gamemode
+  gmsp:
+    description: Switch to spectator mode.
+    usage: /gmsp [player]
+    permission: huntertools.command.gamemode
+  day:
+    description: Set time to day.
+    usage: /day [world]
+    permission: huntertools.command.time
+  night:
+    description: Set time to night.
+    usage: /night [world]
+    permission: huntertools.command.time
+  sun:
+    description: Clear weather.
+    usage: /sun [world]
+    permission: huntertools.command.weather
+  rain:
+    description: Start rain.
+    usage: /rain [world]
+    permission: huntertools.command.weather
+  thunder:
+    description: Start thunder.
+    usage: /thunder [world]
+    permission: huntertools.command.weather
+  broadcast:
+    description: Broadcast a message.
+    usage: /broadcast <message>
+    aliases: [bc]
+    permission: huntertools.command.broadcast
+  clearchat:
+    description: Clear chat for online players.
+    usage: /clearchat
+    aliases: [cc]
+    permission: huntertools.command.clearchat
+  speed:
+    description: Change walk or fly speed.
+    usage: /speed <1-10> [player] [walk|fly]
+    permission: huntertools.command.speed
+  spawn:
+    description: Teleport to configured spawn.
+    usage: /spawn [player]
+    permission: huntertools.command.spawn
+  setspawn:
+    description: Set HunterCore spawn.
+    usage: /setspawn
+    permission: huntertools.command.setspawn
+  back:
+    description: Teleport to your previous location.
+    usage: /back
+    permission: huntertools.command.back
+permissions:
+  huntertools.command.tps:
+    default: true
+  huntertools.command.admin:
+    default: op
+  huntertools.command.heal:
+    default: op
+  huntertools.command.feed:
+    default: op
+  huntertools.command.fly:
+    default: op
+  huntertools.command.gamemode:
+    default: op
+  huntertools.command.time:
+    default: op
+  huntertools.command.weather:
+    default: op
+  huntertools.command.broadcast:
+    default: op
+  huntertools.command.clearchat:
+    default: op
+  huntertools.command.speed:
+    default: op
+  huntertools.command.spawn:
+    default: true
+  huntertools.command.setspawn:
+    default: op
+  huntertools.command.back:
+    default: true
+  huntertools.display.tps:
+    default: true
+  huntertools.display.sidebar:
+    default: true

@@ -16,9 +16,16 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.huntercore.bootstrap.HunterCoreBootstrap;
 import org.huntercore.bootstrap.HunterCoreRuntime;
+import org.huntercore.config.HunterPreferences;
 import org.slf4j.Logger;
 
 public final class HunterBundledPluginInstaller {
@@ -44,24 +51,17 @@ public final class HunterBundledPluginInstaller {
         try {
             Files.createDirectories(pluginDirectory);
             final List<HunterBundledPluginRecord> plugins = loadManifests();
-            final YamlConfiguration config = loadOrCreateConfig(pluginDirectory, plugins);
+            final HunterPreferences preferences = HunterPreferences.loadOrCreate(pluginDirectory, plugins);
+            HunterCoreRuntime.get().setPreferences(preferences);
 
-            if (!config.getBoolean("enabled", true)) {
+            if (!preferences.bundledPluginsEnabled()) {
                 LOGGER.info("HunterCore bundled plugin installer disabled by configuration.");
                 final InstallReport report = new InstallReport(plugins, List.of());
                 HunterCoreRuntime.get().setLastInstallReport(report);
                 return report;
             }
 
-            final boolean updateExisting = config.getBoolean("update-existing", true);
-            final List<InstallResult> results = new ArrayList<>();
-            for (final HunterBundledPluginRecord plugin : plugins) {
-                if (!config.getBoolean("plugins." + plugin.id(), true)) {
-                    results.add(new InstallResult(plugin, InstallState.DISABLED, "disabled in plugins/HunterCore/bundled-plugins.yml"));
-                    continue;
-                }
-                results.add(installPlugin(pluginDirectory, plugin, updateExisting));
-            }
+            final List<InstallResult> results = installPlugins(pluginDirectory, plugins, preferences);
 
             final InstallReport report = new InstallReport(plugins, results);
             HunterCoreRuntime.get().setLastInstallReport(report);
@@ -124,39 +124,58 @@ public final class HunterBundledPluginInstaller {
         return value.startsWith("sha256:") ? value.substring("sha256:".length()) : value;
     }
 
-    private static YamlConfiguration loadOrCreateConfig(final Path pluginDirectory, final List<HunterBundledPluginRecord> plugins) throws IOException {
-        final Path configDirectory = pluginDirectory.resolve("HunterCore");
-        final Path configPath = configDirectory.resolve("bundled-plugins.yml");
-        Files.createDirectories(configDirectory);
-
-        final YamlConfiguration config = Files.exists(configPath)
-            ? YamlConfiguration.loadConfiguration(configPath.toFile())
-            : new YamlConfiguration();
-
-        boolean changed = false;
-        changed |= setDefault(config, "enabled", true);
-        changed |= setDefault(config, "update-existing", true);
-        for (final HunterBundledPluginRecord plugin : plugins) {
-            changed |= setDefault(config, "plugins." + plugin.id(), true);
+    private static List<InstallResult> installPlugins(
+        final Path pluginDirectory,
+        final List<HunterBundledPluginRecord> plugins,
+        final HunterPreferences preferences
+    ) throws Exception {
+        final boolean updateExisting = preferences.updateExistingBundledPlugins();
+        if (!preferences.parallelBundledPluginInstall() || plugins.size() <= 1) {
+            final List<InstallResult> results = new ArrayList<>();
+            for (final HunterBundledPluginRecord plugin : plugins) {
+                results.add(installOrDisable(pluginDirectory, plugin, updateExisting, preferences));
+            }
+            return results;
         }
-        if (changed || !Files.exists(configPath)) {
-            config.options().header("""
-                HunterCore bundled plugin installer.
-                Set enabled=false to stop installing bundled plugins.
-                Set update-existing=false to keep manually replaced jar files.
-                Toggle individual plugins under the plugins section.
-                """);
-            config.save(configPath.toFile());
+
+        final int workers = preferences.bundledPluginInstallWorkers();
+        final AtomicInteger threadId = new AtomicInteger();
+        final ThreadFactory factory = task -> {
+            final Thread thread = new Thread(task, "HunterCore bundled installer " + threadId.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        };
+        final ExecutorService executor = Executors.newFixedThreadPool(workers, factory);
+        try {
+            final List<Future<InstallResult>> futures = new ArrayList<>();
+            for (final HunterBundledPluginRecord plugin : plugins) {
+                final Callable<InstallResult> task = () -> installOrDisable(pluginDirectory, plugin, updateExisting, preferences);
+                futures.add(executor.submit(task));
+            }
+            final List<InstallResult> results = new ArrayList<>(futures.size());
+            for (final Future<InstallResult> future : futures) {
+                results.add(future.get());
+            }
+            return results;
+        } finally {
+            executor.shutdownNow();
         }
-        return config;
     }
 
-    private static boolean setDefault(final YamlConfiguration config, final String path, final Object value) {
-        if (config.contains(path)) {
-            return false;
+    private static InstallResult installOrDisable(
+        final Path pluginDirectory,
+        final HunterBundledPluginRecord plugin,
+        final boolean updateExisting,
+        final HunterPreferences preferences
+    ) {
+        if (!preferences.bundledPluginEnabled(plugin.id())) {
+            return new InstallResult(plugin, InstallState.DISABLED, "disabled in plugins/HunterCore/preferences.yml");
         }
-        config.set(path, value);
-        return true;
+        try {
+            return installPlugin(pluginDirectory, plugin, updateExisting);
+        } catch (final RuntimeException ex) {
+            return new InstallResult(plugin, InstallState.FAILED, ex.getMessage());
+        }
     }
 
     private static InstallResult installPlugin(final Path pluginDirectory, final HunterBundledPluginRecord plugin, final boolean updateExisting) {

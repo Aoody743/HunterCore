@@ -120,9 +120,10 @@ val prepareExternalBundledPlugins by tasks.registering(Exec::class) {
 gradle.projectsEvaluated {
     val tpaJar = project(":huntercore-plugins:hunter-tpa").tasks.named<Jar>("jar")
     val authJar = project(":huntercore-plugins:hunter-auth").tasks.named<Jar>("jar")
+    val toolsJar = project(":huntercore-plugins:hunter-tools").tasks.named<Jar>("jar")
 
     project(":divinemc-server").tasks.named<ProcessResources>("processResources") {
-        dependsOn(prepareExternalBundledPlugins, tpaJar, authJar)
+        dependsOn(prepareExternalBundledPlugins, tpaJar, authJar, toolsJar)
         from(bundledPluginOutput.map { it.dir("plugins") }) {
             into("META-INF/huntercore/bundled-plugins")
         }
@@ -136,6 +137,10 @@ gradle.projectsEvaluated {
         from(authJar.flatMap { it.archiveFile }) {
             into("META-INF/huntercore/bundled-plugins")
             rename { "HunterAuth.jar" }
+        }
+        from(toolsJar.flatMap { it.archiveFile }) {
+            into("META-INF/huntercore/bundled-plugins")
+            rename { "HunterTools.jar" }
         }
     }
 }

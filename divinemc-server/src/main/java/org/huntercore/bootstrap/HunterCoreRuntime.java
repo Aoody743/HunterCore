@@ -10,6 +10,7 @@ import java.util.Map;
 import org.huntercore.api.HunterBundledPlugin;
 import org.huntercore.api.HunterCommandExtension;
 import org.huntercore.api.HunterCoreApi;
+import org.huntercore.config.HunterPreferences;
 import org.huntercore.plugin.HunterBundledPluginInstaller;
 import org.jetbrains.annotations.NotNull;
 
@@ -23,6 +24,7 @@ public final class HunterCoreRuntime implements HunterCoreApi {
     private final Map<String, HunterCommandExtension> commandExtensions = new LinkedHashMap<>();
     private volatile List<HunterBundledPlugin> bundledPlugins = List.of();
     private volatile HunterBundledPluginInstaller.InstallReport lastInstallReport = HunterBundledPluginInstaller.InstallReport.empty();
+    private volatile HunterPreferences preferences;
 
     private HunterCoreRuntime() {
     }
@@ -59,6 +61,14 @@ public final class HunterCoreRuntime implements HunterCoreApi {
     public void setLastInstallReport(final HunterBundledPluginInstaller.InstallReport report) {
         this.lastInstallReport = report;
         this.setBundledPlugins(report.plugins());
+    }
+
+    public HunterPreferences preferences() {
+        return this.preferences;
+    }
+
+    public void setPreferences(final HunterPreferences preferences) {
+        this.preferences = preferences;
     }
 
     @Override

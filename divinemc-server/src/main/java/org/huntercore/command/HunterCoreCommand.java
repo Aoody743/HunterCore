@@ -1,6 +1,7 @@
 package org.huntercore.command;
 
 import io.papermc.paper.command.CommandUtil;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -18,6 +19,7 @@ import org.bukkit.plugin.PluginManager;
 import org.huntercore.api.HunterCommandExtension;
 import org.huntercore.bootstrap.HunterCoreBootstrap;
 import org.huntercore.bootstrap.HunterCoreRuntime;
+import org.huntercore.config.HunterPreferences;
 import org.huntercore.plugin.HunterBundledPluginInstaller;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,12 +31,13 @@ public final class HunterCoreCommand extends Command {
     private final Map<String, HunterCommandExtension> builtIns = new LinkedHashMap<>();
 
     public HunterCoreCommand() {
-        super(COMMAND_LABEL, "HunterCore related commands", "/huntercore [about|system|plugins|reload]", List.of("hc"));
+        super(COMMAND_LABEL, "HunterCore related commands", "/huntercore [about|system|plugins|preferences|reload]", List.of("hc"));
         HunterCoreBootstrap.init();
         this.setPermission(BASE_PERMISSION);
         this.registerBuiltIn(new AboutExtension());
         this.registerBuiltIn(new SystemExtension());
         this.registerBuiltIn(new PluginsExtension());
+        this.registerBuiltIn(new PreferencesExtension());
         this.registerBuiltIn(new ReloadExtension());
         this.registerPermissions();
     }
@@ -234,8 +237,178 @@ public final class HunterCoreCommand extends Command {
         @Override
         public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
             HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
-            sender.sendMessage("HunterCore bundled plugin configuration reloaded. Restart the server to load newly installed plugin jars.");
+            sender.sendMessage("HunterCore preferences reloaded. Restart the server to unload disabled bundled plugin jars.");
             return true;
+        }
+    }
+
+    private static final class PreferencesExtension implements HunterCommandExtension {
+        private static final List<String> MODULES = List.of("tps-display", "sidebar", "essentials", "management");
+        private static final List<String> ESSENTIALS_COMMANDS = List.of("heal", "feed", "fly", "gm", "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back");
+        private static final List<String> MANAGEMENT_COMMANDS = List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module");
+
+        @Override
+        public @NotNull String name() {
+            return "preferences";
+        }
+
+        @Override
+        public @NotNull Collection<String> aliases() {
+            return List.of("prefs", "pref");
+        }
+
+        @Override
+        public @Nullable String permission() {
+            return BASE_PERMISSION + ".preferences";
+        }
+
+        @Override
+        public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
+            final HunterPreferences preferences = preferences();
+            if (preferences == null) {
+                sender.sendMessage("HunterCore preferences are not loaded yet.");
+                return true;
+            }
+            if (args.length == 0 || args[0].equalsIgnoreCase("list")) {
+                this.list(sender, preferences);
+                return true;
+            }
+            final String sub = args[0].toLowerCase(Locale.ROOT);
+            try {
+                switch (sub) {
+                    case "reload" -> {
+                        HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
+                        sender.sendMessage("HunterCore preferences reloaded from disk.");
+                    }
+                    case "bundled" -> this.toggleBundled(sender, preferences, args);
+                    case "module" -> this.toggleModule(sender, preferences, args);
+                    case "command" -> this.toggleCommand(sender, preferences, args);
+                    default -> sender.sendMessage("Usage: /huntercore preferences <list|reload|bundled|module|command>");
+                }
+            } catch (final IOException ex) {
+                sender.sendMessage("Failed to save HunterCore preferences: " + ex.getMessage());
+            }
+            return true;
+        }
+
+        @Override
+        public @NotNull List<String> tabComplete(@NotNull final CommandSender sender, @NotNull final String alias, @NotNull final String[] args) {
+            if (args.length == 1) {
+                return CommandUtil.getListMatchingLast(sender, args, List.of("list", "reload", "bundled", "module", "command"));
+            }
+            if (args.length == 2 && args[0].equalsIgnoreCase("bundled")) {
+                final HunterPreferences preferences = preferences();
+                if (preferences == null) {
+                    return List.of();
+                }
+                return CommandUtil.getListMatchingLast(sender, args, HunterCoreRuntime.get().bundledPlugins().stream().map(plugin -> plugin.id()).toList());
+            }
+            if (args.length == 2 && args[0].equalsIgnoreCase("module")) {
+                return CommandUtil.getListMatchingLast(sender, args, MODULES);
+            }
+            if (args.length == 2 && args[0].equalsIgnoreCase("command")) {
+                return CommandUtil.getListMatchingLast(sender, args, List.of("essentials", "management"));
+            }
+            if (args.length == 3 && args[0].equalsIgnoreCase("command")) {
+                final String module = args[1].toLowerCase(Locale.ROOT);
+                if (module.equals("essentials")) {
+                    return CommandUtil.getListMatchingLast(sender, args, ESSENTIALS_COMMANDS);
+                }
+                if (module.equals("management")) {
+                    return CommandUtil.getListMatchingLast(sender, args, MANAGEMENT_COMMANDS);
+                }
+            }
+            if ((args.length == 3 && (args[0].equalsIgnoreCase("bundled") || args[0].equalsIgnoreCase("module")))
+                || (args.length == 4 && args[0].equalsIgnoreCase("command"))) {
+                return CommandUtil.getListMatchingLast(sender, args, List.of("on", "off"));
+            }
+            return List.of();
+        }
+
+        private void list(final CommandSender sender, final HunterPreferences preferences) {
+            sender.sendMessage("HunterCore preferences: " + preferences.path());
+            sender.sendMessage("Bundled plugin installer: " + (preferences.bundledPluginsEnabled() ? "enabled" : "disabled")
+                + ", update-existing=" + preferences.updateExistingBundledPlugins()
+                + ", parallel-install=" + preferences.parallelBundledPluginInstall()
+                + " (" + preferences.bundledPluginInstallWorkers() + " workers)");
+            sender.sendMessage("Bundled plugins:");
+            for (final var plugin : HunterCoreRuntime.get().bundledPlugins()) {
+                sender.sendMessage("- " + plugin.id() + ": " + (preferences.bundledPluginEnabled(plugin.id()) ? "enabled" : "disabled"));
+            }
+            sender.sendMessage("Modules:");
+            for (final String module : MODULES) {
+                sender.sendMessage("- " + module + ": " + (preferences.moduleEnabled(module) ? "enabled" : "disabled"));
+            }
+        }
+
+        private void toggleBundled(final CommandSender sender, final HunterPreferences preferences, final String[] args) throws IOException {
+            if (args.length != 3) {
+                sender.sendMessage("Usage: /huntercore preferences bundled <plugin-id> <on|off>");
+                return;
+            }
+            final Boolean enabled = parseToggle(args[2]);
+            if (enabled == null) {
+                sender.sendMessage("Use on/off.");
+                return;
+            }
+            preferences.setBundledPluginEnabled(args[1], enabled);
+            HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
+            sender.sendMessage("Bundled plugin " + HunterPreferences.normalize(args[1]) + " set to " + enabled + ". Restart to unload already loaded jars.");
+        }
+
+        private void toggleModule(final CommandSender sender, final HunterPreferences preferences, final String[] args) throws IOException {
+            if (args.length != 3) {
+                sender.sendMessage("Usage: /huntercore preferences module <module> <on|off>");
+                return;
+            }
+            final String module = HunterPreferences.normalize(args[1]);
+            if (!MODULES.contains(module)) {
+                sender.sendMessage("Unknown module. Available: " + String.join(", ", MODULES));
+                return;
+            }
+            final Boolean enabled = parseToggle(args[2]);
+            if (enabled == null) {
+                sender.sendMessage("Use on/off.");
+                return;
+            }
+            preferences.setModuleEnabled(module, enabled);
+            sender.sendMessage("Module " + module + " set to " + enabled + ". Run /hunteradmin reload if HunterTools is already loaded.");
+        }
+
+        private void toggleCommand(final CommandSender sender, final HunterPreferences preferences, final String[] args) throws IOException {
+            if (args.length != 4) {
+                sender.sendMessage("Usage: /huntercore preferences command <essentials|management> <command> <on|off>");
+                return;
+            }
+            final String module = HunterPreferences.normalize(args[1]);
+            if (!module.equals("essentials") && !module.equals("management")) {
+                sender.sendMessage("Command toggles are available for essentials and management.");
+                return;
+            }
+            final Boolean enabled = parseToggle(args[3]);
+            if (enabled == null) {
+                sender.sendMessage("Use on/off.");
+                return;
+            }
+            preferences.setCommandEnabled(module, args[2], enabled);
+            sender.sendMessage("Command " + module + "." + HunterPreferences.normalize(args[2]) + " set to " + enabled + ". Run /hunteradmin reload if needed.");
+        }
+
+        private static HunterPreferences preferences() {
+            HunterPreferences preferences = HunterCoreRuntime.get().preferences();
+            if (preferences == null) {
+                HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
+                preferences = HunterCoreRuntime.get().preferences();
+            }
+            return preferences;
+        }
+
+        private static Boolean parseToggle(final String input) {
+            return switch (input.toLowerCase(Locale.ROOT)) {
+                case "on", "enable", "enabled", "true", "yes" -> Boolean.TRUE;
+                case "off", "disable", "disabled", "false", "no" -> Boolean.FALSE;
+                default -> null;
+            };
         }
     }
 }

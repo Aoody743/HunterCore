@@ -182,6 +182,22 @@ download_github_release_asset \
 manifest_entry "viaversion" "ViaVersion" "5.9.1" "ViaVersion-5.9.1.jar" "https://github.com/ViaVersion/ViaVersion/releases/tag/5.9.1"
 
 download_github_release_asset \
+  "ViaVersion/ViaBackwards" \
+  "5.9.1" \
+  "ViaBackwards-5.9.1.jar" \
+  "$PLUGINS_DIR/ViaBackwards-5.9.1.jar" \
+  "676bda03d8d7e252f8b70ffd0e288252e317b015190351c4b9ab8ab8de388d68"
+manifest_entry "viabackwards" "ViaBackwards" "5.9.1" "ViaBackwards-5.9.1.jar" "https://github.com/ViaVersion/ViaBackwards/releases/tag/5.9.1"
+
+download_github_release_asset \
+  "ViaVersion/ViaRewind" \
+  "4.1.1" \
+  "ViaRewind-4.1.1.jar" \
+  "$PLUGINS_DIR/ViaRewind-4.1.1.jar" \
+  "a16bb39d4de147abac4871bf34963378792082c9008a1375766545a2509e0b6b"
+manifest_entry "viarewind" "ViaRewind" "4.1.1" "ViaRewind-4.1.1.jar" "https://github.com/ViaVersion/ViaRewind/releases/tag/4.1.1"
+
+download_github_release_asset \
   "Multiverse/Multiverse-Core" \
   "5.7.0" \
   "multiverse-core-5.7.0.jar" \

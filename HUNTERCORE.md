@@ -1,6 +1,6 @@
 # HunterCore Notes
 
-HunterCore is an independent DivineMC-based server core with a bundled plugin layer and a small extension API.
+HunterCore is an independent DivineMC-based server core with a bundled plugin layer, a preferences file, HunterTools runtime modules, and a small extension API.
 
 ## Build
 
@@ -26,20 +26,23 @@ The `Build HunterCore` GitHub Actions workflow runs on `main`, pull requests tar
 HunterCore installs bundled plugins before Paper scans the plugin directory. On first startup it writes:
 
 ```text
-plugins/HunterCore/bundled-plugins.yml
+plugins/HunterCore/preferences.yml
 ```
 
-That file can disable the entire installer, disable individual bundled plugins, or stop automatic replacement of changed bundled jars.
+That file can disable the entire installer, disable individual bundled plugins, stop automatic replacement of changed bundled jars, and toggle HunterTools runtime modules/commands.
 
 Current first batch:
 
 ```text
 ViaVersion 5.9.1
+ViaBackwards 5.9.1
+ViaRewind 4.1.1
 Multiverse-Core 5.7.0
 LuckPerms 5.5.55
 CoreProtect 23.2
 HunterTPA builtin
 HunterAuth builtin
+HunterTools builtin
 ```
 
 External plugins are prepared by:
@@ -57,11 +60,39 @@ To add another external bundled plugin, extend that script with a download/build
 /huntercore
 /huntercore system
 /huntercore plugins
+/huntercore preferences
+/huntercore preferences bundled <plugin-id> <on|off>
+/huntercore preferences module <module> <on|off>
+/huntercore preferences command <essentials|management> <command> <on|off>
 /huntercore reload
 /hc
+/htps
+/hunteradmin modules
+/hunteradmin module <module> <on|off>
+/hunteradmin command <essentials|management> <command> <on|off>
+/hunteradmin memory
+/hunteradmin gc
+/hunteradmin threads
 ```
 
 `/about` is HunterCore-specific. `/huntercore system` prints JVM, OS, CPU, memory, uptime, player count, and plugin directory information.
+
+HunterTools provides TPS actionbar/sidebar display plus essentials-style commands such as `/heal`, `/feed`, `/fly`, `/gm`, `/day`, `/night`, `/sun`, `/rain`, `/thunder`, `/broadcast`, `/clearchat`, `/speed`, `/spawn`, `/setspawn`, and `/back`.
+
+## Optimizations
+
+The first optimization batch is intentionally conservative:
+
+```text
+optimizations.bundled-plugin-parallel-install.enabled
+optimizations.bundled-plugin-parallel-install.max-workers
+optimizations.hunter-tools.async-rendering
+optimizations.hunter-tools.async-save
+optimizations.hunter-tools.player-cache
+optimizations.hunter-tools.render-workers
+```
+
+Bundled plugin install work is parallelized across different jar files. HunterTools renders sidebar text, saves preferences, and requests GC off the main thread, then returns to the Bukkit main thread for player/server mutations.
 
 ## API
 

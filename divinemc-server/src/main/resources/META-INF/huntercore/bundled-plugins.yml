@@ -11,3 +11,9 @@ plugins:
     file: HunterAuth.jar
     source: "builtin:huntercore-plugins/hunter-auth"
     resource: META-INF/huntercore/bundled-plugins/HunterAuth.jar
+  - id: hunter-tools
+    name: HunterTools
+    version: builtin
+    file: HunterTools.jar
+    source: "builtin:huntercore-plugins/hunter-tools"
+    resource: META-INF/huntercore/bundled-plugins/HunterTools.jar
