@@ -149,6 +149,8 @@ modules:
     map-url: http://%host%:8100/
     status-cache-millis: 1000
     require-csrf: true
+    command-output-lines: 80
+    command-output-chars: 12000
     users:
       steve:
         role: player
@@ -158,7 +160,7 @@ modules:
         - spawn
 ```
 
-游客可以查看基础状态和 BlueMap 地图链接；登录后的普通用户可以查看更完整的玩家/插件信息，并只能执行全局 `player-allowed-commands` 或该用户 `allowed-commands` 白名单中的指令；管理员默认可以执行控制台指令，也可以按用户限制为指定指令。面板对登录后的 POST 请求默认启用 CSRF token 校验。首次启动不会写入明文默认密码，需要在控制台创建账号：
+游客可以查看基础状态和 BlueMap 地图链接；登录后的普通用户可以查看更完整的玩家/插件信息，并只能执行全局 `player-allowed-commands` 或该用户 `allowed-commands` 白名单中的指令；管理员默认可以执行控制台指令，也可以按用户限制为指定指令。网页命令会尽量捕获命令输出并显示在面板里，输出长度由 `command-output-lines` 和 `command-output-chars` 控制。面板对登录后的 POST 请求默认启用 CSRF token 校验。首次启动不会写入明文默认密码，需要在控制台创建账号：
 
 ```text
 /hunteradmin web user admin admin <password>

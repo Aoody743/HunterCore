@@ -12,11 +12,13 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.security.spec.KeySpec;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -27,9 +29,19 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
+import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Server;
 import org.bukkit.World;
+import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.conversations.Conversation;
+import org.bukkit.conversations.ConversationAbandonedEvent;
 import org.bukkit.entity.Player;
+import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionAttachment;
+import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.plugin.Plugin;
 
 final class HunterWebPanelManager {
@@ -385,8 +397,28 @@ final class HunterWebPanelManager {
         }
 
         final int timeout = Math.max(1, this.preferences.intValue("modules.web-panel.command-timeout-seconds", 10));
-        final boolean dispatched = Bukkit.getScheduler().callSyncMethod(this.plugin, () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command)).get(timeout, TimeUnit.SECONDS);
-        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"dispatched\":" + dispatched + ",\"message\":\"Command dispatched as console.\"}");
+        final int maxLines = Math.max(1, this.preferences.intValue("modules.web-panel.command-output-lines", 80));
+        final int maxChars = Math.max(256, this.preferences.intValue("modules.web-panel.command-output-chars", 12_000));
+        final CommandResult result = Bukkit.getScheduler().callSyncMethod(this.plugin, () -> this.dispatchWebCommand(command, maxLines, maxChars)).get(timeout, TimeUnit.SECONDS);
+        this.send(exchange, 200, "application/json; charset=utf-8",
+            "{\"ok\":true,\"dispatched\":" + result.dispatched()
+                + ",\"message\":\"" + escapeJson(result.message()) + '"'
+                + ",\"output\":\"" + escapeJson(result.output()) + "\"}");
+    }
+
+    private CommandResult dispatchWebCommand(final String command, final int maxLines, final int maxChars) {
+        final CapturingConsoleCommandSender sender = new CapturingConsoleCommandSender(Bukkit.getConsoleSender(), maxLines, maxChars);
+        final boolean dispatched = Bukkit.getServer().getCommandMap().dispatch(sender, command);
+        final String output = sender.output();
+        final String message;
+        if (!dispatched) {
+            message = "Command returned false.";
+        } else if (output.isBlank()) {
+            message = "Command dispatched as console. No command output was captured.";
+        } else {
+            message = "Command dispatched as console.";
+        }
+        return new CommandResult(dispatched, message, output);
     }
 
     private boolean commandAllowed(final WebSession session, final String command) {
@@ -672,6 +704,224 @@ final class HunterWebPanelManager {
     private record CachedResponse(String body, long expiresAtMillis) {
     }
 
+    private record CommandResult(boolean dispatched, String message, String output) {
+    }
+
+    @SuppressWarnings({"deprecation", "removal"})
+    private static final class CapturingConsoleCommandSender implements ConsoleCommandSender {
+        private final ConsoleCommandSender delegate;
+        private final int maxLines;
+        private final int maxChars;
+        private final List<String> lines = new ArrayList<>();
+        private final Spigot spigot = new Spigot() {
+            @Override
+            public void sendMessage(final BaseComponent component) {
+                CapturingConsoleCommandSender.this.capture(component.toLegacyText());
+            }
+
+            @Override
+            public void sendMessage(final BaseComponent... components) {
+                CapturingConsoleCommandSender.this.capture(new TextComponent(components).toLegacyText());
+            }
+
+            @Override
+            public void sendMessage(final java.util.UUID sender, final BaseComponent component) {
+                CapturingConsoleCommandSender.this.capture(component.toLegacyText());
+            }
+
+            @Override
+            public void sendMessage(final java.util.UUID sender, final BaseComponent... components) {
+                CapturingConsoleCommandSender.this.capture(new TextComponent(components).toLegacyText());
+            }
+        };
+        private int chars;
+        private boolean truncated;
+
+        private CapturingConsoleCommandSender(final ConsoleCommandSender delegate, final int maxLines, final int maxChars) {
+            this.delegate = delegate;
+            this.maxLines = maxLines;
+            this.maxChars = maxChars;
+        }
+
+        @Override
+        public void sendMessage(final String message) {
+            this.capture(message);
+        }
+
+        @Override
+        public void sendMessage(final String... messages) {
+            for (final String message : messages) {
+                this.capture(message);
+            }
+        }
+
+        @Override
+        public void sendMessage(final java.util.UUID sender, final String message) {
+            this.capture(message);
+        }
+
+        @Override
+        public void sendMessage(final java.util.UUID sender, final String... messages) {
+            for (final String message : messages) {
+                this.capture(message);
+            }
+        }
+
+        @Override
+        public Server getServer() {
+            return this.delegate.getServer();
+        }
+
+        @Override
+        public String getName() {
+            return "HunterCore Web Console";
+        }
+
+        @Override
+        public net.kyori.adventure.text.Component name() {
+            return net.kyori.adventure.text.Component.text(this.getName());
+        }
+
+        @Override
+        public Spigot spigot() {
+            return this.spigot;
+        }
+
+        @Override
+        public boolean isPermissionSet(final String name) {
+            return this.delegate.isPermissionSet(name);
+        }
+
+        @Override
+        public boolean isPermissionSet(final Permission perm) {
+            return this.delegate.isPermissionSet(perm);
+        }
+
+        @Override
+        public boolean hasPermission(final String name) {
+            return this.delegate.hasPermission(name);
+        }
+
+        @Override
+        public boolean hasPermission(final Permission perm) {
+            return this.delegate.hasPermission(perm);
+        }
+
+        @Override
+        public PermissionAttachment addAttachment(final Plugin plugin, final String name, final boolean value) {
+            return this.delegate.addAttachment(plugin, name, value);
+        }
+
+        @Override
+        public PermissionAttachment addAttachment(final Plugin plugin) {
+            return this.delegate.addAttachment(plugin);
+        }
+
+        @Override
+        public PermissionAttachment addAttachment(final Plugin plugin, final String name, final boolean value, final int ticks) {
+            return this.delegate.addAttachment(plugin, name, value, ticks);
+        }
+
+        @Override
+        public PermissionAttachment addAttachment(final Plugin plugin, final int ticks) {
+            return this.delegate.addAttachment(plugin, ticks);
+        }
+
+        @Override
+        public void removeAttachment(final PermissionAttachment attachment) {
+            this.delegate.removeAttachment(attachment);
+        }
+
+        @Override
+        public void recalculatePermissions() {
+            this.delegate.recalculatePermissions();
+        }
+
+        @Override
+        public Set<PermissionAttachmentInfo> getEffectivePermissions() {
+            return this.delegate.getEffectivePermissions();
+        }
+
+        @Override
+        public boolean isOp() {
+            return this.delegate.isOp();
+        }
+
+        @Override
+        public void setOp(final boolean value) {
+            this.delegate.setOp(value);
+        }
+
+        @Override
+        public boolean isConversing() {
+            return this.delegate.isConversing();
+        }
+
+        @Override
+        public void acceptConversationInput(final String input) {
+            this.delegate.acceptConversationInput(input);
+        }
+
+        @Override
+        public boolean beginConversation(final Conversation conversation) {
+            return this.delegate.beginConversation(conversation);
+        }
+
+        @Override
+        public void abandonConversation(final Conversation conversation) {
+            this.delegate.abandonConversation(conversation);
+        }
+
+        @Override
+        public void abandonConversation(final Conversation conversation, final ConversationAbandonedEvent details) {
+            this.delegate.abandonConversation(conversation, details);
+        }
+
+        @Override
+        public void sendRawMessage(final String message) {
+            this.capture(message);
+        }
+
+        @Override
+        public void sendRawMessage(final java.util.UUID sender, final String message) {
+            this.capture(message);
+        }
+
+        private void capture(final String message) {
+            if (message == null || this.truncated) {
+                return;
+            }
+            for (final String rawLine : message.split("\\R", -1)) {
+                if (this.lines.size() >= this.maxLines) {
+                    this.truncated = true;
+                    return;
+                }
+                String line = ChatColor.stripColor(rawLine);
+                if (line == null) {
+                    line = rawLine;
+                }
+                final int remaining = this.maxChars - this.chars;
+                if (remaining <= 0) {
+                    this.truncated = true;
+                    return;
+                }
+                if (line.length() > remaining) {
+                    this.lines.add(line.substring(0, remaining));
+                    this.chars += remaining;
+                    this.truncated = true;
+                    return;
+                }
+                this.lines.add(line);
+                this.chars += line.length() + 1;
+            }
+        }
+
+        private String output() {
+            final String output = String.join("\n", this.lines);
+            return this.truncated ? output + "\n[output truncated]" : output;
+        }
+    }
+
     private static final class MethodMismatchException extends RuntimeException {
     }
 
@@ -854,7 +1104,7 @@ final class HunterWebPanelManager {
           event.preventDefault();
           const payload = JSON.stringify({ command: $('commandInput').value });
           const result = await json('/api/command', { method: 'POST', body: payload });
-          $('commandResult').textContent = result.ok ? result.message : `Error: ${result.error}`;
+          $('commandResult').textContent = result.ok ? `${result.message}${result.output ? `\\n\\n${result.output}` : ''}` : `Error: ${result.error}`;
           await refresh();
         });
 

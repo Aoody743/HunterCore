@@ -336,6 +336,8 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.web-panel.require-csrf", true);
         changed |= this.setDefault("modules.web-panel.session-minutes", 360);
         changed |= this.setDefault("modules.web-panel.command-timeout-seconds", 10);
+        changed |= this.setDefault("modules.web-panel.command-output-lines", 80);
+        changed |= this.setDefault("modules.web-panel.command-output-chars", 12000);
         changed |= this.setDefault("modules.web-panel.admin-command-execution", true);
         changed |= this.setDefault("modules.web-panel.player-command-execution", true);
         changed |= this.setDefault("modules.web-panel.player-allowed-commands", defaultWebPlayerCommands());
