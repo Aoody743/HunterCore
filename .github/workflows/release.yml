@@ -1,0 +1,106 @@
+name: Release HunterCore
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag, for example v26.1.2-huntercore.1
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: huntercore-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION_INPUT: ${{ github.event.inputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Configure Git and Gradle
+        run: |
+          git config --global user.email "no-reply@github.com"
+          git config --global user.name "GitHub Actions"
+          chmod +x gradlew
+          chmod +x scripts/prepare-bundled-plugins.sh
+
+      - name: Apply patches
+        run: ./gradlew applyAllPatches --stacktrace --no-daemon
+
+      - name: Build paperclip
+        run: ./gradlew createPaperclipJar --stacktrace --no-daemon
+
+      - name: Prepare release assets
+        id: assets
+        run: |
+          set -euo pipefail
+          tag="${RELEASE_VERSION_INPUT:-${GITHUB_REF_NAME}}"
+          if [ -z "$tag" ]; then
+            echo "Release tag is empty" >&2
+            exit 1
+          fi
+          case "$tag" in
+            v*) ;;
+            *) tag="v${tag}" ;;
+          esac
+          version="${tag#v}"
+          out="build/huntercore-release"
+          mkdir -p "$out"
+          cp divinemc-server/build/libs/divinemc-paperclip-*.jar "$out/HunterCore-${version}-paperclip.jar"
+          cp divinemc-api/build/libs/divinemc-api-*.jar "$out/" || true
+          (cd "$out" && sha256sum * > SHA256SUMS.txt)
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "out=$out"
+          } >> "$GITHUB_OUTPUT"
+          cat > "$out/RELEASE_NOTES.md" <<EOF
+          HunterCore ${tag}
+
+          Built from commit ${GITHUB_SHA}.
+
+          Bundled plugins:
+          - ViaVersion 5.9.1
+          - Multiverse-Core 5.7.0
+          - LuckPerms 5.5.55
+          - CoreProtect 23.2
+          - HunterTPA builtin
+          - HunterAuth builtin
+          EOF
+
+      - name: Create or update GitHub release
+        run: |
+          set -euo pipefail
+          tag="${{ steps.assets.outputs.tag }}"
+          out="${{ steps.assets.outputs.out }}"
+          assets=("$out"/*.jar "$out"/SHA256SUMS.txt)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes-file "$out/RELEASE_NOTES.md"
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "HunterCore $tag" \
+              --notes-file "$out/RELEASE_NOTES.md"
+          fi

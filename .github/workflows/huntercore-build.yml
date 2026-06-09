@@ -3,15 +3,19 @@ name: Build HunterCore
 on:
   push:
     branches:
-      - "huntercore/**"
+      - main
   pull_request:
     branches:
-      - "huntercore/**"
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
   actions: read
+
+concurrency:
+  group: huntercore-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -34,7 +38,7 @@ jobs:
       - name: Configure Git and Gradle
         run: |
           git config --global user.email "no-reply@github.com"
-          git config --global user.name "Github Actions"
+          git config --global user.name "GitHub Actions"
           chmod +x gradlew
           chmod +x scripts/prepare-bundled-plugins.sh
 
@@ -44,10 +48,20 @@ jobs:
       - name: Build paperclip
         run: ./gradlew createPaperclipJar --stacktrace --no-daemon
 
+      - name: Prepare artifacts
+        run: |
+          set -euo pipefail
+          version="$(grep '^mcVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          out="build/huntercore-artifacts"
+          mkdir -p "$out"
+          cp divinemc-server/build/libs/divinemc-paperclip-*.jar "$out/HunterCore-${version}-${GITHUB_RUN_NUMBER}-paperclip.jar"
+          cp divinemc-server/build/libs/divinemc-bundler-*.jar "$out/" || true
+          cp divinemc-server/build/libs/divinemc-server-*.jar "$out/" || true
+          cp divinemc-api/build/libs/divinemc-api-*.jar "$out/" || true
+          (cd "$out" && sha256sum * > SHA256SUMS.txt)
+
       - name: Upload jars
         uses: actions/upload-artifact@v5
         with:
           name: HunterCore-${{ github.run_number }}
-          path: |
-            divinemc-api/build/libs/*.jar
-            divinemc-server/build/libs/*.jar
+          path: build/huntercore-artifacts/*

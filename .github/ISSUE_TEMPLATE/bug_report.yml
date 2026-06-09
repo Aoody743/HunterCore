@@ -1,32 +1,29 @@
 name: Bug report
-description: Create a report to help us improve
+description: Report a HunterCore problem
 labels: ["bug"]
 
 body:
   - type: markdown
     attributes:
       value: |
-        Before reporting an issue, make sure you are running the latest build of DivineMC and checked for duplicate issues in [Issues](https://github.com/BX-Team/DivineMC/issues)!
+        Before reporting an issue, make sure you are running the latest HunterCore release and have searched existing issues.
 
   - type: checkboxes
     attributes:
       label: Checklist
-      description: |
-        Before you scroll down, select boxes below.
+      description: Please confirm these before submitting.
       options:
-        - label: I have searched the existing issues and the documentation
+        - label: I have searched existing HunterCore issues.
           required: true
-        - label: I ticked all the boxes without actually reading them
+        - label: I am using the latest HunterCore release or latest GitHub Actions build.
+          required: true
+        - label: I tested whether the issue also happens on upstream DivineMC or Purpur when that comparison is practical.
           required: false
-        - label: I am using latest DivineMC build from https://github.com/BX-Team/DivineMC/releases
-          required: true
-        - label: I tested and couldn't replicate this issue on [latest Purpur build](https://purpurmc.org/)
-          required: true
 
   - type: textarea
     attributes:
-      label: What behaviour is observed?
-      description: A clear and concise description of what the behavior is.
+      label: What behavior is observed?
+      description: A clear and concise description of the behavior.
     validations:
       required: true
 
@@ -40,9 +37,9 @@ body:
   - type: textarea
     attributes:
       label: How to reproduce?
-      description: Steps to reproduce this behaviour.
+      description: Steps to reproduce this behavior.
       placeholder: |
-        1. Enter server ...
+        1. Start the server ...
         2. Execute command /example ...
         3. Server crashes ...
         4. See error
@@ -52,13 +49,13 @@ body:
   - type: input
     attributes:
       label: Spark profiler link
-      description: |
-        Link of spark profiler, which including helpful information helps us to work with your issue,
-        see https://spark.lucko.me/docs/ to learn how to use spark.
+      description: Optional, but very helpful for performance issues. See https://spark.lucko.me/docs/.
     validations:
-      required: true
+      required: false
 
   - type: input
     attributes:
-      label: Error log (if applicable)
-      description: If you are reporting a console error, upload any relevant errors or full log to either https://pastes.dev or https://mclo.gs, save and the paste the link in this box.
+      label: Error log or full latest.log
+      description: Upload relevant logs to https://mclo.gs, https://pastes.dev, or another paste service and paste the link here.
+    validations:
+      required: false

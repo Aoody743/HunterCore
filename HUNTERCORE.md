@@ -1,6 +1,6 @@
 # HunterCore Notes
 
-HunterCore is a private DivineMC-based server core with a bundled plugin layer and a small extension API.
+HunterCore is an independent DivineMC-based server core with a bundled plugin layer and a small extension API.
 
 ## Build
 
@@ -19,7 +19,7 @@ The final runnable jar is generated at:
 divinemc-server/build/libs/divinemc-paperclip-26.1.2.local-SNAPSHOT.jar
 ```
 
-The `Build HunterCore` GitHub Actions workflow runs on `huntercore/**` branches and uploads the generated jars as workflow artifacts.
+The `Build HunterCore` GitHub Actions workflow runs on `main`, pull requests targeting `main`, and manual dispatches. Release jars are built by the `Release HunterCore` workflow.
 
 ## Bundled Plugins
 

@@ -1,15 +1,23 @@
 name: Feature request
-description: Suggest an idea to improve DivineMC
+description: Suggest an idea to improve HunterCore
 labels: ["enhancement"]
 
 body:
   - type: markdown
     attributes:
       value: |
-        We are always looking for ways to improve DivineMC, and your feedback is invaluable to us. Please fill out the form below to help us understand your feature request better.
+        Share what you want HunterCore to do and why it would help a real server.
+
   - type: textarea
     attributes:
       label: What feature do you want to see added?
       description: A clear and concise description of your feature request.
     validations:
       required: true
+
+  - type: textarea
+    attributes:
+      label: Use case
+      description: Describe the server workflow or player experience this would improve.
+    validations:
+      required: false

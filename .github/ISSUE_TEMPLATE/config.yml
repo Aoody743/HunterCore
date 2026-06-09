@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: BX Team Discord
-    url: https://discord.gg/qNyybSSPm5
-    about: If you are having issues, come ask us on our Discord server!
-  - name: DivineMC Docs
-    url: https://bxteam.org/docs/divinemc
-    about: You can find some info at our docs
+  - name: HunterCore releases
+    url: https://github.com/AndyXeCM/HunterCore/releases
+    about: Download release jars here.
+  - name: DivineMC upstream
+    url: https://github.com/BX-Team/DivineMC
+    about: Check upstream DivineMC issues when a problem is not HunterCore-specific.

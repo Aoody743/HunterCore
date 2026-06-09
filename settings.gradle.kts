@@ -15,18 +15,16 @@ if (!file(".git").exists()) {
     val errorText = """
         
         =====================[ ERROR ]=====================
-         The DivineMC project directory is not a properly cloned Git repository.
+         The HunterCore project directory is not a properly cloned Git repository.
          
-         In order to build DivineMC from source you must clone
-         the DivineMC repository using Git, not download a code
+         In order to build HunterCore from source you must clone
+         the HunterCore repository using Git, not download a code
          zip from GitHub.
          
-         Built DivineMC jars are available for download at
-         https://bxteam.org/downloads/divinemc or 
-         at https://mcjars.app/DIVINEMC/versions
+         Built HunterCore jars are available from GitHub Releases:
+         https://github.com/AndyXeCM/HunterCore/releases
          
-         See https://bxteam.org/docs/divinemc/development/contributing
-         for further information on building and modifying DivineMC.
+         See README.md for further information on building and modifying HunterCore.
         ===================================================
     """.trimIndent()
     error(errorText)

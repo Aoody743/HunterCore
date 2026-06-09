@@ -1,0 +1,73 @@
+name: Check DivineMC Upstream
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: DivineMC upstream branch or ref
+        required: true
+        default: ver/26.1.2
+        type: string
+      dry_run_merge:
+        description: Run a no-commit merge check
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fetch DivineMC upstream
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/BX-Team/DivineMC.git || true
+          git fetch upstream "$UPSTREAM_BRANCH"
+
+      - name: Compare commits
+        run: |
+          set -euo pipefail
+          mkdir -p build/upstream-check
+          {
+            echo "HunterCore HEAD: $(git rev-parse --short HEAD)"
+            echo "DivineMC upstream: upstream/${UPSTREAM_BRANCH}"
+            echo
+            echo "Commits in upstream but not HunterCore:"
+            git log --oneline HEAD.."upstream/${UPSTREAM_BRANCH}" || true
+            echo
+            echo "Commits in HunterCore but not upstream:"
+            git log --oneline "upstream/${UPSTREAM_BRANCH}"..HEAD || true
+          } | tee build/upstream-check/upstream-report.txt
+
+      - name: Dry-run merge
+        if: ${{ github.event.inputs.dry_run_merge == 'true' }}
+        run: |
+          set -euo pipefail
+          git config user.email "no-reply@github.com"
+          git config user.name "GitHub Actions"
+          git checkout -b upstream-dry-run
+          if git merge --no-commit --no-ff "upstream/${UPSTREAM_BRANCH}"; then
+            echo "Dry-run merge succeeded." | tee -a build/upstream-check/upstream-report.txt
+            git merge --abort || true
+          else
+            echo "Dry-run merge found conflicts. Resolve them on a sync branch." | tee -a build/upstream-check/upstream-report.txt
+            git status --short | tee -a build/upstream-check/upstream-report.txt
+            exit 1
+          fi
+
+      - name: Upload upstream report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: DivineMC-upstream-report
+          path: build/upstream-check/upstream-report.txt
