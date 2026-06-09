@@ -168,6 +168,7 @@ public final class HunterPreferences {
         changed |= this.setDefault("modules.web-panel.public-map", true);
         changed |= this.setDefault("modules.web-panel.map-url", "http://%host%:8100/");
         changed |= this.setDefault("modules.web-panel.status-cache-millis", 1000);
+        changed |= this.setDefault("modules.web-panel.require-csrf", true);
         changed |= this.setDefault("modules.web-panel.session-minutes", 360);
         changed |= this.setDefault("modules.web-panel.command-timeout-seconds", 10);
         changed |= this.setDefault("modules.web-panel.admin-command-execution", true);
@@ -176,9 +177,13 @@ public final class HunterPreferences {
         changed |= this.setDefault("modules.web-panel.users.admin.display-name", "admin");
         changed |= this.setDefault("modules.web-panel.users.admin.role", "admin");
         changed |= this.setDefault("modules.web-panel.users.admin.password", "");
+        changed |= this.setDefault("modules.web-panel.users.admin.command-execution", true);
+        changed |= this.setDefault("modules.web-panel.users.admin.allowed-commands", List.of("*"));
         changed |= this.setDefault("modules.web-panel.users.player.display-name", "player");
         changed |= this.setDefault("modules.web-panel.users.player.role", "player");
         changed |= this.setDefault("modules.web-panel.users.player.password", "");
+        changed |= this.setDefault("modules.web-panel.users.player.command-execution", true);
+        changed |= this.setDefault("modules.web-panel.users.player.allowed-commands", List.of("help", "list", "me", "msg", "tell", "spawn", "tps", "htps"));
 
         changed |= this.setDefault("optimizations.enabled", true);
         changed |= this.setDefault("optimizations.bundled-plugin-parallel-install.enabled", true);

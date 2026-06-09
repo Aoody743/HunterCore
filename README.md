@@ -82,6 +82,8 @@ HunterTools 还会内置一组常用管理和生存服工具：
 /hunteradmin web restart
 /hunteradmin web users
 /hunteradmin web user <name> <admin|player> <password>
+/hunteradmin web allow <name> <inherit|none|*|command...>
+/hunteradmin web execution <name> <on|off>
 /hunteradmin web remove <name>
 /heal [player]
 /feed [player]
@@ -145,13 +147,23 @@ modules:
     public-map: true
     map-url: http://%host%:8100/
     status-cache-millis: 1000
+    require-csrf: true
+    users:
+      steve:
+        role: player
+        command-execution: true
+        allowed-commands:
+        - list
+        - spawn
 ```
 
-游客可以查看基础状态和 BlueMap 地图链接；登录后的普通用户可以查看更完整的玩家/插件信息，并只能执行 `player-allowed-commands` 白名单中的指令；管理员可以执行控制台指令。首次启动不会写入明文默认密码，需要在控制台创建账号：
+游客可以查看基础状态和 BlueMap 地图链接；登录后的普通用户可以查看更完整的玩家/插件信息，并只能执行全局 `player-allowed-commands` 或该用户 `allowed-commands` 白名单中的指令；管理员默认可以执行控制台指令，也可以按用户限制为指定指令。面板对登录后的 POST 请求默认启用 CSRF token 校验。首次启动不会写入明文默认密码，需要在控制台创建账号：
 
 ```text
 /hunteradmin web user admin admin <password>
 /hunteradmin web user steve player <password>
+/hunteradmin web allow steve list spawn
+/hunteradmin web execution steve on
 ```
 
 BlueMap 5.20 会作为内置插件安装，默认网页地图端口由 BlueMap 自己管理，HunterCore 面板会用 `map-url` 嵌入或跳转到地图。BlueMap 首次运行需要你在 `plugins/BlueMap/core.conf` 里阅读并确认 `accept-download`，它会下载 Mojang 客户端资源用于地图渲染。Chunky 1.5.3 也被内置，适合预生成区块、降低真实开服时的探索卡顿。

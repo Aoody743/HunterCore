@@ -599,7 +599,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length < 2) {
-            sender.sendMessage("Usage: /hunteradmin web <status|restart|user|remove|users>");
+            sender.sendMessage("Usage: /hunteradmin web <status|restart|user|remove|users|allow|execution>");
             return true;
         }
         final String sub = args[1].toLowerCase(Locale.ROOT);
@@ -621,15 +621,20 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 for (final String id : this.preferences.webUserIds()) {
                     final HunterToolsPreferences.WebUser user = this.preferences.webUser(id);
                     if (user != null) {
-                        sender.sendMessage("- " + user.displayName() + ": " + user.role() + (user.passwordConfigured() ? "" : " (password not set)"));
+                        sender.sendMessage("- " + user.displayName() + ": " + user.role()
+                            + (user.passwordConfigured() ? "" : " (password not set)")
+                            + ", execution=" + user.commandExecution()
+                            + ", allowed=" + webAllowedLine(user));
                     }
                 }
                 yield true;
             }
             case "user" -> this.adminWebUser(sender, args);
             case "remove" -> this.adminWebRemove(sender, args);
+            case "allow" -> this.adminWebAllow(sender, args);
+            case "execution" -> this.adminWebExecution(sender, args);
             default -> {
-                sender.sendMessage("Usage: /hunteradmin web <status|restart|user|remove|users>");
+                sender.sendMessage("Usage: /hunteradmin web <status|restart|user|remove|users|allow|execution>");
                 yield true;
             }
         };
@@ -659,6 +664,60 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.preferences.removeWebUser(args[2]);
         this.preferences.save(this.workerExecutor);
         sender.sendMessage("HunterCore web user " + HunterToolsPreferences.webUserId(args[2]) + " removed.");
+        return true;
+    }
+
+    private boolean adminWebAllow(final CommandSender sender, final String[] args) {
+        if (args.length < 4) {
+            sender.sendMessage("Usage: /hunteradmin web allow <name> <inherit|none|*|command...>");
+            return true;
+        }
+        final HunterToolsPreferences.WebUser user = this.preferences.webUser(args[2]);
+        if (user == null) {
+            sender.sendMessage("Unknown web user.");
+            return true;
+        }
+        final String mode = args[3].toLowerCase(Locale.ROOT);
+        final List<String> commands;
+        if (mode.equals("inherit")) {
+            commands = null;
+        } else if (mode.equals("none")) {
+            commands = List.of();
+        } else {
+            final List<String> parsed = new ArrayList<>();
+            for (int i = 3; i < args.length; i++) {
+                for (final String raw : args[i].split(",")) {
+                    final String command = normalizeWebCommand(raw);
+                    if (!command.isBlank() && !parsed.contains(command)) {
+                        parsed.add(command);
+                    }
+                }
+            }
+            commands = parsed;
+        }
+        this.preferences.setWebUserAllowedCommands(args[2], commands);
+        this.preferences.save(this.workerExecutor);
+        sender.sendMessage("HunterCore web user " + HunterToolsPreferences.webUserId(args[2]) + " allowed commands set to " + (commands == null ? "inherit" : commands) + ".");
+        return true;
+    }
+
+    private boolean adminWebExecution(final CommandSender sender, final String[] args) {
+        if (args.length != 4) {
+            sender.sendMessage("Usage: /hunteradmin web execution <name> <on|off>");
+            return true;
+        }
+        if (this.preferences.webUser(args[2]) == null) {
+            sender.sendMessage("Unknown web user.");
+            return true;
+        }
+        final Boolean enabled = parseToggle(args[3]);
+        if (enabled == null) {
+            sender.sendMessage("Use on/off.");
+            return true;
+        }
+        this.preferences.setWebUserCommandExecution(args[2], enabled);
+        this.preferences.save(this.workerExecutor);
+        sender.sendMessage("HunterCore web user " + HunterToolsPreferences.webUserId(args[2]) + " command execution set to " + enabled + ".");
         return true;
     }
 
@@ -998,10 +1057,16 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return matching(args[0], List.of("reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize", "web"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("web")) {
-            return matching(args[1], List.of("status", "restart", "user", "remove", "users"));
+            return matching(args[1], List.of("status", "restart", "user", "remove", "users", "allow", "execution"));
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("user")) {
             return matching(args[3], List.of("admin", "player"));
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("allow")) {
+            return matching(args[3], List.of("inherit", "none", "*", "help", "list", "spawn", "tps", "htps"));
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("execution")) {
+            return matching(args[3], List.of("on", "off"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("module")) {
             return matching(args[1], MODULES);
@@ -1051,6 +1116,20 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
         }
         return matches;
+    }
+
+    private static String webAllowedLine(final HunterToolsPreferences.WebUser user) {
+        if (!user.allowedCommandsConfigured()) {
+            return "inherit";
+        }
+        if (user.allowedCommands().isEmpty()) {
+            return "none";
+        }
+        return String.join(",", user.allowedCommands());
+    }
+
+    private static String normalizeWebCommand(final String command) {
+        return command.replaceFirst("^/+", "").trim().split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
     }
 
     private static NamedTextColor tpsColor(final double tps) {

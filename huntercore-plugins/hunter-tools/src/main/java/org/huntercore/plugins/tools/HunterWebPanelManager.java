@@ -12,14 +12,11 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.security.spec.KeySpec;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -37,6 +34,7 @@ import org.bukkit.plugin.Plugin;
 
 final class HunterWebPanelManager {
     private static final String SESSION_COOKIE = "HCSESSION";
+    private static final String CSRF_HEADER = "X-HunterCore-CSRF";
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final int HASH_ITERATIONS = 120_000;
     private static final int HASH_BITS = 256;
@@ -324,9 +322,13 @@ final class HunterWebPanelManager {
         final long minutes = Math.max(5L, this.preferences.intValue("modules.web-panel.session-minutes", 360));
         final WebSession session = new WebSession(
             this.newToken(),
+            this.newToken(),
             user.id(),
             user.displayName(),
             role,
+            user.commandExecution(),
+            user.allowedCommandsConfigured(),
+            List.copyOf(user.allowedCommands()),
             Instant.now().plusSeconds(minutes * 60L).toEpochMilli()
         );
         this.sessions.put(session.token(), session);
@@ -337,6 +339,10 @@ final class HunterWebPanelManager {
     private void logout(final HttpExchange exchange) {
         final WebSession session = this.session(exchange);
         if (session != null) {
+            if (!this.csrfAllowed(exchange, session)) {
+                this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"csrf_required\"}");
+                return;
+            }
             this.sessions.remove(session.token());
         }
         exchange.getResponseHeaders().add("Set-Cookie", SESSION_COOKIE + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
@@ -347,6 +353,10 @@ final class HunterWebPanelManager {
         final WebSession session = this.session(exchange);
         if (session == null) {
             this.send(exchange, 401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"login_required\"}");
+            return;
+        }
+        if (!this.csrfAllowed(exchange, session)) {
+            this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"csrf_required\"}");
             return;
         }
         final Map<String, String> body = parseJsonObject(this.body(exchange, 16 * 1024));
@@ -366,18 +376,36 @@ final class HunterWebPanelManager {
     }
 
     private boolean commandAllowed(final WebSession session, final String command) {
-        if (session.admin()) {
-            return this.preferences.booleanValue("modules.web-panel.admin-command-execution", true);
+        if (!session.commandExecution()) {
+            return false;
         }
+
+        final String root = commandRoot(command);
+        if (session.admin()) {
+            if (!this.preferences.booleanValue("modules.web-panel.admin-command-execution", true)) {
+                return false;
+            }
+            return !session.allowedCommandsConfigured() || allowedCommand(session.allowedCommands(), root);
+        }
+
         if (!this.preferences.booleanValue("modules.web-panel.player-command-execution", true)) {
             return false;
         }
-        final String root = command.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
-        final List<String> allowed = new ArrayList<>();
-        for (final String value : this.preferences.stringList("modules.web-panel.player-allowed-commands", List.of())) {
-            allowed.add(value.toLowerCase(Locale.ROOT));
+        if (session.allowedCommandsConfigured()) {
+            return allowedCommand(session.allowedCommands(), root);
         }
-        return allowed.contains(root);
+        return allowedCommand(this.preferences.stringList("modules.web-panel.player-allowed-commands", List.of()), root);
+    }
+
+    private boolean csrfAllowed(final HttpExchange exchange, final WebSession session) {
+        if (!this.preferences.booleanValue("modules.web-panel.require-csrf", true)) {
+            return true;
+        }
+        final String provided = exchange.getRequestHeaders().getFirst(CSRF_HEADER);
+        return provided != null && MessageDigest.isEqual(
+            session.csrfToken().getBytes(StandardCharsets.UTF_8),
+            provided.getBytes(StandardCharsets.UTF_8)
+        );
     }
 
     private WebSession session(final HttpExchange exchange) {
@@ -530,7 +558,38 @@ final class HunterWebPanelManager {
         return "{\"username\":\"" + escapeJson(session.displayName())
             + "\",\"role\":\"" + escapeJson(session.role())
             + "\",\"admin\":" + session.admin()
+            + ",\"csrf\":\"" + escapeJson(session.csrfToken()) + '"'
+            + ",\"commandExecution\":" + session.commandExecution()
+            + ",\"allowedCommandsConfigured\":" + session.allowedCommandsConfigured()
+            + ",\"allowedCommands\":" + stringArrayJson(session.allowedCommands())
             + ",\"expiresAt\":" + session.expiresAtMillis() + "}";
+    }
+
+    private static boolean allowedCommand(final List<String> allowedCommands, final String root) {
+        for (final String value : allowedCommands) {
+            final String allowed = commandRoot(value);
+            if (allowed.equals("*") || allowed.equals(root)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String commandRoot(final String command) {
+        return command.replaceFirst("^/+", "").trim().split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
+    }
+
+    private static String stringArrayJson(final List<String> values) {
+        final StringBuilder json = new StringBuilder("[");
+        boolean first = true;
+        for (final String value : values) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('"').append(escapeJson(value)).append('"');
+        }
+        return json.append(']').toString();
     }
 
     private static StringBuilder field(final StringBuilder json, final String name, final String value) {
@@ -580,7 +639,17 @@ final class HunterWebPanelManager {
         return normalized.equals("admin") ? "admin" : "player";
     }
 
-    private record WebSession(String token, String username, String displayName, String role, long expiresAtMillis) {
+    private record WebSession(
+        String token,
+        String csrfToken,
+        String username,
+        String displayName,
+        String role,
+        boolean commandExecution,
+        boolean allowedCommandsConfigured,
+        List<String> allowedCommands,
+        long expiresAtMillis
+    ) {
         boolean admin() {
             return this.role.equals("admin");
         }
@@ -689,7 +758,7 @@ final class HunterWebPanelManager {
         """;
 
     private static final String APP_JS = """
-        const state = { session: null };
+        const state = { session: null, csrf: '' };
         const $ = (id) => document.getElementById(id);
         const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
           '&': '&amp;',
@@ -701,13 +770,17 @@ final class HunterWebPanelManager {
         const item = (left, right = '') => `<div class="item"><span>${esc(left)}</span><strong>${esc(right)}</strong></div>`;
 
         async function json(url, options = {}) {
-          const response = await fetch(url, { credentials: 'same-origin', ...options });
+          const headers = { ...(options.headers || {}) };
+          if (state.csrf) headers['X-HunterCore-CSRF'] = state.csrf;
+          if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+          const response = await fetch(url, { credentials: 'same-origin', ...options, headers });
           return response.json();
         }
 
         async function refresh() {
           const data = await json('/api/status');
           state.session = data.session;
+          state.csrf = data.session?.csrf || state.csrf;
           $('serverLine').textContent = `${data.server.name} · ${data.server.version}`;
           $('tps').textContent = Number(data.server.tps1).toFixed(2);
           $('mspt').textContent = Number(data.server.mspt).toFixed(1);
@@ -733,12 +806,18 @@ final class HunterWebPanelManager {
           const payload = JSON.stringify({ username: $('username').value, password: $('password').value });
           const result = await json('/api/login', { method: 'POST', body: payload });
           $('password').value = '';
+          if (result.ok) {
+            state.session = result.session;
+            state.csrf = result.session.csrf || '';
+          }
           $('commandResult').textContent = result.ok ? `Logged in as ${result.session.username} (${result.session.role}).` : 'Login failed.';
           await refresh();
         });
 
         $('logoutButton').addEventListener('click', async () => {
           await json('/api/logout', { method: 'POST' });
+          state.session = null;
+          state.csrf = '';
           $('commandResult').textContent = 'Logged out.';
           await refresh();
         });

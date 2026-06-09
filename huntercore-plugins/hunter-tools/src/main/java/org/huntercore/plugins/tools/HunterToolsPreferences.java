@@ -120,7 +120,10 @@ final class HunterToolsPreferences {
                 id,
                 this.config.getString(path + ".display-name", username),
                 normalize(this.config.getString(path + ".role", "player")),
-                this.config.getString(path + ".password", "")
+                this.config.getString(path + ".password", ""),
+                this.config.getBoolean(path + ".command-execution", true),
+                this.config.contains(path + ".allowed-commands"),
+                this.config.getStringList(path + ".allowed-commands")
             );
         }
     }
@@ -132,6 +135,20 @@ final class HunterToolsPreferences {
             this.config.set(path + ".display-name", username);
             this.config.set(path + ".role", normalize(role));
             this.config.set(path + ".password", passwordHash);
+            this.config.set(path + ".command-execution", true);
+        }
+    }
+
+    void setWebUserCommandExecution(final String username, final boolean enabled) {
+        synchronized (this.lock) {
+            this.config.set("modules.web-panel.users." + webUserId(username) + ".command-execution", enabled);
+        }
+    }
+
+    void setWebUserAllowedCommands(final String username, final List<String> commands) {
+        synchronized (this.lock) {
+            final String path = "modules.web-panel.users." + webUserId(username) + ".allowed-commands";
+            this.config.set(path, commands == null ? null : commands);
         }
     }
 
@@ -316,17 +333,22 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.web-panel.public-map", true);
         changed |= this.setDefault("modules.web-panel.map-url", "http://%host%:8100/");
         changed |= this.setDefault("modules.web-panel.status-cache-millis", 1000);
+        changed |= this.setDefault("modules.web-panel.require-csrf", true);
         changed |= this.setDefault("modules.web-panel.session-minutes", 360);
         changed |= this.setDefault("modules.web-panel.command-timeout-seconds", 10);
         changed |= this.setDefault("modules.web-panel.admin-command-execution", true);
         changed |= this.setDefault("modules.web-panel.player-command-execution", true);
-        changed |= this.setDefault("modules.web-panel.player-allowed-commands", List.of("help", "list", "me", "msg", "tell", "spawn", "tps", "htps"));
+        changed |= this.setDefault("modules.web-panel.player-allowed-commands", defaultWebPlayerCommands());
         changed |= this.setDefault("modules.web-panel.users.admin.display-name", "admin");
         changed |= this.setDefault("modules.web-panel.users.admin.role", "admin");
         changed |= this.setDefault("modules.web-panel.users.admin.password", "");
+        changed |= this.setDefault("modules.web-panel.users.admin.command-execution", true);
+        changed |= this.setDefault("modules.web-panel.users.admin.allowed-commands", List.of("*"));
         changed |= this.setDefault("modules.web-panel.users.player.display-name", "player");
         changed |= this.setDefault("modules.web-panel.users.player.role", "player");
         changed |= this.setDefault("modules.web-panel.users.player.password", "");
+        changed |= this.setDefault("modules.web-panel.users.player.command-execution", true);
+        changed |= this.setDefault("modules.web-panel.users.player.allowed-commands", defaultWebPlayerCommands());
         changed |= this.setDefault("optimizations.enabled", true);
         changed |= this.setDefault("optimizations.hunter-tools.async-rendering", true);
         changed |= this.setDefault("optimizations.hunter-tools.async-save", true);
@@ -363,6 +385,10 @@ final class HunterToolsPreferences {
 
     static List<String> actorCommands() {
         return List.of("spawn", "remove", "list", "tp", "clear");
+    }
+
+    static List<String> defaultWebPlayerCommands() {
+        return List.of("help", "list", "me", "msg", "tell", "spawn", "tps", "htps");
     }
 
     static String normalize(final String id) {
@@ -421,7 +447,15 @@ final class HunterToolsPreferences {
         }
     }
 
-    record WebUser(String id, String displayName, String role, String passwordHash) {
+    record WebUser(
+        String id,
+        String displayName,
+        String role,
+        String passwordHash,
+        boolean commandExecution,
+        boolean allowedCommandsConfigured,
+        List<String> allowedCommands
+    ) {
         boolean passwordConfigured() {
             return this.passwordHash != null && !this.passwordHash.isBlank();
         }

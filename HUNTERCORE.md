@@ -84,6 +84,8 @@ To add another external bundled plugin, extend that script with a download/build
 /hunteradmin web restart
 /hunteradmin web users
 /hunteradmin web user <name> <admin|player> <password>
+/hunteradmin web allow <name> <inherit|none|*|command...>
+/hunteradmin web execution <name> <on|off>
 /hunteradmin web remove <name>
 /fakeplayer spawn <name> [world x y z [yaw pitch]]
 /fakeplayer remove <name>
@@ -107,13 +109,15 @@ HunterTools provides TPS actionbar/sidebar display plus essentials-style command
 
 HunterTools includes a lightweight built-in web panel. It defaults to `http://127.0.0.1:8088/`; set `modules.web-panel.bind-address` to `0.0.0.0` and change `modules.web-panel.port` to expose it.
 
-Guests can view public status and the configured BlueMap URL. Logged-in player users can view detailed player/plugin data and run only `modules.web-panel.player-allowed-commands`; admin users can run console commands when `modules.web-panel.admin-command-execution` is enabled.
+Guests can view public status and the configured BlueMap URL. Logged-in player users can view detailed player/plugin data and run only `modules.web-panel.player-allowed-commands` or their per-user `allowed-commands`; admin users can run console commands when `modules.web-panel.admin-command-execution` is enabled, and can also be restricted with per-user command lists. Logged-in POST requests require a session CSRF token by default.
 
 Create web users from console or an op account:
 
 ```text
 /hunteradmin web user admin admin <password>
 /hunteradmin web user player player <password>
+/hunteradmin web allow player list spawn
+/hunteradmin web execution player on
 ```
 
 BlueMap is bundled for the web map, and Chunky is bundled for chunk pre-generation/performance prep. BlueMap still requires the server owner to read and set `accept-download` in `plugins/BlueMap/core.conf` on first use because it downloads Mojang client resources for rendering.

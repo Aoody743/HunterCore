@@ -102,6 +102,7 @@ jobs:
           - HunterTools TPS/actionbar/sidebar/management and essentials-style commands
           - HunterTools fake players and NPCs with persistent preferences.yml definitions
           - Built-in HunterCore web panel with guest map/status, player users, and admin command execution
+          - Web panel CSRF protection plus per-user command execution and allowed-command overrides
           - BlueMap web map bundle; first use requires accepting BlueMap's resource download in plugins/BlueMap/core.conf
           - Common server foundation plugins: PlaceholderAPI, Vault, WorldEdit, and WorldGuard
           - Cached guest status responses for lower public web panel main-thread pressure
