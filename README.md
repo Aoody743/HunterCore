@@ -144,7 +144,7 @@ GitHub Actions 会在发布时把它重命名为 `HunterCore-<version>-paperclip
 推荐从 [GitHub Releases](https://github.com/AndyXeCM/HunterCore/releases) 下载 `HunterCore-*-paperclip.jar`。
 
 ```bash
-java -Xms2G -Xmx4G -jar HunterCore-26.1.2-huntercore.2-paperclip.jar nogui
+java -Xms2G -Xmx4G -jar HunterCore-<version>-paperclip.jar nogui
 ```
 
 首次启动会生成 EULA 和配置文件。接受 Minecraft EULA 后再次启动即可。
