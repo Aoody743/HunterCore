@@ -93,6 +93,16 @@ commands:
     description: Teleport to your previous location.
     usage: /back
     permission: huntertools.command.back
+  fakeplayer:
+    description: Manage HunterCore lightweight fake players.
+    usage: /fakeplayer <spawn|remove|list|tp|clear>
+    aliases: [fp, hfake]
+    permission: huntertools.command.fakeplayer
+  npc:
+    description: Manage HunterCore NPCs.
+    usage: /npc <spawn|remove|list|tp|clear>
+    aliases: [hnpc]
+    permission: huntertools.command.npc
 permissions:
   huntertools.command.tps:
     default: true
@@ -122,6 +132,10 @@ permissions:
     default: op
   huntertools.command.back:
     default: true
+  huntertools.command.fakeplayer:
+    default: op
+  huntertools.command.npc:
+    default: op
   huntertools.display.tps:
     default: true
   huntertools.display.sidebar:

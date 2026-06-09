@@ -71,6 +71,7 @@ HunterTools 还会内置一组常用管理和生存服工具：
 /hunteradmin memory
 /hunteradmin gc
 /hunteradmin threads
+/hunteradmin optimize
 /heal [player]
 /feed [player]
 /fly [player] [on|off]
@@ -86,6 +87,16 @@ HunterTools 还会内置一组常用管理和生存服工具：
 /spawn [player]
 /setspawn
 /back
+/fakeplayer spawn <name> [world x y z [yaw pitch]]
+/fakeplayer remove <name>
+/fakeplayer list
+/fakeplayer tp <name> [world x y z [yaw pitch]]
+/fakeplayer clear
+/npc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]
+/npc remove <name>
+/npc list
+/npc tp <name> [world x y z [yaw pitch]]
+/npc clear
 ```
 
 运行时模块：
@@ -95,9 +106,13 @@ tps-display
 sidebar
 essentials
 management
+fake-players
+npcs
 ```
 
 这些模块和命令都可以通过 `preferences.yml` 或 `/hunteradmin`、`/huntercore preferences` 开关。
+
+`/fakeplayer` 使用 Minecraft 的 Mannequin 实体创建轻量假人，适合大厅展示、压测可视目标和基础交互占位。`/npc` 支持 `villager` 和 `mannequin` 两种类型。两者都会写入 `plugins/HunterCore/preferences.yml`，重启后由 HunterTools 重建。
 
 ## 优化
 
@@ -110,9 +125,18 @@ optimizations.hunter-tools.async-rendering
 optimizations.hunter-tools.async-save
 optimizations.hunter-tools.player-cache
 optimizations.hunter-tools.render-workers
+optimizations.hunter-tools.actor-async-load
+optimizations.hunter-tools.actor-batch-save
+optimizations.cpu.enabled
+optimizations.cpu.paper-worker-threads
+optimizations.cpu.divine-worker-threads
+optimizations.cpu.netty-io-threads
+optimizations.cpu.common-pool-parallelism
 ```
 
-内置插件安装阶段会并行校验/写入不同 jar。HunterTools 的 sidebar 文本渲染、GC 请求和配置保存会移出主线程，最终 Bukkit 状态修改仍回到主线程执行，避免破坏 Bukkit/Paper 线程安全规则。
+内置插件安装阶段会并行校验/写入不同 jar。HunterTools 的 sidebar 文本渲染、假人/NPC 配置加载、GC 请求和配置保存会移出主线程，最终 Bukkit 状态修改仍回到主线程执行，避免破坏 Bukkit/Paper 线程安全规则。
+
+HunterCore 还会在启动时按 CPU 核心数设置保守的多线程默认值，包括 Paper/DivineMC worker threads、Netty IO threads 和 ForkJoin common pool parallelism。你通过 JVM 参数显式设置过的值不会被覆盖。
 
 ## 构建
 

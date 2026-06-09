@@ -73,11 +73,24 @@ To add another external bundled plugin, extend that script with a download/build
 /hunteradmin memory
 /hunteradmin gc
 /hunteradmin threads
+/hunteradmin optimize
+/fakeplayer spawn <name> [world x y z [yaw pitch]]
+/fakeplayer remove <name>
+/fakeplayer list
+/fakeplayer tp <name> [world x y z [yaw pitch]]
+/fakeplayer clear
+/npc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]
+/npc remove <name>
+/npc list
+/npc tp <name> [world x y z [yaw pitch]]
+/npc clear
 ```
 
 `/about` is HunterCore-specific. `/huntercore system` prints JVM, OS, CPU, memory, uptime, player count, and plugin directory information.
 
 HunterTools provides TPS actionbar/sidebar display plus essentials-style commands such as `/heal`, `/feed`, `/fly`, `/gm`, `/day`, `/night`, `/sun`, `/rain`, `/thunder`, `/broadcast`, `/clearchat`, `/speed`, `/spawn`, `/setspawn`, and `/back`.
+
+`/fakeplayer` creates lightweight Mannequin-based fake players. `/npc` creates managed Villager or Mannequin NPCs. Both are persisted in `plugins/HunterCore/preferences.yml` and rebuilt on startup/reload.
 
 ## Optimizations
 
@@ -90,9 +103,18 @@ optimizations.hunter-tools.async-rendering
 optimizations.hunter-tools.async-save
 optimizations.hunter-tools.player-cache
 optimizations.hunter-tools.render-workers
+optimizations.hunter-tools.actor-async-load
+optimizations.hunter-tools.actor-batch-save
+optimizations.cpu.enabled
+optimizations.cpu.paper-worker-threads
+optimizations.cpu.divine-worker-threads
+optimizations.cpu.netty-io-threads
+optimizations.cpu.common-pool-parallelism
 ```
 
-Bundled plugin install work is parallelized across different jar files. HunterTools renders sidebar text, saves preferences, and requests GC off the main thread, then returns to the Bukkit main thread for player/server mutations.
+Bundled plugin install work is parallelized across different jar files. HunterTools renders sidebar text, loads fake player/NPC definitions, saves preferences, and requests GC off the main thread, then returns to the Bukkit main thread for player/server mutations.
+
+HunterCore also applies CPU-aware startup defaults for Paper/DivineMC worker threads, Netty IO threads, and ForkJoin common pool parallelism. Existing JVM flags are preserved by default.
 
 ## API
 

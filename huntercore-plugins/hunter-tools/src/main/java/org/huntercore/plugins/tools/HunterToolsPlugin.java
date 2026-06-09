@@ -49,9 +49,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class HunterToolsPlugin extends JavaPlugin implements CommandExecutor, TabCompleter, Listener {
-    private static final List<String> MODULES = List.of("tps-display", "sidebar", "essentials", "management");
+    private static final List<String> MODULES = List.of("tps-display", "sidebar", "essentials", "management", "fake-players", "npcs");
     private static final String ESSENTIALS = "essentials";
     private static final String MANAGEMENT = "management";
+    private static final String FAKE_PLAYERS = "fake-players";
+    private static final String NPCS = "npcs";
     private static final String[] SIDEBAR_KEYS = {
         "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a", "§b", "§c", "§d", "§e", "§f"
     };
@@ -59,6 +61,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private final Map<UUID, SidebarBoard> sidebars = new HashMap<>();
     private final Map<UUID, Location> backLocations = new HashMap<>();
     private HunterToolsPreferences preferences;
+    private HunterActorManager actorManager;
     private ExecutorService workerExecutor;
     private MetricsSnapshot snapshot = MetricsSnapshot.empty();
     private volatile List<String> cachedPlayerNames = List.of();
@@ -70,16 +73,24 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     public void onEnable() {
         this.preferences = HunterToolsPreferences.loadOrCreate(this);
         this.workerExecutor = this.createWorkerExecutor();
+        this.actorManager = new HunterActorManager(this, this.preferences, this.workerExecutor);
         this.registerCommands();
         this.getServer().getPluginManager().registerEvents(this, this);
         this.startTasks();
+        this.actorManager.reload();
         this.getLogger().info("HunterTools enabled with preferences at " + this.preferences.file().getPath());
     }
 
     @Override
     public void onDisable() {
         this.cancelTasks();
+        if (this.actorManager != null) {
+            this.actorManager.shutdown();
+        }
         this.clearSidebars();
+        if (this.preferences != null) {
+            this.preferences.flushPendingSaves();
+        }
         if (this.workerExecutor != null) {
             this.workerExecutor.shutdownNow();
         }
@@ -111,6 +122,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "spawn" -> this.spawn(sender, args);
             case "setspawn" -> this.setSpawn(sender);
             case "back" -> this.back(sender);
+            case "fakeplayer" -> this.fakePlayer(sender, args);
+            case "npc" -> this.npc(sender, args);
             default -> false;
         };
     }
@@ -125,6 +138,12 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         final String name = command.getName().toLowerCase(Locale.ROOT);
         if (name.equals("hunteradmin")) {
             return this.adminCompletions(args);
+        }
+        if (name.equals("fakeplayer")) {
+            return this.actorManager == null ? List.of() : this.actorManager.completions(FAKE_PLAYERS, args);
+        }
+        if (name.equals("npc")) {
+            return this.actorManager == null ? List.of() : this.actorManager.completions(NPCS, args);
         }
         if (name.equals("gm") && args.length == 1) {
             return matching(args[0], List.of("survival", "creative", "adventure", "spectator"));
@@ -177,7 +196,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private void registerCommands() {
         for (final String command : List.of(
             "htps", "hunteradmin", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
-            "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back"
+            "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
+            "fakeplayer", "npc"
         )) {
             final org.bukkit.command.PluginCommand pluginCommand = this.getCommand(command);
             if (pluginCommand != null) {
@@ -406,7 +426,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.GOLD + "HunterAdmin: " + ChatColor.YELLOW + "reload, modules, module, command, plugins, memory, gc, threads");
+            sender.sendMessage(ChatColor.GOLD + "HunterAdmin: " + ChatColor.YELLOW + "reload, modules, module, command, plugins, memory, gc, threads, optimize");
             return true;
         }
         final String sub = args[0].toLowerCase(Locale.ROOT);
@@ -419,8 +439,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "memory" -> this.adminMemory(sender);
             case "gc" -> this.adminGc(sender);
             case "threads" -> this.adminThreads(sender);
+            case "optimize" -> this.adminOptimize(sender);
             default -> {
-                sender.sendMessage("Usage: /hunteradmin <reload|modules|module|command|plugins|memory|gc|threads>");
+                sender.sendMessage("Usage: /hunteradmin <reload|modules|module|command|plugins|memory|gc|threads|optimize>");
                 yield true;
             }
         };
@@ -432,6 +453,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             this.workerExecutor.shutdownNow();
         }
         this.workerExecutor = this.createWorkerExecutor();
+        if (this.actorManager != null) {
+            this.actorManager.setExecutor(this.workerExecutor);
+            this.actorManager.reload();
+        }
         this.startTasks();
         sender.sendMessage("HunterCore preferences reloaded from " + this.preferences.file().getPath() + ".");
         return true;
@@ -463,6 +488,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.preferences.setModuleEnabled(module, enabled);
         this.preferences.save(this.workerExecutor);
         this.startTasks();
+        if (this.actorManager != null && (module.equals(FAKE_PLAYERS) || module.equals(NPCS))) {
+            this.actorManager.reload();
+        }
         sender.sendMessage("HunterCore module " + module + " set to " + enabled + ".");
         return true;
     }
@@ -474,8 +502,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         final String module = HunterToolsPreferences.normalize(args[1]);
         final String command = HunterToolsPreferences.normalize(args[2]);
-        if (!module.equals(ESSENTIALS) && !module.equals(MANAGEMENT)) {
-            sender.sendMessage("Command toggles are available for essentials and management.");
+        if (!module.equals(ESSENTIALS) && !module.equals(MANAGEMENT) && !module.equals(FAKE_PLAYERS) && !module.equals(NPCS)) {
+            sender.sendMessage("Command toggles are available for essentials, management, fake-players, and npcs.");
             return true;
         }
         final Boolean enabled = parseToggle(args[3]);
@@ -529,6 +557,24 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         final ThreadMXBean bean = ManagementFactory.getThreadMXBean();
         sender.sendMessage(ChatColor.GOLD + "Threads: " + ChatColor.WHITE + bean.getThreadCount() + " live, " + bean.getDaemonThreadCount() + " daemon, peak " + bean.getPeakThreadCount());
         sender.sendMessage(ChatColor.GRAY + "HunterTools render workers: " + ChatColor.WHITE + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4));
+        sender.sendMessage(ChatColor.GRAY + "Fake players: " + ChatColor.WHITE + (this.actorManager == null ? 0 : this.actorManager.liveCount(FAKE_PLAYERS)) + " live");
+        sender.sendMessage(ChatColor.GRAY + "NPCs: " + ChatColor.WHITE + (this.actorManager == null ? 0 : this.actorManager.liveCount(NPCS)) + " live");
+        return true;
+    }
+
+    private boolean adminOptimize(final CommandSender sender) {
+        if (!this.managementCommandEnabled(sender, "optimize")) {
+            return true;
+        }
+        sender.sendMessage(ChatColor.GOLD + "HunterCore CPU optimization");
+        sender.sendMessage(ChatColor.GRAY + "CPU threads: " + ChatColor.WHITE + Runtime.getRuntime().availableProcessors());
+        sender.sendMessage(ChatColor.GRAY + "Paper workers: " + ChatColor.WHITE + System.getProperty("Paper.WorkerThreadCount", "auto"));
+        sender.sendMessage(ChatColor.GRAY + "DivineMC workers: " + ChatColor.WHITE + System.getProperty("DivineMC.WorkerThreadCount", "auto"));
+        sender.sendMessage(ChatColor.GRAY + "Netty IO threads: " + ChatColor.WHITE + System.getProperty("io.netty.eventLoopThreads", "auto"));
+        sender.sendMessage(ChatColor.GRAY + "ForkJoin common parallelism: " + ChatColor.WHITE + System.getProperty("java.util.concurrent.ForkJoinPool.common.parallelism", "auto"));
+        sender.sendMessage(ChatColor.GRAY + "HunterTools workers: " + ChatColor.WHITE + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4));
+        sender.sendMessage(ChatColor.GRAY + "Async actor load: " + ChatColor.WHITE + this.preferences.booleanValue("optimizations.hunter-tools.actor-async-load", true));
+        sender.sendMessage(ChatColor.GRAY + "Async/batched actor save: " + ChatColor.WHITE + this.preferences.booleanValue("optimizations.hunter-tools.actor-batch-save", true));
         return true;
     }
 
@@ -764,6 +810,20 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         return true;
     }
 
+    private boolean fakePlayer(final CommandSender sender, final String[] args) {
+        if (!this.require(sender, "huntertools.command.fakeplayer")) {
+            return true;
+        }
+        return this.actorManager != null && this.actorManager.fakePlayerCommand(sender, args);
+    }
+
+    private boolean npc(final CommandSender sender, final String[] args) {
+        if (!this.require(sender, "huntertools.command.npc")) {
+            return true;
+        }
+        return this.actorManager != null && this.actorManager.npcCommand(sender, args);
+    }
+
     private boolean essentialsCommandEnabled(final CommandSender sender, final String command) {
         if (!this.preferences.moduleEnabled(ESSENTIALS)) {
             sender.sendMessage("HunterCore essentials module is disabled in preferences.yml.");
@@ -851,13 +911,13 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private List<String> adminCompletions(final String[] args) {
         if (args.length == 1) {
-            return matching(args[0], List.of("reload", "modules", "module", "command", "plugins", "memory", "gc", "threads"));
+            return matching(args[0], List.of("reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("module")) {
             return matching(args[1], MODULES);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("command")) {
-            return matching(args[1], List.of(ESSENTIALS, MANAGEMENT));
+            return matching(args[1], List.of(ESSENTIALS, MANAGEMENT, FAKE_PLAYERS, NPCS));
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("command")) {
             final String module = args[1].toLowerCase(Locale.ROOT);
@@ -866,6 +926,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             if (module.equals(MANAGEMENT)) {
                 return matching(args[2], HunterToolsPreferences.managementCommands());
+            }
+            if (module.equals(FAKE_PLAYERS) || module.equals(NPCS)) {
+                return matching(args[2], HunterToolsPreferences.actorCommands());
             }
         }
         if ((args.length == 3 && args[0].equalsIgnoreCase("module")) || (args.length == 4 && args[0].equalsIgnoreCase("command"))) {

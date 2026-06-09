@@ -94,8 +94,10 @@ jobs:
           Highlights:
           - Central preferences file at plugins/HunterCore/preferences.yml
           - HunterTools TPS/actionbar/sidebar/management and essentials-style commands
+          - HunterTools fake players and NPCs with persistent preferences.yml definitions
           - Configurable module and command toggles
-          - Parallel bundled plugin install plus async HunterTools rendering/saving
+          - Parallel bundled plugin install plus async HunterTools rendering/saving/actor loading
+          - CPU-aware Paper/DivineMC worker, Netty IO, and ForkJoin defaults
           EOF
 
       - name: Create or update GitHub release

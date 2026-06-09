@@ -1,6 +1,7 @@
 package org.huntercore.bootstrap;
 
 import org.huntercore.api.HunterCoreProvider;
+import org.huntercore.optimization.HunterCoreOptimizer;
 
 public final class HunterCoreBootstrap {
     private static boolean initialized;
@@ -12,6 +13,7 @@ public final class HunterCoreBootstrap {
         if (initialized) {
             return;
         }
+        HunterCoreOptimizer.applyStartupDefaults();
         HunterCoreProvider.register(HunterCoreRuntime.get());
         initialized = true;
     }

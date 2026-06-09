@@ -81,6 +81,18 @@ public final class HunterPreferences {
         this.save();
     }
 
+    public boolean booleanValue(final String path, final boolean fallback) {
+        return this.config.getBoolean(path, fallback);
+    }
+
+    public int intValue(final String path, final int fallback) {
+        return this.config.getInt(path, fallback);
+    }
+
+    public String stringValue(final String path, final String fallback) {
+        return this.config.getString(path, fallback);
+    }
+
     public boolean parallelBundledPluginInstall() {
         return this.config.getBoolean("optimizations.bundled-plugin-parallel-install.enabled", true);
     }
@@ -131,8 +143,24 @@ public final class HunterPreferences {
             changed |= this.setDefault("modules.essentials.commands." + command, true);
         }
         changed |= this.setDefault("modules.management.enabled", true);
-        for (final String command : List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module")) {
+        for (final String command : List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module", "optimize")) {
             changed |= this.setDefault("modules.management.commands." + command, true);
+        }
+        changed |= this.setDefault("modules.fake-players.enabled", true);
+        changed |= this.setDefault("modules.fake-players.max-active", 64);
+        changed |= this.setDefault("modules.fake-players.persist", true);
+        changed |= this.setDefault("modules.fake-players.remove-on-disable", true);
+        for (final String command : List.of("spawn", "remove", "list", "tp", "clear")) {
+            changed |= this.setDefault("modules.fake-players.commands." + command, true);
+        }
+        changed |= this.setDefault("modules.npcs.enabled", true);
+        changed |= this.setDefault("modules.npcs.max-active", 64);
+        changed |= this.setDefault("modules.npcs.persist", true);
+        changed |= this.setDefault("modules.npcs.remove-on-disable", true);
+        changed |= this.setDefault("modules.npcs.default-type", "villager");
+        changed |= this.setDefault("modules.npcs.villager-ai", false);
+        for (final String command : List.of("spawn", "remove", "list", "tp", "clear")) {
+            changed |= this.setDefault("modules.npcs.commands." + command, true);
         }
 
         changed |= this.setDefault("optimizations.enabled", true);
@@ -141,6 +169,15 @@ public final class HunterPreferences {
         changed |= this.setDefault("optimizations.hunter-tools.async-rendering", true);
         changed |= this.setDefault("optimizations.hunter-tools.async-save", true);
         changed |= this.setDefault("optimizations.hunter-tools.player-cache", true);
+        changed |= this.setDefault("optimizations.hunter-tools.actor-async-load", true);
+        changed |= this.setDefault("optimizations.hunter-tools.actor-batch-save", true);
+        changed |= this.setDefault("optimizations.cpu.enabled", true);
+        changed |= this.setDefault("optimizations.cpu.mode", "balanced");
+        changed |= this.setDefault("optimizations.cpu.prefer-existing-jvm-flags", true);
+        changed |= this.setDefault("optimizations.cpu.paper-worker-threads", "auto");
+        changed |= this.setDefault("optimizations.cpu.divine-worker-threads", "auto");
+        changed |= this.setDefault("optimizations.cpu.netty-io-threads", "auto");
+        changed |= this.setDefault("optimizations.cpu.common-pool-parallelism", "auto");
 
         if (changed) {
             this.config.options().header("""

@@ -26,6 +26,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.huntercore.bootstrap.HunterCoreBootstrap;
 import org.huntercore.bootstrap.HunterCoreRuntime;
 import org.huntercore.config.HunterPreferences;
+import org.huntercore.optimization.HunterCoreOptimizer;
 import org.slf4j.Logger;
 
 public final class HunterBundledPluginInstaller {
@@ -52,6 +53,7 @@ public final class HunterBundledPluginInstaller {
             Files.createDirectories(pluginDirectory);
             final List<HunterBundledPluginRecord> plugins = loadManifests();
             final HunterPreferences preferences = HunterPreferences.loadOrCreate(pluginDirectory, plugins);
+            HunterCoreOptimizer.applyPreferences(preferences);
             HunterCoreRuntime.get().setPreferences(preferences);
 
             if (!preferences.bundledPluginsEnabled()) {

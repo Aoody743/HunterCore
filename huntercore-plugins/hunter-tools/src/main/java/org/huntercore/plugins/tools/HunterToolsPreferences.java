@@ -2,16 +2,21 @@ package org.huntercore.plugins.tools;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -19,6 +24,8 @@ final class HunterToolsPreferences {
     private final JavaPlugin plugin;
     private final Path path;
     private final Object lock = new Object();
+    private final Object saveLock = new Object();
+    private CompletableFuture<Void> pendingSave = CompletableFuture.completedFuture(null);
     private YamlConfiguration config;
 
     private HunterToolsPreferences(final JavaPlugin plugin, final Path path, final YamlConfiguration config) {
@@ -38,6 +45,7 @@ final class HunterToolsPreferences {
     }
 
     void reload() {
+        this.flushPendingSaves();
         synchronized (this.lock) {
             this.config = Files.exists(this.path) ? YamlConfiguration.loadConfiguration(this.path.toFile()) : new YamlConfiguration();
             if (this.applyDefaults()) {
@@ -88,6 +96,65 @@ final class HunterToolsPreferences {
         }
     }
 
+    Set<String> actorIds(final String module) {
+        synchronized (this.lock) {
+            final ConfigurationSection section = this.config.getConfigurationSection(actorPath(module));
+            return section == null ? Set.of() : new TreeSet<>(section.getKeys(false));
+        }
+    }
+
+    ActorDefinition actorDefinition(final String module, final String id) {
+        synchronized (this.lock) {
+            final String path = actorPath(module) + "." + normalize(id);
+            if (!this.config.contains(path)) {
+                return null;
+            }
+            final String world = this.config.getString(path + ".world", "");
+            if (world == null || world.isBlank()) {
+                return null;
+            }
+            return new ActorDefinition(
+                normalize(id),
+                this.config.getString(path + ".display-name", id),
+                this.config.getString(path + ".kind", module.equals("npcs") ? this.stringValue("modules.npcs.default-type", "villager") : "mannequin"),
+                actorUuid(module, normalize(id), this.config.getString(path + ".uuid")),
+                world,
+                this.config.getDouble(path + ".x"),
+                this.config.getDouble(path + ".y"),
+                this.config.getDouble(path + ".z"),
+                (float) this.config.getDouble(path + ".yaw"),
+                (float) this.config.getDouble(path + ".pitch")
+            );
+        }
+    }
+
+    void setActorDefinition(final String module, final ActorDefinition actor) {
+        synchronized (this.lock) {
+            final String path = actorPath(module) + "." + normalize(actor.id());
+            this.config.set(path + ".display-name", actor.displayName());
+            this.config.set(path + ".kind", normalize(actor.kind()));
+            this.config.set(path + ".uuid", actor.uuid().toString());
+            this.config.set(path + ".world", actor.world());
+            this.config.set(path + ".x", actor.x());
+            this.config.set(path + ".y", actor.y());
+            this.config.set(path + ".z", actor.z());
+            this.config.set(path + ".yaw", actor.yaw());
+            this.config.set(path + ".pitch", actor.pitch());
+        }
+    }
+
+    void removeActorDefinition(final String module, final String id) {
+        synchronized (this.lock) {
+            this.config.set(actorPath(module) + "." + normalize(id), null);
+        }
+    }
+
+    void clearActorDefinitions(final String module) {
+        synchronized (this.lock) {
+            this.config.set(actorPath(module), null);
+        }
+    }
+
     void setSpawn(final Location location) {
         synchronized (this.lock) {
             this.config.set("modules.essentials.spawn.world", location.getWorld().getName());
@@ -125,7 +192,20 @@ final class HunterToolsPreferences {
             this.saveNow();
             return CompletableFuture.completedFuture(null);
         }
-        return CompletableFuture.runAsync(this::saveNow, executor);
+        synchronized (this.saveLock) {
+            this.pendingSave = this.pendingSave
+                .exceptionally(throwable -> null)
+                .thenRunAsync(this::saveNow, executor);
+            return this.pendingSave;
+        }
+    }
+
+    void flushPendingSaves() {
+        final CompletableFuture<Void> pending;
+        synchronized (this.saveLock) {
+            pending = this.pendingSave;
+        }
+        pending.join();
     }
 
     void saveNow() {
@@ -169,11 +249,36 @@ final class HunterToolsPreferences {
         for (final String command : managementCommands()) {
             changed |= this.setDefault("modules.management.commands." + command, true);
         }
+        changed |= this.setDefault("modules.fake-players.enabled", true);
+        changed |= this.setDefault("modules.fake-players.max-active", 64);
+        changed |= this.setDefault("modules.fake-players.persist", true);
+        changed |= this.setDefault("modules.fake-players.remove-on-disable", true);
+        for (final String command : actorCommands()) {
+            changed |= this.setDefault("modules.fake-players.commands." + command, true);
+        }
+        changed |= this.setDefault("modules.npcs.enabled", true);
+        changed |= this.setDefault("modules.npcs.max-active", 64);
+        changed |= this.setDefault("modules.npcs.persist", true);
+        changed |= this.setDefault("modules.npcs.remove-on-disable", true);
+        changed |= this.setDefault("modules.npcs.default-type", "villager");
+        changed |= this.setDefault("modules.npcs.villager-ai", false);
+        for (final String command : actorCommands()) {
+            changed |= this.setDefault("modules.npcs.commands." + command, true);
+        }
         changed |= this.setDefault("optimizations.enabled", true);
         changed |= this.setDefault("optimizations.hunter-tools.async-rendering", true);
         changed |= this.setDefault("optimizations.hunter-tools.async-save", true);
         changed |= this.setDefault("optimizations.hunter-tools.player-cache", true);
         changed |= this.setDefault("optimizations.hunter-tools.render-workers", Math.min(4, Math.max(2, Runtime.getRuntime().availableProcessors())));
+        changed |= this.setDefault("optimizations.hunter-tools.actor-async-load", true);
+        changed |= this.setDefault("optimizations.hunter-tools.actor-batch-save", true);
+        changed |= this.setDefault("optimizations.cpu.enabled", true);
+        changed |= this.setDefault("optimizations.cpu.mode", "balanced");
+        changed |= this.setDefault("optimizations.cpu.prefer-existing-jvm-flags", true);
+        changed |= this.setDefault("optimizations.cpu.paper-worker-threads", "auto");
+        changed |= this.setDefault("optimizations.cpu.divine-worker-threads", "auto");
+        changed |= this.setDefault("optimizations.cpu.netty-io-threads", "auto");
+        changed |= this.setDefault("optimizations.cpu.common-pool-parallelism", "auto");
         return changed;
     }
 
@@ -190,14 +295,71 @@ final class HunterToolsPreferences {
     }
 
     static List<String> managementCommands() {
-        return List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module");
+        return List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module", "optimize");
+    }
+
+    static List<String> actorCommands() {
+        return List.of("spawn", "remove", "list", "tp", "clear");
     }
 
     static String normalize(final String id) {
         return id.toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
+    static String actorId(final String id) {
+        final String normalized = normalize(id).replaceAll("[^a-z0-9-]", "");
+        return normalized.isBlank() ? "actor" : normalized;
+    }
+
+    private static String actorPath(final String module) {
+        return "modules." + normalize(module) + ".actors";
+    }
+
     private static World defaultWorld() {
         return Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().getFirst();
+    }
+
+    record ActorDefinition(
+        String id,
+        String displayName,
+        String kind,
+        UUID uuid,
+        String world,
+        double x,
+        double y,
+        double z,
+        float yaw,
+        float pitch
+    ) {
+        static ActorDefinition of(final String module, final String name, final String kind, final Location location) {
+            final String id = actorId(name);
+            return new ActorDefinition(
+                id,
+                name,
+                normalize(kind),
+                UUID.nameUUIDFromBytes(("huntercore:" + module + ":" + id).getBytes(StandardCharsets.UTF_8)),
+                location.getWorld().getName(),
+                location.getX(),
+                location.getY(),
+                location.getZ(),
+                location.getYaw(),
+                location.getPitch()
+            );
+        }
+
+        Location location() {
+            final World world = Bukkit.getWorld(this.world);
+            return world == null ? null : new Location(world, this.x, this.y, this.z, this.yaw, this.pitch);
+        }
+    }
+
+    private static UUID actorUuid(final String module, final String id, final String configured) {
+        if (configured != null && !configured.isBlank()) {
+            try {
+                return UUID.fromString(configured);
+            } catch (final IllegalArgumentException ignored) {
+            }
+        }
+        return UUID.nameUUIDFromBytes(("huntercore:" + module + ":" + id).getBytes(StandardCharsets.UTF_8));
     }
 }

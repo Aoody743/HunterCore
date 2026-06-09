@@ -208,7 +208,7 @@ public class DivineConfig {
 
         // Async pathfinding settings
         public static boolean asyncPathfinding = true;
-        public static int asyncPathfindingMaxThreads = 1;
+        public static int asyncPathfindingMaxThreads = 0;
         public static int asyncPathfindingKeepalive = 60;
         public static int asyncPathfindingQueueSize = 0;
         public static PathfindTaskRejectPolicy asyncPathfindingRejectPolicy = PathfindTaskRejectPolicy.CALLER_RUNS;
@@ -216,13 +216,13 @@ public class DivineConfig {
         // Multithreaded tracker settings
         public static boolean multithreadedEnabled = true;
         public static boolean multithreadedCompatModeEnabled = false;
-        public static int asyncEntityTrackerMaxThreads = 1;
+        public static int asyncEntityTrackerMaxThreads = 0;
         public static int asyncEntityTrackerKeepalive = 60;
         public static int asyncEntityTrackerQueueSize = 0;
 
         // Async chunk sending settings
         public static boolean asyncChunkSendingEnabled = true;
-        public static int asyncChunkSendingMaxThreads = 1;
+        public static int asyncChunkSendingMaxThreads = 0;
 
         // Async mob spawning settings
         public static boolean enableAsyncSpawning = true;
