@@ -95,12 +95,12 @@ commands:
     permission: huntertools.command.back
   fakeplayer:
     description: Manage HunterCore lightweight fake players.
-    usage: /fakeplayer <spawn|remove|list|tp|clear>
+    usage: /fakeplayer <spawn|remove|list|tp|tphere|look|pose|info|clear>
     aliases: [fp, hfake]
     permission: huntertools.command.fakeplayer
   npc:
     description: Manage HunterCore NPCs.
-    usage: /npc <spawn|remove|list|tp|clear>
+    usage: /npc <spawn|remove|list|tp|tphere|look|pose|info|clear>
     aliases: [hnpc]
     permission: huntertools.command.npc
 permissions:

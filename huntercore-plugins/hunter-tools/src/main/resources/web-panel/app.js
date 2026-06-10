@@ -80,6 +80,7 @@ const translations = {
     'actors.fakePlayer': '假人',
     'actors.villager': '村民',
     'actors.mannequin': '模型假人',
+    'actors.pose': '姿态',
     'actors.notConfigured': '未配置',
     'actors.live': '在线',
     'actors.configured': '已配置',
@@ -210,6 +211,7 @@ const translations = {
     'actors.fakePlayer': 'Fake player',
     'actors.villager': 'Villager',
     'actors.mannequin': 'Mannequin',
+    'actors.pose': 'pose',
     'actors.notConfigured': 'not configured',
     'actors.live': 'live',
     'actors.configured': 'configured',
@@ -456,7 +458,7 @@ function actorLine(actor) {
     ? `${actor.world} ${Number(actor.x).toFixed(1)} ${Number(actor.y).toFixed(1)} ${Number(actor.z).toFixed(1)}`
     : t('actors.notConfigured');
   return `<div class="dataItem">
-    <span>${esc(actor.displayName)}<small>${actor.live ? t('actors.live') : t('actors.configured')} · ${esc(actor.module)} · ${esc(actor.kind)} · ${esc(location)}</small></span>
+    <span>${esc(actor.displayName)}<small>${actor.live ? t('actors.live') : t('actors.configured')} · ${esc(actor.module)} · ${esc(actor.kind)} · ${esc(t('actors.pose'))}: ${esc(actor.pose || 'standing')} · ${esc(location)}</small></span>
     <span class="actorActions"><button type="button" data-actor-remove="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">${esc(t('action.remove'))}</button></span>
   </div>`;
 }

@@ -679,6 +679,7 @@ final class HunterWebPanelManager {
                 numberField(json, "z", actor.z()).append(',');
                 numberField(json, "yaw", actor.yaw()).append(',');
                 numberField(json, "pitch", actor.pitch()).append(',');
+                field(json, "pose", actor.pose()).append(',');
                 booleanField(json, "live", actor.live()).append(',');
                 field(json, "entityUuid", actor.entityUuid());
                 json.append('}');
@@ -2405,7 +2406,7 @@ final class HunterWebPanelManager {
         const alertItem = (alert) => `<div class="item alert ${severityClass(alert.severity)}"><span>${esc(alert.label)}</span><strong>${esc(alert.detail)}</strong></div>`;
         const actorLine = (actor) => {
           const location = actor.world ? `${actor.world} ${Number(actor.x).toFixed(1)} ${Number(actor.y).toFixed(1)} ${Number(actor.z).toFixed(1)}` : 'not configured';
-          return `<div class="item"><span>${esc(actor.displayName)} <small>${actor.live ? 'live' : 'configured'} · ${esc(actor.module)} · ${esc(actor.kind)} · ${esc(location)}</small></span><button type="button" data-actor-remove="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">Remove</button></div>`;
+          return `<div class="item"><span>${esc(actor.displayName)} <small>${actor.live ? 'live' : 'configured'} · ${esc(actor.module)} · ${esc(actor.kind)} · pose: ${esc(actor.pose || 'standing')} · ${esc(location)}</small></span><button type="button" data-actor-remove="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">Remove</button></div>`;
         };
         const allowedLine = (user) => {
           if (!user.allowedCommandsConfigured) return 'inherit';

@@ -105,11 +105,19 @@ HunterTools 还会内置一组常用管理和生存服工具：
 /fakeplayer remove <name>
 /fakeplayer list
 /fakeplayer tp <name> [world x y z [yaw pitch]]
+/fakeplayer tphere <name>
+/fakeplayer look <name> [yaw pitch|north|south|east|west|up|down]
+/fakeplayer pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
+/fakeplayer info [name]
 /fakeplayer clear
 /npc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]
 /npc remove <name>
 /npc list
 /npc tp <name> [world x y z [yaw pitch]]
+/npc tphere <name>
+/npc look <name> [yaw pitch|north|south|east|west|up|down]
+/npc pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
+/npc info [name]
 /npc clear
 ```
 
@@ -127,7 +135,9 @@ web-panel
 
 这些模块和命令都可以通过 `preferences.yml` 或 `/hunteradmin`、`/huntercore preferences` 开关。
 
-`/fakeplayer` 使用 Minecraft 的 Mannequin 实体创建轻量假人，适合大厅展示、压测可视目标和基础交互占位。`/npc` 支持 `villager` 和 `mannequin` 两种类型。两者都会写入 `plugins/HunterCore/preferences.yml`，重启后由 HunterTools 重建。
+`/fakeplayer` 使用 Minecraft 的 Mannequin 实体创建轻量假人，适合大厅展示、压测可视目标和基础交互占位。它现在支持传送到坐标、传送到玩家身边、朝向调整、固定姿态和信息查看，姿态会持久化到 `plugins/HunterCore/preferences.yml`。`/npc` 支持 `villager` 和 `mannequin` 两种类型，也支持同样的摆位和信息命令。
+
+这些轻量假人不会作为真实 `ServerPlayer` 加入服务器，因此不会占用在线玩家槽、加载区块、触发完整玩家连接流程，或执行 Carpet 风格的持续右键/左键/跳跃/潜行循环。后续如果需要更接近 Carpet 的生电假人，建议作为单独的真实假人模块实现。
 
 ## 网页面板和地图
 

@@ -92,11 +92,19 @@ To add another external bundled plugin, extend that script with a download/build
 /fakeplayer remove <name>
 /fakeplayer list
 /fakeplayer tp <name> [world x y z [yaw pitch]]
+/fakeplayer tphere <name>
+/fakeplayer look <name> [yaw pitch|north|south|east|west|up|down]
+/fakeplayer pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
+/fakeplayer info [name]
 /fakeplayer clear
 /npc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]
 /npc remove <name>
 /npc list
 /npc tp <name> [world x y z [yaw pitch]]
+/npc tphere <name>
+/npc look <name> [yaw pitch|north|south|east|west|up|down]
+/npc pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
+/npc info [name]
 /npc clear
 ```
 
@@ -104,7 +112,9 @@ To add another external bundled plugin, extend that script with a download/build
 
 HunterTools provides TPS actionbar/sidebar display plus essentials-style commands such as `/heal`, `/feed`, `/fly`, `/gm`, `/day`, `/night`, `/sun`, `/rain`, `/thunder`, `/broadcast`, `/clearchat`, `/speed`, `/spawn`, `/setspawn`, and `/back`.
 
-`/fakeplayer` creates lightweight Mannequin-based fake players. `/npc` creates managed Villager or Mannequin NPCs. Both are persisted in `plugins/HunterCore/preferences.yml` and rebuilt on startup/reload.
+`/fakeplayer` creates lightweight Mannequin-based fake players with placement commands for teleporting, moving to the sender, rotating, fixed poses, and info output. `/npc` creates managed Villager or Mannequin NPCs and shares the same placement/info commands where the entity type supports them. Both are persisted in `plugins/HunterCore/preferences.yml` and rebuilt on startup/reload.
+
+These lightweight actors are not real `ServerPlayer` connections, so they do not occupy player slots, load chunks, or run Carpet-style continuous use/attack/jump/sneak actions. A closer Carpet-like fake player should be implemented as a separate real-player simulation module.
 
 ## Web Panel And Map
 

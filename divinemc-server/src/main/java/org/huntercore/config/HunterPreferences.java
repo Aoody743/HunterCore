@@ -150,7 +150,7 @@ public final class HunterPreferences {
         changed |= this.setDefault("modules.fake-players.max-active", 64);
         changed |= this.setDefault("modules.fake-players.persist", true);
         changed |= this.setDefault("modules.fake-players.remove-on-disable", true);
-        for (final String command : List.of("spawn", "remove", "list", "tp", "clear")) {
+        for (final String command : List.of("spawn", "remove", "list", "tp", "tphere", "look", "pose", "info", "clear")) {
             changed |= this.setDefault("modules.fake-players.commands." + command, true);
         }
         changed |= this.setDefault("modules.npcs.enabled", true);
@@ -159,7 +159,7 @@ public final class HunterPreferences {
         changed |= this.setDefault("modules.npcs.remove-on-disable", true);
         changed |= this.setDefault("modules.npcs.default-type", "villager");
         changed |= this.setDefault("modules.npcs.villager-ai", false);
-        for (final String command : List.of("spawn", "remove", "list", "tp", "clear")) {
+        for (final String command : List.of("spawn", "remove", "list", "tp", "tphere", "look", "pose", "info", "clear")) {
             changed |= this.setDefault("modules.npcs.commands." + command, true);
         }
         changed |= this.setDefault("modules.web-panel.enabled", true);

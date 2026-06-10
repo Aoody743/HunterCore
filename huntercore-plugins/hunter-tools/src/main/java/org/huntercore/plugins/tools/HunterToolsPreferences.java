@@ -197,7 +197,8 @@ final class HunterToolsPreferences {
                 this.config.getDouble(path + ".y"),
                 this.config.getDouble(path + ".z"),
                 (float) this.config.getDouble(path + ".yaw"),
-                (float) this.config.getDouble(path + ".pitch")
+                (float) this.config.getDouble(path + ".pitch"),
+                normalize(this.config.getString(path + ".pose", "standing"))
             );
         }
     }
@@ -214,6 +215,7 @@ final class HunterToolsPreferences {
             this.config.set(path + ".z", actor.z());
             this.config.set(path + ".yaw", actor.yaw());
             this.config.set(path + ".pitch", actor.pitch());
+            this.config.set(path + ".pose", normalize(actor.pose()));
         }
     }
 
@@ -409,7 +411,7 @@ final class HunterToolsPreferences {
     }
 
     static List<String> actorCommands() {
-        return List.of("spawn", "remove", "list", "tp", "clear");
+        return List.of("spawn", "remove", "list", "tp", "tphere", "look", "pose", "info", "clear");
     }
 
     static List<String> defaultWebPlayerCommands() {
@@ -448,9 +450,14 @@ final class HunterToolsPreferences {
         double y,
         double z,
         float yaw,
-        float pitch
+        float pitch,
+        String pose
     ) {
         static ActorDefinition of(final String module, final String name, final String kind, final Location location) {
+            return of(module, name, kind, location, "standing");
+        }
+
+        static ActorDefinition of(final String module, final String name, final String kind, final Location location, final String pose) {
             final String id = actorId(name);
             return new ActorDefinition(
                 id,
@@ -462,7 +469,8 @@ final class HunterToolsPreferences {
                 location.getY(),
                 location.getZ(),
                 location.getYaw(),
-                location.getPitch()
+                location.getPitch(),
+                normalize(pose)
             );
         }
 
