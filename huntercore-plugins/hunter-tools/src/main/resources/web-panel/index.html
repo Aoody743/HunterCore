@@ -7,6 +7,25 @@
   <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
+  <svg class="liquidGlassDefs" width="0" height="0" aria-hidden="true" focusable="false">
+    <filter id="liquid-glass-refraction" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018" numOctaves="2" seed="21" result="noise"></feTurbulence>
+      <feGaussianBlur in="noise" stdDeviation="1.35" result="softNoise"></feGaussianBlur>
+      <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="18" xChannelSelector="R" yChannelSelector="G" result="refracted"></feDisplacementMap>
+      <feColorMatrix in="refracted" type="saturate" values="1.28" result="saturated"></feColorMatrix>
+      <feComponentTransfer in="saturated">
+        <feFuncR type="gamma" amplitude="1.02" exponent="0.96" offset="0"></feFuncR>
+        <feFuncG type="gamma" amplitude="1.02" exponent="0.96" offset="0"></feFuncG>
+        <feFuncB type="gamma" amplitude="1.02" exponent="0.96" offset="0"></feFuncB>
+      </feComponentTransfer>
+    </filter>
+    <filter id="liquid-glass-control" x="-16%" y="-16%" width="132%" height="132%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018 0.026" numOctaves="2" seed="13" result="noise"></feTurbulence>
+      <feGaussianBlur in="noise" stdDeviation="0.85" result="softNoise"></feGaussianBlur>
+      <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="9" xChannelSelector="R" yChannelSelector="G" result="refracted"></feDisplacementMap>
+      <feColorMatrix in="refracted" type="saturate" values="1.18"></feColorMatrix>
+    </filter>
+  </svg>
   <main class="app">
     <section class="mapStage" aria-label="Server map">
       <iframe id="mapFrame" title="BlueMap"></iframe>

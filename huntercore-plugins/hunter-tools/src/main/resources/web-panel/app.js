@@ -19,6 +19,24 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
 })[char]);
 
 const severityClass = (value) => ['ok', 'warning', 'critical', 'disabled'].includes(value) ? value : 'ok';
+const liquidGlassSelector = [
+  '.topNav',
+  '.sessionDock',
+  '.panel',
+  '.pluginItem',
+  '.toggleItem',
+  '.primaryButton',
+  '.secondaryButton',
+  '.smallButton',
+  '.quickRow button',
+  'input',
+  'select',
+  '.navButton',
+  '.productMark',
+  '.statusPill',
+  '.roleBadge',
+  '.stateChip'
+].join(',');
 
 function setOutput(message, output = '') {
   $('commandResult').textContent = output ? `${message}\n\n${output}` : message;
@@ -251,6 +269,66 @@ function updateActorKind() {
   if (fake) $('actorKind').value = 'mannequin';
 }
 
+function liquidGlassElement(target) {
+  return target instanceof Element ? target.closest(liquidGlassSelector) : null;
+}
+
+function updateLiquidGlassPointer(element, event) {
+  const rect = element.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const x = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
+  const y = Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100));
+  const tiltX = ((x - 50) / 50) * 3.6;
+  const tiltY = ((50 - y) / 50) * 3.2;
+  element.style.setProperty('--glass-x', `${x.toFixed(2)}%`);
+  element.style.setProperty('--glass-y', `${y.toFixed(2)}%`);
+  element.style.setProperty('--tilt-x', `${tiltX.toFixed(2)}deg`);
+  element.style.setProperty('--tilt-y', `${tiltY.toFixed(2)}deg`);
+}
+
+function relaxLiquidGlass(element) {
+  element.style.setProperty('--tilt-x', '0deg');
+  element.style.setProperty('--tilt-y', '0deg');
+  element.style.setProperty('--press', '0');
+}
+
+function bindLiquidGlass() {
+  let pressed = null;
+
+  document.addEventListener('pointermove', (event) => {
+    const element = liquidGlassElement(event.target);
+    if (!element) return;
+    updateLiquidGlassPointer(element, event);
+  }, { passive: true });
+
+  document.addEventListener('pointerdown', (event) => {
+    const element = liquidGlassElement(event.target);
+    if (!element) return;
+    updateLiquidGlassPointer(element, event);
+    element.style.setProperty('--press', '1');
+    pressed = element;
+  }, { passive: true });
+
+  document.addEventListener('pointerup', () => {
+    if (!pressed) return;
+    pressed.style.setProperty('--press', '0');
+    pressed = null;
+  }, { passive: true });
+
+  document.addEventListener('pointercancel', () => {
+    if (!pressed) return;
+    pressed.style.setProperty('--press', '0');
+    pressed = null;
+  }, { passive: true });
+
+  document.addEventListener('pointerout', (event) => {
+    const element = liquidGlassElement(event.target);
+    if (!element) return;
+    if (event.relatedTarget instanceof Node && element.contains(event.relatedTarget)) return;
+    relaxLiquidGlass(element);
+  }, { passive: true });
+}
+
 function bindEvents() {
   $$('.navButton').forEach((button) => {
     button.addEventListener('click', () => {
@@ -476,6 +554,7 @@ function bindEvents() {
   });
 }
 
+bindLiquidGlass();
 bindEvents();
 updateActorKind();
 refresh().catch((error) => {

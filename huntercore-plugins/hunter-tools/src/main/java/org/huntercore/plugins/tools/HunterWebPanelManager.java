@@ -225,6 +225,10 @@ final class HunterWebPanelManager {
                 this.send(exchange, 200, "application/javascript; charset=utf-8", webAsset("app.js", APP_JS));
                 return;
             }
+            if (path.equals("/assets/panel-bg.jpg")) {
+                this.sendBytes(exchange, 200, "image/jpeg", webAssetBytes("panel-bg.jpg"));
+                return;
+            }
             if (path.equals("/health")) {
                 this.send(exchange, 200, "text/plain; charset=utf-8", "ok\n");
                 return;
@@ -1574,6 +1578,20 @@ final class HunterWebPanelManager {
         }
     }
 
+    private void sendBytes(final HttpExchange exchange, final int status, final String type, final byte[] bytes) {
+        try {
+            final Headers headers = exchange.getResponseHeaders();
+            headers.set("Content-Type", type);
+            headers.set("Cache-Control", "no-store");
+            headers.set("X-Content-Type-Options", "nosniff");
+            exchange.sendResponseHeaders(status, bytes.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(bytes);
+            }
+        } catch (final IOException ignored) {
+        }
+    }
+
     private String newToken() {
         final byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
@@ -1808,6 +1826,17 @@ final class HunterWebPanelManager {
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         } catch (final IOException ex) {
             return fallback;
+        }
+    }
+
+    private static byte[] webAssetBytes(final String name) {
+        try (InputStream input = HunterWebPanelManager.class.getResourceAsStream("/web-panel/" + name)) {
+            if (input == null) {
+                return new byte[0];
+            }
+            return input.readAllBytes();
+        } catch (final IOException ex) {
+            return new byte[0];
         }
     }
 
