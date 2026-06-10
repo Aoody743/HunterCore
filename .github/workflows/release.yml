@@ -68,7 +68,6 @@ jobs:
           out="build/huntercore-release"
           mkdir -p "$out"
           cp divinemc-server/build/libs/divinemc-paperclip-*.jar "$out/HunterCore-${version}-paperclip.jar"
-          cp divinemc-api/build/libs/divinemc-api-*.jar "$out/" || true
           (cd "$out" && sha256sum * > SHA256SUMS.txt)
           {
             echo "tag=$tag"
