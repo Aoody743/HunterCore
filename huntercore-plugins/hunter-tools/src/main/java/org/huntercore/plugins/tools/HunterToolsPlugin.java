@@ -41,6 +41,7 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.server.ServerListPingEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -57,7 +58,7 @@ import org.jetbrains.annotations.Nullable;
 
 public final class HunterToolsPlugin extends JavaPlugin implements CommandExecutor, TabCompleter, Listener {
     private static final String CLIENT_BRAND = "\"HunterCraft\" Server";
-    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "web-panel");
+    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "web-panel");
     private static final String MOTD = "motd";
     private static final String COMMAND_OVERRIDES = "command-overrides";
     private static final String ESSENTIALS = "essentials";
@@ -65,6 +66,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private static final String FAKE_PLAYERS = "fake-players";
     private static final String REAL_FAKE_PLAYERS = "real-fake-players";
     private static final String NPCS = "npcs";
+    private static final String AI = "ai";
     private static final String WEB_PANEL = "web-panel";
     private static final String[] SIDEBAR_KEYS = {
         "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a", "§b", "§c", "§d", "§e", "§f"
@@ -75,6 +77,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private HunterToolsPreferences preferences;
     private HunterActorManager actorManager;
     private HunterRealFakePlayerManager realFakePlayerManager;
+    private HunterAiManager aiManager;
     private HunterWebPanelManager webPanelManager;
     private ExecutorService workerExecutor;
     private MetricsSnapshot snapshot = MetricsSnapshot.empty();
@@ -90,6 +93,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.workerExecutor = this.createWorkerExecutor();
         this.actorManager = new HunterActorManager(this, this.preferences, this.workerExecutor);
         this.realFakePlayerManager = new HunterRealFakePlayerManager(this, this.preferences);
+        this.aiManager = new HunterAiManager(this, this.preferences, this.workerExecutor);
         this.webPanelManager = new HunterWebPanelManager(this, this.preferences);
         this.registerCommands();
         this.getServer().getPluginManager().registerEvents(this, this);
@@ -268,11 +272,26 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
     }
 
+    @SuppressWarnings("deprecation")
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onPlayerChat(final AsyncPlayerChatEvent event) {
+        if (this.aiManager != null && this.aiManager.handleChat(event.getPlayer(), event.getMessage())) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler(priority = EventPriority.NORMAL)
     public void onActorInteract(final PlayerInteractEntityEvent event) {
-        if (this.actorManager != null && this.actorManager.handleInteract(event.getPlayer(), event.getRightClicked())) {
-            event.setCancelled(true);
-            return;
+        if (this.actorManager != null) {
+            if (this.actorManager.handleInteract(event.getPlayer(), event.getRightClicked())) {
+                event.setCancelled(true);
+                return;
+            }
+            final HunterActorManager.ActorInteraction interaction = this.actorManager.interaction(event.getRightClicked());
+            if (interaction != null && this.aiManager != null && this.aiManager.handleActorInteract(event.getPlayer(), interaction)) {
+                event.setCancelled(true);
+                return;
+            }
         }
         if (this.realFakePlayerManager != null && this.realFakePlayerManager.handleInteract(event.getPlayer(), event.getRightClicked())) {
             event.setCancelled(true);
@@ -523,7 +542,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.GOLD + "HunterAdmin: " + ChatColor.YELLOW + "reload, modules, module, command, plugins, memory, gc, threads, optimize, motd, web");
+            sender.sendMessage(ChatColor.GOLD + "HunterAdmin: " + ChatColor.YELLOW + "reload, modules, module, command, plugins, memory, gc, threads, optimize, motd, web, ai");
             return true;
         }
         final String sub = args[0].toLowerCase(Locale.ROOT);
@@ -539,8 +558,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "optimize" -> this.adminOptimize(sender);
             case "motd" -> this.adminMotd(sender, args);
             case "web" -> this.adminWeb(sender, args);
+            case "ai" -> this.adminAi(sender, args);
             default -> {
-                sender.sendMessage("Usage: /hunteradmin <reload|modules|module|command|plugins|memory|gc|threads|optimize|motd|web>");
+                sender.sendMessage("Usage: /hunteradmin <reload|modules|module|command|plugins|memory|gc|threads|optimize|motd|web|ai>");
                 yield true;
             }
         };
@@ -555,6 +575,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (this.actorManager != null) {
             this.actorManager.setExecutor(this.workerExecutor);
             this.actorManager.reload();
+        }
+        if (this.aiManager != null) {
+            this.aiManager.setExecutor(this.workerExecutor);
         }
         if (this.realFakePlayerManager != null && !this.preferences.moduleEnabled(REAL_FAKE_PLAYERS)) {
             this.realFakePlayerManager.shutdown();
@@ -953,6 +976,169 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.preferences.save(this.workerExecutor);
         sender.sendMessage("HunterCore public map access set to " + enabled + ".");
         return true;
+    }
+
+    private boolean adminAi(final CommandSender sender, final String[] args) {
+        if (!this.managementCommandEnabled(sender, "ai")) {
+            return true;
+        }
+        if (args.length < 2 || args[1].equalsIgnoreCase("status")) {
+            sender.sendMessage(ChatColor.GOLD + "HunterCore AI");
+            sender.sendMessage(ChatColor.GRAY + "Module: " + ChatColor.WHITE + this.preferences.moduleEnabled(AI));
+            sender.sendMessage(ChatColor.GRAY + "Base URL: " + ChatColor.WHITE + this.preferences.stringValue("modules.ai.base-url", "https://api.openai.com/v1"));
+            sender.sendMessage(ChatColor.GRAY + "Model: " + ChatColor.WHITE + this.preferences.stringValue("modules.ai.model", "gpt-4o-mini"));
+            sender.sendMessage(ChatColor.GRAY + "API key: " + ChatColor.WHITE + (this.aiApiKeyConfigured() ? "configured" : "missing"));
+            sender.sendMessage(ChatColor.GRAY + "Chat: " + ChatColor.WHITE + this.preferences.booleanValue("modules.ai.chat.enabled", true)
+                + ChatColor.GRAY + " prefix " + ChatColor.WHITE + this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai"));
+            sender.sendMessage(ChatColor.GRAY + "NPC: " + ChatColor.WHITE + this.preferences.booleanValue("modules.ai.npc.enabled", true)
+                + ChatColor.GRAY + " actions " + ChatColor.WHITE + this.preferences.booleanValue("modules.ai.npc.allow-actions", true));
+            return true;
+        }
+
+        final String sub = HunterToolsPreferences.normalize(args[1]);
+        switch (sub) {
+            case "enable", "on" -> {
+                this.preferences.setModuleEnabled(AI, true);
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI module enabled.");
+                return true;
+            }
+            case "disable", "off" -> {
+                this.preferences.setModuleEnabled(AI, false);
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI module disabled.");
+                return true;
+            }
+            case "model" -> {
+                if (args.length != 3 || args[2].isBlank() || args[2].length() > 128) {
+                    sender.sendMessage("Usage: /hunteradmin ai model <model>");
+                    return true;
+                }
+                this.preferences.setValue("modules.ai.model", args[2].trim());
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI model set to " + args[2].trim() + ".");
+                return true;
+            }
+            case "base-url", "baseurl", "url" -> {
+                if (args.length != 3 || args[2].isBlank() || args[2].length() > 512) {
+                    sender.sendMessage("Usage: /hunteradmin ai base-url <url>");
+                    return true;
+                }
+                this.preferences.setValue("modules.ai.base-url", args[2].trim());
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI base URL updated.");
+                return true;
+            }
+            case "key", "api-key" -> {
+                if (args.length != 3 || args[2].isBlank() || args[2].length() > 512) {
+                    sender.sendMessage("Usage: /hunteradmin ai key <api-key>");
+                    return true;
+                }
+                this.preferences.setValue("modules.ai.api-key", args[2].trim());
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI API key saved.");
+                return true;
+            }
+            case "clear-key", "clearkey" -> {
+                this.preferences.setValue("modules.ai.api-key", "");
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI API key cleared. Env fallback can still be used.");
+                return true;
+            }
+            case "env", "api-key-env" -> {
+                if (args.length != 3 || args[2].isBlank() || args[2].length() > 128) {
+                    sender.sendMessage("Usage: /hunteradmin ai env <ENV_NAME>");
+                    return true;
+                }
+                this.preferences.setValue("modules.ai.api-key-env", args[2].trim());
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI API key env set to " + args[2].trim() + ".");
+                return true;
+            }
+            case "prefix" -> {
+                if (args.length != 3 || args[2].isBlank() || args[2].length() > 32) {
+                    sender.sendMessage("Usage: /hunteradmin ai prefix <trigger>");
+                    return true;
+                }
+                this.preferences.setValue("modules.ai.chat.trigger-prefix", args[2].trim());
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI chat prefix set to " + args[2].trim() + ".");
+                return true;
+            }
+            case "chat", "npc" -> {
+                if (args.length != 3) {
+                    sender.sendMessage("Usage: /hunteradmin ai " + sub + " <on|off>");
+                    return true;
+                }
+                final Boolean enabled = parseToggle(args[2]);
+                if (enabled == null) {
+                    sender.sendMessage("Use on/off.");
+                    return true;
+                }
+                this.preferences.setValue("modules.ai." + sub + ".enabled", enabled);
+                this.preferences.save(this.workerExecutor);
+                sender.sendMessage("HunterCore AI " + sub + " set to " + enabled + ".");
+                return true;
+            }
+            case "temperature" -> {
+                if (args.length != 3) {
+                    sender.sendMessage("Usage: /hunteradmin ai temperature <0.0-2.0>");
+                    return true;
+                }
+                try {
+                    final double temperature = Double.parseDouble(args[2]);
+                    if (temperature < 0.0D || temperature > 2.0D) {
+                        sender.sendMessage("Temperature must be between 0.0 and 2.0.");
+                        return true;
+                    }
+                    this.preferences.setValue("modules.ai.temperature", temperature);
+                    this.preferences.save(this.workerExecutor);
+                    sender.sendMessage("HunterCore AI temperature set to " + temperature + ".");
+                } catch (final NumberFormatException ex) {
+                    sender.sendMessage("Temperature must be a number.");
+                }
+                return true;
+            }
+            case "max-tokens", "maxtokens" -> {
+                if (args.length != 3) {
+                    sender.sendMessage("Usage: /hunteradmin ai max-tokens <16-4096>");
+                    return true;
+                }
+                try {
+                    final int maxTokens = Integer.parseInt(args[2]);
+                    if (maxTokens < 16 || maxTokens > 4096) {
+                        sender.sendMessage("Max tokens must be between 16 and 4096.");
+                        return true;
+                    }
+                    this.preferences.setValue("modules.ai.max-tokens", maxTokens);
+                    this.preferences.save(this.workerExecutor);
+                    sender.sendMessage("HunterCore AI max tokens set to " + maxTokens + ".");
+                } catch (final NumberFormatException ex) {
+                    sender.sendMessage("Max tokens must be a number.");
+                }
+                return true;
+            }
+            case "test" -> {
+                if (args.length < 3) {
+                    sender.sendMessage("Usage: /hunteradmin ai test <prompt>");
+                    return true;
+                }
+                final String prompt = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)).trim();
+                sender.sendMessage("HunterCore AI test request started...");
+                this.testAiPrompt(prompt).whenComplete((response, error) -> this.getServer().getScheduler().runTask(this, () -> {
+                    if (error != null) {
+                        sender.sendMessage(ChatColor.RED + "HunterCore AI test failed: " + (error.getCause() == null ? error.getMessage() : error.getCause().getMessage()));
+                    } else {
+                        sender.sendMessage(ChatColor.AQUA + "AI > " + ChatColor.WHITE + response);
+                    }
+                }));
+                return true;
+            }
+            default -> {
+                sender.sendMessage("Usage: /hunteradmin ai <status|enable|disable|model|base-url|key|clear-key|env|prefix|chat|npc|temperature|max-tokens|test>");
+                return true;
+            }
+        }
     }
 
     private boolean heal(final CommandSender sender, final String[] args) {
@@ -1376,7 +1562,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private List<String> adminCompletions(final String[] args) {
         if (args.length == 1) {
-            return matching(args[0], List.of("reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize", "motd", "web"));
+            return matching(args[0], List.of("reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize", "motd", "web", "ai"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("motd")) {
             return matching(args[1], List.of("status", "line1", "line2", "max"));
@@ -1407,6 +1593,18 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("execution")) {
             return matching(args[3], List.of("on", "off"));
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("ai")) {
+            return matching(args[1], List.of("status", "enable", "disable", "model", "base-url", "key", "clear-key", "env", "prefix", "chat", "npc", "temperature", "max-tokens", "test"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("chat") || args[1].equalsIgnoreCase("npc"))) {
+            return matching(args[2], List.of("on", "off"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("model")) {
+            return matching(args[2], List.of("gpt-4o-mini", "gpt-4.1-mini"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("base-url") || args[1].equalsIgnoreCase("url"))) {
+            return matching(args[2], List.of("https://api.openai.com/v1"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("module")) {
             return matching(args[1], MODULES);
@@ -1466,6 +1664,20 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return this.realFakePlayerManager != null && this.realFakePlayerManager.setClickCommand(id, command);
         }
         return this.actorManager != null && this.actorManager.setClickCommand(module, id, command);
+    }
+
+    boolean setActorAi(final String module, final String id, final boolean enabled, final String persona) {
+        return this.actorManager != null && this.actorManager.setActorAi(module, id, enabled, persona);
+    }
+
+    CompletableFuture<String> testAiPrompt(final String prompt) {
+        return this.aiManager == null
+            ? CompletableFuture.failedFuture(new IllegalStateException("HunterCore AI manager is not available."))
+            : this.aiManager.completeTest(prompt);
+    }
+
+    boolean aiApiKeyConfigured() {
+        return this.aiManager != null && this.aiManager.apiKeyConfigured();
     }
 
     private void sendCommandOverride(final Player player, final String target) {

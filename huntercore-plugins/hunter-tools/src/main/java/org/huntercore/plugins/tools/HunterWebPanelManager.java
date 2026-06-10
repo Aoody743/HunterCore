@@ -68,7 +68,7 @@ final class HunterWebPanelManager {
         .build();
     private static final int HASH_ITERATIONS = 120_000;
     private static final int HASH_BITS = 256;
-    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "web-panel");
+    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "web-panel");
     private static final Map<String, List<String>> MODULE_COMMANDS = Map.of(
         "essentials", HunterToolsPreferences.essentialsCommands(),
         "management", HunterToolsPreferences.managementCommands(),
@@ -293,6 +293,11 @@ final class HunterWebPanelManager {
                 this.adminActorClickCommand(exchange);
                 return;
             }
+            if (path.equals("/api/admin/actor/ai")) {
+                this.requireMethod(exchange, "POST");
+                this.adminActorAi(exchange);
+                return;
+            }
             if (path.equals("/api/admin/web-user/save")) {
                 this.requireMethod(exchange, "POST");
                 this.adminWebUserSave(exchange);
@@ -316,6 +321,16 @@ final class HunterWebPanelManager {
             if (path.equals("/api/admin/command-messages")) {
                 this.requireMethod(exchange, "POST");
                 this.adminCommandMessages(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/ai-settings")) {
+                this.requireMethod(exchange, "POST");
+                this.adminAiSettings(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/ai-test")) {
+                this.requireMethod(exchange, "POST");
+                this.adminAiTest(exchange);
                 return;
             }
             if (path.equals("/api/admin/plugin")) {
@@ -453,6 +468,7 @@ final class HunterWebPanelManager {
             json.append(",\"webUsers\":").append(this.webUsersJson());
             json.append(",\"webSettings\":").append(this.webSettingsJson());
             json.append(",\"commandMessages\":").append(this.commandMessagesJson());
+            json.append(",\"aiSettings\":").append(this.aiSettingsJson());
         }
         json.append('}');
         return json.toString();
@@ -694,6 +710,8 @@ final class HunterWebPanelManager {
                 numberField(json, "pitch", actor.pitch()).append(',');
                 field(json, "pose", actor.pose()).append(',');
                 field(json, "clickCommand", actor.clickCommand()).append(',');
+                booleanField(json, "aiEnabled", actor.aiEnabled()).append(',');
+                field(json, "aiPersona", actor.aiPersona()).append(',');
                 booleanField(json, "live", actor.live()).append(',');
                 field(json, "entityUuid", actor.entityUuid());
                 json.append('}');
@@ -718,6 +736,8 @@ final class HunterWebPanelManager {
             field(json, "pose", actor.gameMode()).append(',');
             field(json, "loops", actor.loops()).append(',');
             field(json, "clickCommand", actor.clickCommand()).append(',');
+            booleanField(json, "aiEnabled", false).append(',');
+            field(json, "aiPersona", "").append(',');
             booleanField(json, "live", true).append(',');
             field(json, "entityUuid", actor.entityUuid());
             json.append('}');
@@ -753,6 +773,36 @@ final class HunterWebPanelManager {
         json.append("\"opDenied\":").append(stringArrayJson(this.preferences.stringList(
             "modules.command-overrides.messages.op-denied",
             HunterToolsPreferences.defaultCommandOverrideLines("op-denied")
+        )));
+        json.append('}');
+        return json.toString();
+    }
+
+    private String aiSettingsJson() {
+        final StringBuilder json = new StringBuilder(1536);
+        json.append('{');
+        booleanField(json, "enabled", this.preferences.moduleEnabled("ai")).append(',');
+        field(json, "provider", this.preferences.stringValue("modules.ai.provider", "openai-compatible")).append(',');
+        field(json, "baseUrl", this.preferences.stringValue("modules.ai.base-url", "https://api.openai.com/v1")).append(',');
+        field(json, "model", this.preferences.stringValue("modules.ai.model", "gpt-4o-mini")).append(',');
+        booleanField(json, "apiKeyConfigured", this.plugin.aiApiKeyConfigured()).append(',');
+        field(json, "apiKeyEnv", this.preferences.stringValue("modules.ai.api-key-env", "OPENAI_API_KEY")).append(',');
+        numberField(json, "temperature", this.preferences.doubleValue("modules.ai.temperature", 0.7D)).append(',');
+        numberField(json, "maxTokens", this.preferences.intValue("modules.ai.max-tokens", 300)).append(',');
+        numberField(json, "timeoutSeconds", this.preferences.intValue("modules.ai.timeout-seconds", 30)).append(',');
+        booleanField(json, "chatEnabled", this.preferences.booleanValue("modules.ai.chat.enabled", true)).append(',');
+        field(json, "chatTriggerPrefix", this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai")).append(',');
+        numberField(json, "chatCooldownSeconds", this.preferences.intValue("modules.ai.chat.cooldown-seconds", 5)).append(',');
+        booleanField(json, "chatBroadcast", this.preferences.booleanValue("modules.ai.chat.broadcast", true)).append(',');
+        field(json, "chatSystemPrompt", this.preferences.stringValue("modules.ai.chat.system-prompt", "")).append(',');
+        booleanField(json, "npcEnabled", this.preferences.booleanValue("modules.ai.npc.enabled", true)).append(',');
+        numberField(json, "npcCooldownSeconds", this.preferences.intValue("modules.ai.npc.cooldown-seconds", 5)).append(',');
+        numberField(json, "npcResponseRadiusBlocks", this.preferences.intValue("modules.ai.npc.response-radius-blocks", 16)).append(',');
+        booleanField(json, "npcAllowActions", this.preferences.booleanValue("modules.ai.npc.allow-actions", true)).append(',');
+        field(json, "npcSystemPrompt", this.preferences.stringValue("modules.ai.npc.system-prompt", "")).append(',');
+        json.append("\"npcCommandWhitelist\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.ai.npc.command-whitelist",
+            List.of("say", "tell", "msg", "title", "effect", "playsound")
         )));
         json.append('}');
         return json.toString();
@@ -1001,6 +1051,32 @@ final class HunterWebPanelManager {
         this.send(exchange, 200, "application/json; charset=utf-8", json.toString());
     }
 
+    private void adminActorAi(final HttpExchange exchange) throws IOException {
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 24 * 1024));
+        final String module = HunterToolsPreferences.normalize(body.getOrDefault("module", ""));
+        if (!module.equals("npcs")) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"ai_only_supports_npcs\"}");
+            return;
+        }
+        final WebSession session = this.adminOperator(exchange, "npc");
+        if (session == null) {
+            return;
+        }
+        final String id = commandToken(body.getOrDefault("id", ""), 32);
+        final Boolean enabled = parseBoolean(body.getOrDefault("enabled", ""));
+        final String persona = body.getOrDefault("persona", "").replace("\r\n", "\n").replace('\r', '\n').trim();
+        if (id.isBlank() || enabled == null || persona.length() > 2048) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_actor_ai\"}");
+            return;
+        }
+        if (!this.plugin.setActorAi(module, id, enabled, persona)) {
+            this.send(exchange, 404, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"actor_not_found\"}");
+            return;
+        }
+        this.guestStatusCache = null;
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"message\":\"NPC AI settings saved.\"}");
+    }
+
     private void adminWebUserSave(final HttpExchange exchange) throws IOException {
         final WebSession session = this.adminOperator(exchange);
         if (session == null) {
@@ -1197,6 +1273,97 @@ final class HunterWebPanelManager {
         this.savePreferences();
         this.guestStatusCache = null;
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"messages\":" + this.commandMessagesJson() + "}");
+    }
+
+    private void adminAiSettings(final HttpExchange exchange) throws IOException {
+        final WebSession session = this.adminOperator(exchange);
+        if (session == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 48 * 1024));
+        final Boolean enabled = parseBoolean(body.getOrDefault("enabled", String.valueOf(this.preferences.moduleEnabled("ai"))));
+        final Boolean chatEnabled = parseBoolean(body.getOrDefault("chatEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.chat.enabled", true))));
+        final Boolean chatBroadcast = parseBoolean(body.getOrDefault("chatBroadcast", String.valueOf(this.preferences.booleanValue("modules.ai.chat.broadcast", true))));
+        final Boolean npcEnabled = parseBoolean(body.getOrDefault("npcEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.npc.enabled", true))));
+        final Boolean npcAllowActions = parseBoolean(body.getOrDefault("npcAllowActions", String.valueOf(this.preferences.booleanValue("modules.ai.npc.allow-actions", true))));
+        final String provider = body.getOrDefault("provider", "openai-compatible").trim();
+        final String baseUrl = body.getOrDefault("baseUrl", this.preferences.stringValue("modules.ai.base-url", "https://api.openai.com/v1")).trim();
+        final String model = body.getOrDefault("model", this.preferences.stringValue("modules.ai.model", "gpt-4o-mini")).trim();
+        final String apiKey = body.getOrDefault("apiKey", "").trim();
+        final Boolean clearApiKey = parseBoolean(body.getOrDefault("clearApiKey", "false"));
+        final String apiKeyEnv = body.getOrDefault("apiKeyEnv", this.preferences.stringValue("modules.ai.api-key-env", "OPENAI_API_KEY")).trim();
+        final String chatPrefix = body.getOrDefault("chatTriggerPrefix", this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai")).trim();
+        final String chatPrompt = body.getOrDefault("chatSystemPrompt", this.preferences.stringValue("modules.ai.chat.system-prompt", "")).trim();
+        final String npcPrompt = body.getOrDefault("npcSystemPrompt", this.preferences.stringValue("modules.ai.npc.system-prompt", "")).trim();
+        final Double temperature = parseDouble(body.getOrDefault("temperature", String.valueOf(this.preferences.doubleValue("modules.ai.temperature", 0.7D))), 0.0D, 2.0D);
+        final Integer maxTokens = parseInteger(body.getOrDefault("maxTokens", String.valueOf(this.preferences.intValue("modules.ai.max-tokens", 300))), 16, 4096);
+        final Integer timeoutSeconds = parseInteger(body.getOrDefault("timeoutSeconds", String.valueOf(this.preferences.intValue("modules.ai.timeout-seconds", 30))), 1, 120);
+        final Integer chatCooldown = parseInteger(body.getOrDefault("chatCooldownSeconds", String.valueOf(this.preferences.intValue("modules.ai.chat.cooldown-seconds", 5))), 0, 3600);
+        final Integer npcCooldown = parseInteger(body.getOrDefault("npcCooldownSeconds", String.valueOf(this.preferences.intValue("modules.ai.npc.cooldown-seconds", 5))), 0, 3600);
+        final Integer npcRadius = parseInteger(body.getOrDefault("npcResponseRadiusBlocks", String.valueOf(this.preferences.intValue("modules.ai.npc.response-radius-blocks", 16))), 0, 128);
+        final List<String> whitelist = parseCommandList(body.getOrDefault("npcCommandWhitelist", String.join(",", this.preferences.stringList(
+            "modules.ai.npc.command-whitelist",
+            List.of("say", "tell", "msg", "title", "effect", "playsound")
+        ))));
+
+        if (enabled == null || chatEnabled == null || chatBroadcast == null || npcEnabled == null || npcAllowActions == null
+            || clearApiKey == null || temperature == null || maxTokens == null || timeoutSeconds == null || chatCooldown == null
+            || npcCooldown == null || npcRadius == null || whitelist == null || provider.isBlank() || provider.length() > 64
+            || !validHttpUrl(baseUrl) || model.isBlank() || model.length() > 128 || apiKey.length() > 512
+            || apiKeyEnv.length() > 128 || chatPrefix.isBlank() || chatPrefix.length() > 32
+            || chatPrompt.length() > 4096 || npcPrompt.length() > 4096) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_ai_settings\"}");
+            return;
+        }
+
+        this.preferences.setModuleEnabled("ai", enabled);
+        this.preferences.setValue("modules.ai.provider", provider);
+        this.preferences.setValue("modules.ai.base-url", baseUrl);
+        this.preferences.setValue("modules.ai.model", model);
+        if (clearApiKey) {
+            this.preferences.setValue("modules.ai.api-key", "");
+        } else if (!apiKey.isBlank()) {
+            this.preferences.setValue("modules.ai.api-key", apiKey);
+        }
+        this.preferences.setValue("modules.ai.api-key-env", apiKeyEnv);
+        this.preferences.setValue("modules.ai.temperature", temperature);
+        this.preferences.setValue("modules.ai.max-tokens", maxTokens);
+        this.preferences.setValue("modules.ai.timeout-seconds", timeoutSeconds);
+        this.preferences.setValue("modules.ai.chat.enabled", chatEnabled);
+        this.preferences.setValue("modules.ai.chat.trigger-prefix", chatPrefix);
+        this.preferences.setValue("modules.ai.chat.cooldown-seconds", chatCooldown);
+        this.preferences.setValue("modules.ai.chat.broadcast", chatBroadcast);
+        this.preferences.setValue("modules.ai.chat.system-prompt", chatPrompt);
+        this.preferences.setValue("modules.ai.npc.enabled", npcEnabled);
+        this.preferences.setValue("modules.ai.npc.cooldown-seconds", npcCooldown);
+        this.preferences.setValue("modules.ai.npc.response-radius-blocks", npcRadius);
+        this.preferences.setValue("modules.ai.npc.allow-actions", npcAllowActions);
+        this.preferences.setValue("modules.ai.npc.system-prompt", npcPrompt);
+        this.preferences.setValue("modules.ai.npc.command-whitelist", whitelist);
+        this.savePreferences();
+        this.guestStatusCache = null;
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"settings\":" + this.aiSettingsJson() + "}");
+    }
+
+    private void adminAiTest(final HttpExchange exchange) throws IOException, InterruptedException, ExecutionException, TimeoutException {
+        final WebSession session = this.adminOperator(exchange);
+        if (session == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 8 * 1024));
+        final String prompt = body.getOrDefault("prompt", "").trim();
+        if (prompt.isBlank() || prompt.length() > 1024) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_ai_prompt\"}");
+            return;
+        }
+        final int timeout = Math.max(1, Math.min(120, this.preferences.intValue("modules.ai.timeout-seconds", 30))) + 5;
+        try {
+            final String response = this.plugin.testAiPrompt(prompt).get(timeout, TimeUnit.SECONDS);
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"response\":\"" + escapeJson(response) + "\"}");
+        } catch (final ExecutionException ex) {
+            final Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"ai_test_failed\",\"message\":\"" + escapeJson(cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage()) + "\"}");
+        }
     }
 
     private void adminPlugin(final HttpExchange exchange) throws IOException, InterruptedException, ExecutionException, TimeoutException {
@@ -1958,6 +2125,57 @@ final class HunterWebPanelManager {
             return false;
         }
         return null;
+    }
+
+    private static Double parseDouble(final String value, final double min, final double max) {
+        try {
+            final double parsed = Double.parseDouble(value.trim());
+            return parsed >= min && parsed <= max ? parsed : null;
+        } catch (final RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private static Integer parseInteger(final String value, final int min, final int max) {
+        try {
+            final int parsed = Integer.parseInt(value.trim());
+            return parsed >= min && parsed <= max ? parsed : null;
+        } catch (final RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private static boolean validHttpUrl(final String value) {
+        if (value == null || value.isBlank() || value.length() > 512) {
+            return false;
+        }
+        try {
+            final URI uri = URI.create(value);
+            final String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            return (scheme.equals("http") || scheme.equals("https")) && uri.getHost() != null;
+        } catch (final IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private static List<String> parseCommandList(final String rawCommands) {
+        final List<String> commands = new ArrayList<>();
+        for (final String raw : rawCommands.split("[,\\s]+")) {
+            final String command = commandRoot(raw);
+            if (command.isBlank()) {
+                continue;
+            }
+            if (command.length() > 64 || !command.matches("[a-z0-9*_.:-]+")) {
+                return null;
+            }
+            if (!commands.contains(command)) {
+                commands.add(command);
+            }
+            if (commands.size() > 64) {
+                return null;
+            }
+        }
+        return commands;
     }
 
     private static ParsedAllowedCommands parseAllowedCommands(final String mode, final String rawCommands) {

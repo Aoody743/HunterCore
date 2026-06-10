@@ -89,6 +89,11 @@ const translations = {
     'actors.saveClick': '保存点击',
     'actors.clearClick': '清空点击',
     'actors.clickSaved': '点击指令已保存。',
+    'actors.aiEnabled': 'AI',
+    'actors.aiPersona': 'NPC 人设',
+    'actors.aiPersonaPlaceholder': '例如：主城向导，语气温和，知道服务器规则',
+    'actors.saveAi': '保存 AI',
+    'actors.aiSaved': 'NPC AI 已保存。',
     'actors.notConfigured': '未配置',
     'actors.live': '在线',
     'actors.configured': '已配置',
@@ -115,6 +120,34 @@ const translations = {
     'commandMessages.opDeniedPlaceholder': '&c你没有权限使用 /op。',
     'commandMessages.save': '保存命令文案',
     'commandMessages.saved': '命令文案已保存。',
+    'ai.title': '原生 AI',
+    'ai.enabled': 'AI 模块',
+    'ai.baseUrl': 'OpenAI 兼容 Base URL',
+    'ai.model': '模型',
+    'ai.apiKey': 'API key（留空保留）',
+    'ai.apiKeyEnv': 'API key 环境变量',
+    'ai.clearKey': '清空密钥',
+    'ai.temperature': '温度 0-2',
+    'ai.maxTokens': '最大 tokens',
+    'ai.timeout': '超时秒数',
+    'ai.chatEnabled': '聊天栏',
+    'ai.chatPrefix': '聊天触发词',
+    'ai.chatCooldown': '聊天冷却秒',
+    'ai.chatBroadcast': '广播回复',
+    'ai.npcEnabled': 'NPC AI',
+    'ai.npcActions': 'NPC 动作',
+    'ai.npcCooldown': 'NPC 冷却秒',
+    'ai.npcRadius': 'NPC 可见半径',
+    'ai.commandWhitelist': 'NPC 命令白名单',
+    'ai.chatPrompt': '聊天系统 Prompt',
+    'ai.npcPrompt': 'NPC 系统 Prompt',
+    'ai.save': '保存 AI 设置',
+    'ai.saved': 'AI 设置已保存。',
+    'ai.keyConfigured': 'API key 已配置',
+    'ai.keyMissing': 'API key 未配置',
+    'ai.testPrompt': '测试提示词',
+    'ai.test': '测试',
+    'ai.testDone': 'AI 测试完成。',
     'webUsers.title': '网页身份',
     'webUsers.username': '用户名',
     'webUsers.password': '可选网页密码',
@@ -237,6 +270,11 @@ const translations = {
     'actors.saveClick': 'Save click',
     'actors.clearClick': 'Clear click',
     'actors.clickSaved': 'Click command saved.',
+    'actors.aiEnabled': 'AI',
+    'actors.aiPersona': 'NPC persona',
+    'actors.aiPersonaPlaceholder': 'Example: a calm spawn guide who knows the server rules',
+    'actors.saveAi': 'Save AI',
+    'actors.aiSaved': 'NPC AI saved.',
     'actors.notConfigured': 'not configured',
     'actors.live': 'live',
     'actors.configured': 'configured',
@@ -263,6 +301,34 @@ const translations = {
     'commandMessages.opDeniedPlaceholder': '&cYou do not have permission to use /op.',
     'commandMessages.save': 'Save command text',
     'commandMessages.saved': 'Command text saved.',
+    'ai.title': 'Native AI',
+    'ai.enabled': 'AI module',
+    'ai.baseUrl': 'OpenAI-compatible Base URL',
+    'ai.model': 'Model',
+    'ai.apiKey': 'API key (blank keeps current)',
+    'ai.apiKeyEnv': 'API key env var',
+    'ai.clearKey': 'clear key',
+    'ai.temperature': 'Temperature 0-2',
+    'ai.maxTokens': 'Max tokens',
+    'ai.timeout': 'Timeout seconds',
+    'ai.chatEnabled': 'chat',
+    'ai.chatPrefix': 'Chat trigger',
+    'ai.chatCooldown': 'Chat cooldown seconds',
+    'ai.chatBroadcast': 'Broadcast replies',
+    'ai.npcEnabled': 'NPC AI',
+    'ai.npcActions': 'NPC actions',
+    'ai.npcCooldown': 'NPC cooldown seconds',
+    'ai.npcRadius': 'NPC radius',
+    'ai.commandWhitelist': 'NPC command whitelist',
+    'ai.chatPrompt': 'Chat system prompt',
+    'ai.npcPrompt': 'NPC system prompt',
+    'ai.save': 'Save AI settings',
+    'ai.saved': 'AI settings saved.',
+    'ai.keyConfigured': 'API key configured',
+    'ai.keyMissing': 'API key missing',
+    'ai.testPrompt': 'Test prompt',
+    'ai.test': 'Test',
+    'ai.testDone': 'AI test completed.',
     'webUsers.title': 'Web roles',
     'webUsers.username': 'Username',
     'webUsers.password': 'Optional web password',
@@ -454,6 +520,7 @@ function rerenderCachedStatus() {
   renderWebUsers(data.webUsers);
   renderWebSettings(data.webSettings);
   renderCommandMessages(data.commandMessages);
+  renderAiSettings(data.aiSettings);
 }
 
 function setLanguage(lang) {
@@ -499,17 +566,26 @@ function actorLine(actor) {
     ? t('actors.npc')
     : actor.module === 'real-fake-players' ? t('actors.realFakePlayer') : t('actors.fakePlayer');
   const stateLabel = actor.live ? t('actors.live') : t('actors.configured');
+  const aiMeta = actor.module === 'npcs'
+    ? ` · ${esc(t('actors.aiEnabled'))}: ${esc(actor.aiEnabled ? statusLabel('ok') : statusLabel('disabled'))}`
+    : '';
   const metaLine = actor.module === 'real-fake-players'
     ? `${stateLabel} · ${moduleLabel} · ${esc(actor.pose || 'survival')} · ${esc(t('actors.loops'))}: ${esc(actor.loops || 'none')} · ${esc(location)} · ${esc(t('actors.clickCommand'))}: ${esc(clickLine)}`
-    : `${stateLabel} · ${moduleLabel} · ${esc(actor.kind)} · ${esc(t('actors.pose'))}: ${esc(actor.pose || 'standing')} · ${esc(location)} · ${esc(t('actors.clickCommand'))}: ${esc(clickLine)}`;
+    : `${stateLabel} · ${moduleLabel} · ${esc(actor.kind)} · ${esc(t('actors.pose'))}: ${esc(actor.pose || 'standing')} · ${esc(location)} · ${esc(t('actors.clickCommand'))}: ${esc(clickLine)}${aiMeta}`;
+  const npcAiControls = actor.module === 'npcs'
+    ? `<label class="checkLine actorAiToggle"><input type="checkbox" data-actor-ai-enabled="true" ${actor.aiEnabled ? 'checked' : ''}> <span>${esc(t('actors.aiEnabled'))}</span></label>
+      <textarea class="actorPersonaInput" rows="2" data-actor-ai-persona="true" placeholder="${esc(t('actors.aiPersonaPlaceholder'))}">${esc(actor.aiPersona || '')}</textarea>
+      <button type="button" data-actor-ai-save="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">${esc(t('actors.saveAi'))}</button>`
+    : '';
   return `<div class="dataItem">
     <span>${esc(actor.displayName)}<small>${metaLine}</small></span>
-    <span class="actorActions">
+    <div class="actorActions">
       <input class="actorCommandInput" value="${esc(clickCommand)}" placeholder="${esc(t('actors.clickPlaceholder'))}" data-actor-command-input="true">
       <button type="button" data-actor-click-save="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">${esc(t('actors.saveClick'))}</button>
       <button type="button" data-actor-click-clear="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">${esc(t('actors.clearClick'))}</button>
+      ${npcAiControls}
       <button type="button" data-actor-remove="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">${esc(t('action.remove'))}</button>
-    </span>
+    </div>
   </div>`;
 }
 
@@ -694,6 +770,32 @@ function renderCommandMessages(messages) {
   $('commandMessageOpDenied').value = (messages.opDenied || []).join('\n');
 }
 
+function renderAiSettings(settings) {
+  if (!state.session?.admin || !settings) return;
+  if (document.activeElement && $('aiSettingsForm').contains(document.activeElement)) return;
+  $('aiEnabled').checked = Boolean(settings.enabled);
+  $('aiBaseUrl').value = settings.baseUrl || '';
+  $('aiModel').value = settings.model || '';
+  $('aiApiKey').value = '';
+  $('aiApiKeyEnv').value = settings.apiKeyEnv || '';
+  $('aiClearApiKey').checked = false;
+  $('aiTemperature').value = settings.temperature ?? '';
+  $('aiMaxTokens').value = settings.maxTokens ?? '';
+  $('aiTimeoutSeconds').value = settings.timeoutSeconds ?? '';
+  $('aiChatEnabled').checked = Boolean(settings.chatEnabled);
+  $('aiChatTriggerPrefix').value = settings.chatTriggerPrefix || '';
+  $('aiChatCooldownSeconds').value = settings.chatCooldownSeconds ?? '';
+  $('aiChatBroadcast').checked = Boolean(settings.chatBroadcast);
+  $('aiNpcEnabled').checked = Boolean(settings.npcEnabled);
+  $('aiNpcAllowActions').checked = Boolean(settings.npcAllowActions);
+  $('aiNpcCooldownSeconds').value = settings.npcCooldownSeconds ?? '';
+  $('aiNpcResponseRadiusBlocks').value = settings.npcResponseRadiusBlocks ?? '';
+  $('aiNpcCommandWhitelist').value = (settings.npcCommandWhitelist || []).join(', ');
+  $('aiChatSystemPrompt').value = settings.chatSystemPrompt || '';
+  $('aiNpcSystemPrompt').value = settings.npcSystemPrompt || '';
+  $('aiKeyStatus').textContent = settings.apiKeyConfigured ? t('ai.keyConfigured') : t('ai.keyMissing');
+}
+
 async function refresh() {
   const data = await json('/api/status');
   state.lastData = data;
@@ -714,6 +816,7 @@ async function refresh() {
   renderWebUsers(data.webUsers);
   renderWebSettings(data.webSettings);
   renderCommandMessages(data.commandMessages);
+  renderAiSettings(data.aiSettings);
 }
 
 async function refreshMap() {
@@ -918,6 +1021,14 @@ function bindEvents() {
         payload.command = target.dataset.actorClickClear ? '' : (input?.value || '');
         const result = await json('/api/admin/actor/click-command', { method: 'POST', body: JSON.stringify(payload) });
         setOutput(result.message || t('actors.clickSaved'), '');
+      } else if (target.dataset.actorAiSave) {
+        const row = target.closest('.dataItem');
+        const enabled = row?.querySelector('[data-actor-ai-enabled]');
+        const persona = row?.querySelector('[data-actor-ai-persona]');
+        payload.enabled = String(Boolean(enabled?.checked));
+        payload.persona = persona?.value || '';
+        const result = await json('/api/admin/actor/ai', { method: 'POST', body: JSON.stringify(payload) });
+        setOutput(result.message || t('actors.aiSaved'), '');
       } else if (target.dataset.actorRemove) {
         const result = await json('/api/admin/actor/remove', { method: 'POST', body: JSON.stringify(payload) });
         setOutput(result.message || t('actors.removed'), result.output || '');
@@ -997,6 +1108,53 @@ function bindEvents() {
       setOutput(t('commandMessages.saved'));
       if (result.messages) renderCommandMessages(result.messages);
       await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('aiSettingsForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = {
+      enabled: String($('aiEnabled').checked),
+      provider: 'openai-compatible',
+      baseUrl: $('aiBaseUrl').value,
+      model: $('aiModel').value,
+      apiKey: $('aiApiKey').value,
+      clearApiKey: String($('aiClearApiKey').checked),
+      apiKeyEnv: $('aiApiKeyEnv').value,
+      temperature: $('aiTemperature').value,
+      maxTokens: $('aiMaxTokens').value,
+      timeoutSeconds: $('aiTimeoutSeconds').value,
+      chatEnabled: String($('aiChatEnabled').checked),
+      chatTriggerPrefix: $('aiChatTriggerPrefix').value,
+      chatCooldownSeconds: $('aiChatCooldownSeconds').value,
+      chatBroadcast: String($('aiChatBroadcast').checked),
+      chatSystemPrompt: $('aiChatSystemPrompt').value,
+      npcEnabled: String($('aiNpcEnabled').checked),
+      npcCooldownSeconds: $('aiNpcCooldownSeconds').value,
+      npcResponseRadiusBlocks: $('aiNpcResponseRadiusBlocks').value,
+      npcAllowActions: String($('aiNpcAllowActions').checked),
+      npcSystemPrompt: $('aiNpcSystemPrompt').value,
+      npcCommandWhitelist: $('aiNpcCommandWhitelist').value
+    };
+    try {
+      const result = await json('/api/admin/ai-settings', { method: 'POST', body: JSON.stringify(payload) });
+      $('aiApiKey').value = '';
+      $('aiClearApiKey').checked = false;
+      setOutput(t('ai.saved'));
+      if (result.settings) renderAiSettings(result.settings);
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('aiTestForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const result = await json('/api/admin/ai-test', { method: 'POST', body: JSON.stringify({ prompt: $('aiTestPrompt').value }) });
+      setOutput(t('ai.testDone'), result.response || '');
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));
     }

@@ -832,11 +832,50 @@ textarea {
   justify-content: flex-end;
 }
 
+.actorActions {
+  max-width: min(100%, 560px);
+}
+
+#actorList .dataItem {
+  align-items: flex-start;
+}
+
+.actorActions .actorCommandInput {
+  flex: 1 1 220px;
+}
+
+.actorAiToggle {
+  min-height: 31px;
+  padding: 0 4px;
+}
+
+.actorPersonaInput {
+  flex: 1 1 260px;
+  min-height: 54px;
+  max-height: 120px;
+}
+
 .userActions button,
 .actorActions button {
   min-height: 31px;
   border-radius: var(--radius-control);
   padding: 0 10px;
+}
+
+.aiSettingsForm {
+  gap: 12px;
+}
+
+.aiSettingsForm .textEditorLabel {
+  margin-top: 2px;
+}
+
+.aiSettingsForm .primaryButton {
+  width: 100%;
+}
+
+.aiTestForm {
+  margin-top: 12px;
 }
 
 .actorCommandInput {

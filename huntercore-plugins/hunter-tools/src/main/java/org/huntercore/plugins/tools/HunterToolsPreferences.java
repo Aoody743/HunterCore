@@ -199,7 +199,9 @@ final class HunterToolsPreferences {
                 (float) this.config.getDouble(path + ".yaw"),
                 (float) this.config.getDouble(path + ".pitch"),
                 normalize(this.config.getString(path + ".pose", "standing")),
-                this.config.getString(path + ".click-command", "")
+                this.config.getString(path + ".click-command", ""),
+                this.config.contains(path + ".ai-enabled") ? this.config.getBoolean(path + ".ai-enabled") : module.equals("npcs"),
+                this.config.getString(path + ".ai-persona", "")
             );
         }
     }
@@ -219,6 +221,9 @@ final class HunterToolsPreferences {
             this.config.set(path + ".pose", normalize(actor.pose()));
             final String clickCommand = actor.clickCommand() == null ? "" : actor.clickCommand().trim();
             this.config.set(path + ".click-command", clickCommand.isBlank() ? null : clickCommand);
+            this.config.set(path + ".ai-enabled", actor.aiEnabled());
+            final String aiPersona = actor.aiPersona() == null ? "" : actor.aiPersona().trim();
+            this.config.set(path + ".ai-persona", aiPersona.isBlank() ? null : aiPersona);
         }
     }
 
@@ -359,6 +364,28 @@ final class HunterToolsPreferences {
         for (final String command : actorCommands()) {
             changed |= this.setDefault("modules.npcs.commands." + command, true);
         }
+        changed |= this.setDefault("modules.ai.enabled", false);
+        changed |= this.setDefault("modules.ai.provider", "openai-compatible");
+        changed |= this.setDefault("modules.ai.base-url", "https://api.openai.com/v1");
+        changed |= this.setDefault("modules.ai.api-key", "");
+        changed |= this.setDefault("modules.ai.api-key-env", "OPENAI_API_KEY");
+        changed |= this.setDefault("modules.ai.model", "gpt-4o-mini");
+        changed |= this.setDefault("modules.ai.temperature", 0.7D);
+        changed |= this.setDefault("modules.ai.max-tokens", 300);
+        changed |= this.setDefault("modules.ai.timeout-seconds", 30);
+        changed |= this.setDefault("modules.ai.chat.enabled", true);
+        changed |= this.setDefault("modules.ai.chat.trigger-prefix", "@ai");
+        changed |= this.setDefault("modules.ai.chat.cooldown-seconds", 5);
+        changed |= this.setDefault("modules.ai.chat.broadcast", true);
+        changed |= this.setDefault("modules.ai.chat.response-format", "&bAI &8> &f%response%");
+        changed |= this.setDefault("modules.ai.chat.system-prompt", "You are the native AI assistant for a Minecraft server running HunterCore. Answer in the same language as the player when possible. Keep responses useful, friendly, and concise.");
+        changed |= this.setDefault("modules.ai.npc.enabled", true);
+        changed |= this.setDefault("modules.ai.npc.cooldown-seconds", 5);
+        changed |= this.setDefault("modules.ai.npc.response-radius-blocks", 16);
+        changed |= this.setDefault("modules.ai.npc.allow-actions", true);
+        changed |= this.setDefault("modules.ai.npc.response-format", "&d%npc% &8> &f%response%");
+        changed |= this.setDefault("modules.ai.npc.system-prompt", "You control a HunterCore Minecraft NPC. Reply as the NPC in one or two short chat lines. You may add action lines on their own line: [look], [pose:standing], [pose:sneaking], or [command:say text]. Only use commands when they are helpful and safe.");
+        changed |= this.setDefault("modules.ai.npc.command-whitelist", List.of("say", "tell", "msg", "title", "effect", "playsound"));
         changed |= this.setDefault("modules.web-panel.enabled", true);
         changed |= this.setDefault("modules.web-panel.bind-address", "127.0.0.1");
         changed |= this.setDefault("modules.web-panel.port", 8088);
@@ -428,7 +455,7 @@ final class HunterToolsPreferences {
     }
 
     static List<String> managementCommands() {
-        return List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module", "optimize", "motd", "web");
+        return List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module", "optimize", "motd", "web", "ai");
     }
 
     static List<String> actorCommands() {
@@ -497,7 +524,9 @@ final class HunterToolsPreferences {
         float yaw,
         float pitch,
         String pose,
-        String clickCommand
+        String clickCommand,
+        boolean aiEnabled,
+        String aiPersona
     ) {
         static ActorDefinition of(final String module, final String name, final String kind, final Location location) {
             return of(module, name, kind, location, "standing", "");
@@ -515,6 +544,19 @@ final class HunterToolsPreferences {
             final String pose,
             final String clickCommand
         ) {
+            return of(module, name, kind, location, pose, clickCommand, module.equals("npcs"), "");
+        }
+
+        static ActorDefinition of(
+            final String module,
+            final String name,
+            final String kind,
+            final Location location,
+            final String pose,
+            final String clickCommand,
+            final boolean aiEnabled,
+            final String aiPersona
+        ) {
             final String id = actorId(name);
             return new ActorDefinition(
                 id,
@@ -528,7 +570,9 @@ final class HunterToolsPreferences {
                 location.getYaw(),
                 location.getPitch(),
                 normalize(pose),
-                clickCommand == null ? "" : clickCommand.trim()
+                clickCommand == null ? "" : clickCommand.trim(),
+                aiEnabled,
+                aiPersona == null ? "" : aiPersona.trim()
             );
         }
 

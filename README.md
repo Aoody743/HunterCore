@@ -95,10 +95,31 @@ HunterCore 的网页面板不是一个简单状态页，而是面向服主日常
 - `/about`、`/plugins`、`/op` 无权限提示的自定义文案，支持 `&` 颜色和样式代码。
 - 网页用户、角色、允许命令和命令执行权限管理。
 - 网页端口、绑定地址、地图地址、服务器名称设置。
+- 原生 AI 接入设置：OpenAI 兼容 Base URL、模型、API key/env、聊天触发词、NPC Prompt、NPC 命令白名单和在线测试。
 
 网页端会读取根目录的 `server-icon.png` 作为服务器标志。面板支持中文和英文切换，会根据浏览器语言自动选择，也可以手动切换。
 
 提示：Minecraft 插件的热启停、热重载和热更新取决于插件自身是否安全支持。HunterCore 提供这个能力是为了让调试和维护更方便，但正式服更新关键插件前仍建议先测试。面板会保护承载网页面板的核心插件，避免把自己关掉。
+
+## 原生 AI 接入
+
+HunterCore 现在自带 AI 接入系统，不需要额外写插件就能把 ChatGPT 或其他 OpenAI-compatible 服务接进服务器。
+
+- 聊天栏 AI：玩家输入 `@ai <内容>`，服务器会调用配置好的模型回复。
+- NPC AI：NPC 没有点击指令时，可以直接由 AI 回复玩家，还能执行安全白名单动作。
+- 网页管理：管理员可以在后台配置 Base URL、模型、API key、环境变量、Prompt、冷却时间、NPC 可见半径和命令白名单。
+- 灵活接入：默认兼容 OpenAI 的 `/v1/chat/completions`，也可以换成支持同协议的第三方或自建模型网关。
+- 安全默认：AI 模块默认关闭，API key 不会回显到网页；NPC 只能执行白名单命令。
+
+快速启用：
+
+```text
+/hunteradmin ai key <你的 API key>
+/hunteradmin ai model gpt-4o-mini
+/hunteradmin ai enable
+```
+
+如果你更喜欢用环境变量，可以设置 `OPENAI_API_KEY`，或者在网页后台修改 `api-key-env`。
 
 ## 地图和 BlueMap
 

@@ -225,6 +225,46 @@
           <p id="webAddressLine" class="subtleLine"></p>
         </section>
 
+        <section id="aiSettingsPanel" class="panel">
+          <h3 data-i18n="ai.title">Native AI</h3>
+          <form id="aiSettingsForm" class="stackForm aiSettingsForm">
+            <div class="formGrid">
+              <label class="checkLine"><input id="aiEnabled" type="checkbox"> <span data-i18n="ai.enabled">AI module</span></label>
+              <input id="aiBaseUrl" placeholder="https://api.openai.com/v1" data-i18n-placeholder="ai.baseUrl">
+              <input id="aiModel" placeholder="gpt-4o-mini" data-i18n-placeholder="ai.model">
+              <input id="aiApiKey" type="password" autocomplete="new-password" placeholder="API key" data-i18n-placeholder="ai.apiKey">
+              <input id="aiApiKeyEnv" placeholder="OPENAI_API_KEY" data-i18n-placeholder="ai.apiKeyEnv">
+              <label class="checkLine"><input id="aiClearApiKey" type="checkbox"> <span data-i18n="ai.clearKey">clear key</span></label>
+              <input id="aiTemperature" inputmode="decimal" placeholder="0.7" data-i18n-placeholder="ai.temperature">
+              <input id="aiMaxTokens" inputmode="numeric" placeholder="300" data-i18n-placeholder="ai.maxTokens">
+              <input id="aiTimeoutSeconds" inputmode="numeric" placeholder="30" data-i18n-placeholder="ai.timeout">
+              <label class="checkLine"><input id="aiChatEnabled" type="checkbox"> <span data-i18n="ai.chatEnabled">chat</span></label>
+              <input id="aiChatTriggerPrefix" placeholder="@ai" data-i18n-placeholder="ai.chatPrefix">
+              <input id="aiChatCooldownSeconds" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.chatCooldown">
+              <label class="checkLine"><input id="aiChatBroadcast" type="checkbox"> <span data-i18n="ai.chatBroadcast">broadcast</span></label>
+              <label class="checkLine"><input id="aiNpcEnabled" type="checkbox"> <span data-i18n="ai.npcEnabled">NPC</span></label>
+              <label class="checkLine"><input id="aiNpcAllowActions" type="checkbox"> <span data-i18n="ai.npcActions">NPC actions</span></label>
+              <input id="aiNpcCooldownSeconds" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.npcCooldown">
+              <input id="aiNpcResponseRadiusBlocks" inputmode="numeric" placeholder="16" data-i18n-placeholder="ai.npcRadius">
+              <input id="aiNpcCommandWhitelist" placeholder="say, tell, msg" data-i18n-placeholder="ai.commandWhitelist">
+            </div>
+            <label class="textEditorLabel">
+              <span data-i18n="ai.chatPrompt">Chat system prompt</span>
+              <textarea id="aiChatSystemPrompt" rows="4" spellcheck="false"></textarea>
+            </label>
+            <label class="textEditorLabel">
+              <span data-i18n="ai.npcPrompt">NPC system prompt</span>
+              <textarea id="aiNpcSystemPrompt" rows="4" spellcheck="false"></textarea>
+            </label>
+            <button type="submit" class="primaryButton" data-i18n="ai.save">Save AI settings</button>
+          </form>
+          <form id="aiTestForm" class="inlineForm aiTestForm">
+            <input id="aiTestPrompt" placeholder="Say HunterCore AI is ready." data-i18n-placeholder="ai.testPrompt">
+            <button type="submit" class="secondaryButton" data-i18n="ai.test">Test</button>
+          </form>
+          <p id="aiKeyStatus" class="subtleLine"></p>
+        </section>
+
         <section id="commandMessagesPanel" class="panel">
           <h3 data-i18n="commandMessages.title">Command text</h3>
           <form id="commandMessagesForm" class="stackForm commandMessagesForm">
