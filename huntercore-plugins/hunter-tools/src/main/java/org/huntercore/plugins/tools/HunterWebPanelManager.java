@@ -821,12 +821,16 @@ final class HunterWebPanelManager {
 
     private String webSettingsJson() {
         final StringBuilder json = new StringBuilder(256);
+        final String cpuMode = normalizeCpuMode(this.preferences.stringValue("optimizations.cpu.mode", "single-thread"));
         json.append('{');
         field(json, "bindAddress", this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1")).append(',');
         numberField(json, "port", Math.max(1, Math.min(65535, this.preferences.intValue("modules.web-panel.port", 8088)))).append(',');
         booleanField(json, "publicMap", this.preferences.booleanValue("modules.web-panel.public-map", true)).append(',');
         field(json, "mapUrl", this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/")).append(',');
         field(json, "serverName", this.webServerName()).append(',');
+        field(json, "cpuMode", cpuMode).append(',');
+        booleanField(json, "asyncEnabled", !cpuMode.equals("single-thread")).append(',');
+        numberField(json, "recommendedWorkers", this.preferences.defaultWorkerCount()).append(',');
         field(json, "address", this.addressLine());
         json.append('}');
         return json.toString();
@@ -1306,6 +1310,7 @@ final class HunterWebPanelManager {
         final String rawPort = body.getOrDefault("port", String.valueOf(this.preferences.intValue("modules.web-panel.port", 8088))).trim();
         final String mapUrl = body.getOrDefault("mapUrl", this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/")).trim();
         final String serverName = body.getOrDefault("serverName", this.webServerName()).trim();
+        final String cpuMode = normalizeCpuMode(body.getOrDefault("cpuMode", this.preferences.stringValue("optimizations.cpu.mode", "single-thread")));
         final Boolean publicMap = parseBoolean(body.getOrDefault("publicMap", String.valueOf(this.preferences.booleanValue("modules.web-panel.public-map", true))));
         final int port;
         try {
@@ -1319,17 +1324,30 @@ final class HunterWebPanelManager {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_web_settings\"}");
             return;
         }
+        if (!validCpuMode(cpuMode)) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_cpu_mode\"}");
+            return;
+        }
 
         final boolean restart = !bindAddress.equals(this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1"))
             || port != this.preferences.intValue("modules.web-panel.port", 8088);
+        final boolean threadingChanged = !cpuMode.equalsIgnoreCase(this.preferences.stringValue("optimizations.cpu.mode", "single-thread"));
         this.preferences.setValue("modules.web-panel.bind-address", bindAddress);
         this.preferences.setValue("modules.web-panel.port", port);
         this.preferences.setValue("modules.web-panel.public-map", publicMap);
         this.preferences.setValue("modules.web-panel.map-url", mapUrl);
         this.preferences.setValue("modules.web-panel.server-name", serverName);
+        this.preferences.setValue("optimizations.cpu.mode", cpuMode);
+        final boolean asyncEnabled = !cpuMode.equals("single-thread");
+        this.preferences.setValue("optimizations.hunter-tools.async-rendering", asyncEnabled);
+        this.preferences.setValue("optimizations.hunter-tools.async-save", asyncEnabled);
+        this.preferences.setValue("optimizations.hunter-tools.actor-async-load", asyncEnabled);
+        this.preferences.setValue("optimizations.hunter-tools.actor-batch-save", asyncEnabled);
+        this.preferences.setValue("optimizations.hunter-tools.render-workers", this.preferences.defaultWorkerCount());
+        this.preferences.setValue("optimizations.hunter-tools.web-panel-workers", this.preferences.defaultWorkerCount());
         this.savePreferences();
         this.invalidateStatusCaches();
-        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"restart\":" + restart + ",\"settings\":" + this.webSettingsJson() + "}");
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"restart\":" + restart + ",\"threadingChanged\":" + threadingChanged + ",\"settings\":" + this.webSettingsJson() + "}");
         if (restart) {
             CompletableFuture.runAsync(() -> {
                 try {
@@ -1340,6 +1358,23 @@ final class HunterWebPanelManager {
                 this.restart();
             });
         }
+    }
+
+    private static boolean validCpuMode(final String input) {
+        return input.equals("single-thread")
+            || input.equals("high-clock")
+            || input.equals("high-core")
+            || input.equals("multi-thread");
+    }
+
+    private static String normalizeCpuMode(final String input) {
+        final String normalized = HunterToolsPreferences.normalize(input);
+        return switch (normalized) {
+            case "high-clock", "clock" -> "high-clock";
+            case "high-core", "core" -> "high-core";
+            case "multi-thread", "multi", "performance", "multithread" -> "multi-thread";
+            default -> "single-thread";
+        };
     }
 
     private void adminCommandMessages(final HttpExchange exchange) throws IOException {

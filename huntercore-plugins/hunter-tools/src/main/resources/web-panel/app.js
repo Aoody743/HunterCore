@@ -111,6 +111,7 @@ const translations = {
     'commands.title': '命令开关',
     'webSettings.title': '网页面板',
     'webSettings.serverName': '服务器名称',
+    'webSettings.cpuMode': '线程模式',
     'webSettings.bind': '绑定地址',
     'webSettings.port': '网页端口',
     'webSettings.mapUrl': '地图地址，例如 http://%host%:8100/',
@@ -118,6 +119,7 @@ const translations = {
     'webSettings.save': '保存网页设置',
     'webSettings.saved': '网页设置已保存。',
     'webSettings.restarting': '网页设置已保存，面板会切换到新地址。',
+    'webSettings.threadingSaved': '线程策略已保存，核心线程参数重启后会完全生效。',
     'commandMessages.title': '命令文案',
     'commandMessages.about': '/about',
     'commandMessages.plugins': '/plugins',
@@ -328,6 +330,7 @@ const translations = {
     'commands.title': 'Command gates',
     'webSettings.title': 'Web panel',
     'webSettings.serverName': 'Server name',
+    'webSettings.cpuMode': 'Thread mode',
     'webSettings.bind': 'Bind address',
     'webSettings.port': 'Web port',
     'webSettings.mapUrl': 'Map URL, for example http://%host%:8100/',
@@ -335,6 +338,7 @@ const translations = {
     'webSettings.save': 'Save web settings',
     'webSettings.saved': 'Web settings saved.',
     'webSettings.restarting': 'Web settings saved. Panel is restarting on the new address.',
+    'webSettings.threadingSaved': 'Thread policy saved. Core thread parameters fully apply after restart.',
     'commandMessages.title': 'Command text',
     'commandMessages.about': '/about',
     'commandMessages.plugins': '/plugins',
@@ -855,11 +859,13 @@ function renderWebSettings(settings) {
   if (!state.session?.admin || !settings) return;
   if (document.activeElement && $('webSettingsForm').contains(document.activeElement)) return;
   $('webServerName').value = settings.serverName || '';
+  $('webCpuMode').value = settings.cpuMode || 'single-thread';
   $('webBindAddress').value = settings.bindAddress || '';
   $('webPort').value = settings.port || '';
   $('webMapUrl').value = settings.mapUrl || '';
   $('webPublicMap').checked = Boolean(settings.publicMap);
   $('webAddressLine').textContent = settings.address || '';
+  $('webThreadingLine').textContent = `${t('webSettings.cpuMode')}: ${settings.cpuMode || 'single-thread'} · ${settings.asyncEnabled ? 'async' : 'sync'} · workers ${settings.recommendedWorkers || '--'}`;
 }
 
 function renderCommandMessages(messages) {
@@ -1203,6 +1209,7 @@ function bindEvents() {
     event.preventDefault();
     const payload = {
       serverName: $('webServerName').value,
+      cpuMode: $('webCpuMode').value,
       bindAddress: $('webBindAddress').value,
       port: $('webPort').value,
       mapUrl: $('webMapUrl').value,
@@ -1210,7 +1217,7 @@ function bindEvents() {
     };
     try {
       const result = await json('/api/admin/web-settings', { method: 'POST', body: JSON.stringify(payload) });
-      setOutput(result.restart ? t('webSettings.restarting') : t('webSettings.saved'));
+      setOutput(result.restart ? t('webSettings.restarting') : (result.threadingChanged ? t('webSettings.threadingSaved') : t('webSettings.saved')));
       if (result.settings) renderWebSettings(result.settings);
       await refresh();
       await refreshMap();

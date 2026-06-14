@@ -239,6 +239,12 @@
           <form id="webSettingsForm" class="stackForm">
             <div class="formGrid">
               <input id="webServerName" placeholder="HunterCore" data-i18n-placeholder="webSettings.serverName">
+              <select id="webCpuMode">
+                <option value="single-thread">single-thread</option>
+                <option value="high-clock">high-clock</option>
+                <option value="high-core">high-core</option>
+                <option value="multi-thread">multi-thread</option>
+              </select>
               <input id="webBindAddress" placeholder="127.0.0.1" data-i18n-placeholder="webSettings.bind">
               <input id="webPort" inputmode="numeric" placeholder="8088" data-i18n-placeholder="webSettings.port">
               <input id="webMapUrl" placeholder="http://%host%:8100/" data-i18n-placeholder="webSettings.mapUrl">
@@ -247,6 +253,7 @@
             </div>
           </form>
           <p id="webAddressLine" class="subtleLine"></p>
+          <p id="webThreadingLine" class="subtleLine"></p>
         </section>
 
         <section id="aiSettingsPanel" class="panel">
