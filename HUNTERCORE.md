@@ -16,7 +16,7 @@ GIT_CONFIG_VALUE_0=https://github.com/ \
 The release jar is generated at:
 
 ```text
-divinemc-server/build/libs/HunterCore-1.0-MinecraftServer-26.1.2-release.jar
+divinemc-server/build/libs/HunterCore-1.0.1-MinecraftServer-26.1.2-release.jar
 ```
 
 `packageHunterCoreRelease` trims bundled Zstd and SQLite native jars to common server platforms so the release artifact stays below 100MB. It keeps Linux, macOS, and Windows x86_64/aarch64 native libraries, plus Linux-Musl x86_64/aarch64 for SQLite. Use `:divinemc-server:createPaperclipJar` when a fully universal upstream-style paperclip jar is needed.
