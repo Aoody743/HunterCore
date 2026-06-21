@@ -8,7 +8,7 @@ diff --git a/net/minecraft/server/dedicated/DedicatedServer.java b/net/minecraft
 index 891df1e27e6f7d6c8b331eb446bb80ceb8f853e0..b85a6ce9029b45a749e0ad8eff39abd4c4886669 100644
 --- a/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/net/minecraft/server/dedicated/DedicatedServer.java
-@@ -269,6 +269,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+@@ -269,6 +269,9 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
              this.setLocalIp(properties.serverIp);
          }
  
