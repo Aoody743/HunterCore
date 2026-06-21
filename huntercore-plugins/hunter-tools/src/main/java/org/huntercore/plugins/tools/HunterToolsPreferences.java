@@ -18,6 +18,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.huntercore.api.HunterLanguage;
 import org.bukkit.plugin.java.JavaPlugin;
 
 final class HunterToolsPreferences {
@@ -88,6 +89,10 @@ final class HunterToolsPreferences {
         synchronized (this.lock) {
             return this.config.getString(path, fallback);
         }
+    }
+
+    String language() {
+        return HunterLanguage.normalize(this.stringValue("language", HunterLanguage.DEFAULT));
     }
 
     List<String> stringList(final String path, final List<String> fallback) {
@@ -319,10 +324,14 @@ final class HunterToolsPreferences {
 
     private boolean applyDefaults() {
         boolean changed = false;
+        changed |= this.setDefault("language", HunterLanguage.DEFAULT);
         changed |= this.setDefault("modules.tps-display.enabled", true);
         changed |= this.setDefault("modules.tps-display.actionbar", true);
+        changed |= this.setDefault("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%");
         changed |= this.setDefault("modules.tps-display.interval-ticks", 40);
         changed |= this.setDefault("modules.sidebar.enabled", true);
+        changed |= this.setDefault("modules.sidebar.title", "&6HunterCore");
+        changed |= this.setDefault("modules.sidebar.lines", defaultSidebarLines());
         changed |= this.setDefault("modules.sidebar.interval-ticks", 40);
         changed |= this.setDefault("modules.sidebar.dirty-updates-only", true);
         changed |= this.setDefault("modules.motd.enabled", true);
@@ -394,25 +403,41 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.nearby-radius-blocks", 6);
         changed |= this.setDefault("modules.ai.fake-players.allow-movement", true);
         changed |= this.setDefault("modules.ai.fake-players.allow-breaking", true);
+        changed |= this.setDefault("modules.ai.fake-players.allow-placing", true);
         changed |= this.setDefault("modules.ai.fake-players.allow-interaction", true);
+        changed |= this.setDefault("modules.ai.fake-players.max-place-distance-blocks", 6);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.enabled", true);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.trigger-prefix", "@bot");
         changed |= this.setDefault("modules.ai.fake-players.chat-control.cooldown-seconds", 3);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.require-permission", false);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer");
-        changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines, no prose. Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=20,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=60,sprint=true], [follow:player=name,ticks=80,distance=2.5], [mine:ticks=40], [use], [attack], [jump], [sneak:on], [sprint:off], [slot:1], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. Use small safe steps. For player chat work requests, act like a cooperative helper. Mine only when the goal requires it and the target block is visible.");
+        changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines, no prose. Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=20,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=60,sprint=true], [follow:player=name,ticks=80,distance=2.5], [mine:ticks=40], [use], [attack], [jump], [sneak:on], [sprint:off], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. Use small safe steps. For building requests, infer a compact style and dimensions from the player's request, choose suitable hotbar materials with [slot:n], and place one or a few visible nearby blocks per turn. Mine only when the goal requires it and the target block is visible.");
         changed |= this.setDefault("modules.ai.fake-players.high-risk-protection", true);
         changed |= this.setDefault("modules.ai.fake-players.high-risk-approval-window-seconds", 120);
         changed |= this.setDefault("modules.ai.adaptive-throttling.enabled", true);
         changed |= this.setDefault("modules.ai.adaptive-throttling.warning-mspt", 40.0D);
         changed |= this.setDefault("modules.ai.adaptive-throttling.critical-mspt", 55.0D);
         changed |= this.setDefault("modules.ai.adaptive-throttling.severe-mspt", 75.0D);
+        changed |= this.setDefault("modules.auth.enabled", true);
+        changed |= this.setDefault("modules.auth.registration-required", true);
+        changed |= this.setDefault("modules.auth.web-registration-required", false);
+        changed |= this.setDefault("modules.auth.web-registration-enabled", false);
+        changed |= this.setDefault("modules.auth.web-login-enabled", false);
+        changed |= this.setDefault("modules.auth.gui-enabled", true);
+        changed |= this.setDefault("modules.auth.open-gui-on-join", true);
+        changed |= this.setDefault("modules.auth.minimum-password-length", 4);
+        changed |= this.setDefault("modules.auth.registration-url", "");
         changed |= this.setDefault("modules.web-panel.enabled", true);
         changed |= this.setDefault("modules.web-panel.bind-address", "127.0.0.1");
         changed |= this.setDefault("modules.web-panel.port", 8088);
+        changed |= this.setDefault("modules.web-panel.external-url", "");
         changed |= this.setDefault("modules.web-panel.server-name", "HunterCore");
         changed |= this.setDefault("modules.web-panel.public-map", true);
         changed |= this.setDefault("modules.web-panel.map-url", "http://%host%:8100/");
+        changed |= this.setDefault("modules.web-panel.cors-enabled", true);
+        changed |= this.setDefault("modules.web-panel.cors-allow-origin", "*");
+        changed |= this.setDefault("modules.web-panel.api-key-enabled", false);
+        changed |= this.setDefault("modules.web-panel.api-key", "");
         changed |= this.setDefault("modules.web-panel.status-cache-millis", 1000);
         changed |= this.setDefault("modules.web-panel.status-cache-player-millis", 700);
         changed |= this.setDefault("modules.web-panel.status-cache-admin-millis", 400);
@@ -533,6 +558,17 @@ final class HunterToolsPreferences {
                 "&7高性能自定义核心 · 网页面板 · 假人调试 · 地图管理"
             );
         };
+    }
+
+    static List<String> defaultSidebarLines() {
+        return List.of(
+            "&7TPS: %tps_color%%tps%",
+            "&7MSPT: &f%mspt%",
+            "&7Players: &f%online%/%max%",
+            "&7Memory: &f%memory%",
+            "&7World: &f%world%",
+            "&7Ping: &f%ping%ms"
+        );
     }
 
     static String normalize(final String id) {

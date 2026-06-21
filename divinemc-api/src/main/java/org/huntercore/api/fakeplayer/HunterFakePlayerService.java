@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Optional;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.block.BlockFace;
 import org.jetbrains.annotations.NotNull;
 
 public interface HunterFakePlayerService {
@@ -33,6 +34,10 @@ public interface HunterFakePlayerService {
     @NotNull FakePlayerActionResult jump(@NotNull String name);
 
     @NotNull FakePlayerActionResult use(@NotNull String name);
+
+    default @NotNull FakePlayerActionResult placeBlock(@NotNull final String name, @NotNull final Location clickedBlock, @NotNull final BlockFace face) {
+        return FakePlayerActionResult.fail("Fake player block placement is not supported by this service.");
+    }
 
     @NotNull FakePlayerActionResult attack(@NotNull String name);
 

@@ -1,4 +1,8 @@
 const LANG_KEY = 'huntercore.panel.language';
+const BACKEND_URL_KEY = 'huntercore.panel.backendUrl';
+const BACKEND_API_KEY_KEY = 'huntercore.panel.apiKey';
+const SESSION_TOKEN_KEY = 'huntercore.panel.sessionToken';
+const CONFIG_WORKBENCH_KEY_PREFIX = 'huntercore.panel.config.';
 
 function detectLanguage() {
   try {
@@ -10,9 +14,33 @@ function detectLanguage() {
   return navigator.language?.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
+function storedValue(key) {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+function storeValue(key, value) {
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {
+    // The current page still works when storage is unavailable.
+  }
+}
+
+function normalizeBackendUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
 const state = {
   session: null,
   csrf: '',
+  sessionToken: storedValue(SESSION_TOKEN_KEY),
+  backendUrl: normalizeBackendUrl(storedValue(BACKEND_URL_KEY)),
+  apiKey: storedValue(BACKEND_API_KEY_KEY),
   webUsers: [],
   plugins: [],
   mapUrl: '',
@@ -24,6 +52,8 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+const ADMIN_PAGES = ['settings', 'access', 'ai', 'admin'];
+const PAGES = ['map', 'overview', 'runtime', 'plugins', 'tools', ...ADMIN_PAGES];
 
 const translations = {
   zh: {
@@ -33,14 +63,37 @@ const translations = {
     'nav.runtime': '运行时',
     'nav.plugins': '插件',
     'nav.tools': '工具',
+    'nav.settings': '设置',
+    'nav.access': '权限',
+    'nav.ai': 'AI',
     'nav.admin': '管理',
     'language.switch': '切换到 English',
     'session.eyebrow': '网页控制台',
     'session.guest': '访客视图',
-    'login.username': 'HunterAuth 用户名',
-    'login.password': '密码',
+    'login.username': '玩家名 / 面板管理员',
+    'login.password': '游戏密码 / 面板密码',
     'login.action': '登录',
+    'register.description': '首次进服前先在这里注册；这个密码就是游戏 /login 密码，也可用于网页登录（需开启）。',
+    'register.username': '玩家名称（3-16 位）',
+    'register.password': '密码',
+    'register.confirm': '确认密码',
+    'register.action': '注册玩家',
+    'register.closed': '网页登录注册已关闭。',
+    'register.done': '注册成功，现在可以用同一密码进服 /login。',
     'logout.action': '退出登录',
+    'remote.description': '前后端分离模式：填写后端 URL，可选 API key。',
+    'remote.backendUrl': '后端 URL，例如 http://127.0.0.1:8088',
+    'remote.apiKey': '可选 API key',
+    'remote.connect': '连接后端',
+    'remote.clear': '使用本地面板',
+    'remote.connected': '已连接后端：{url}',
+    'remote.local': '当前使用同源面板。',
+    'remote.saved': '后端连接已保存。',
+    'remote.title': '远程前端 / API',
+    'remote.corsEnabled': '允许独立前端跨域',
+    'remote.corsAllowOrigin': '允许来源，例如 * 或 https://panel.example.com',
+    'remote.apiKeyEnabled': '允许 API key 管理',
+    'remote.clearApiKey': '清空 API key',
     'metric.online': '在线',
     'metric.memory': '内存',
     'map.open': '在新标签打开地图',
@@ -107,6 +160,24 @@ const translations = {
     'admin.required': '需要管理员会话。',
     'admin.eyebrow': '运维控制',
     'admin.title': '管理',
+    'settings.eyebrow': '服务器展示',
+    'settings.title': '设置',
+    'settings.tab.web': '网页面板',
+    'settings.tab.webHint': '名称、F3 和面板地址',
+    'settings.tab.display': '游戏显示',
+    'settings.tab.displayHint': '侧边栏与 TPS 文案',
+    'settings.tab.motd': 'MOTD',
+    'settings.tab.motdHint': '服务器列表展示',
+    'settings.tab.messages': '命令文案',
+    'settings.tab.messagesHint': '公开命令提示文字',
+    'access.eyebrow': '登录与远程访问',
+    'access.title': '权限',
+    'access.tab.auth': 'HunterAuth',
+    'access.tab.authHint': '游戏登录与网页注册',
+    'access.tab.remote': '远程 API',
+    'access.tab.remoteHint': '跨域和 API key',
+    'access.tab.users': '网页身份',
+    'access.tab.usersHint': '面板用户与命令权限',
     'modules.title': '模块',
     'commands.title': '命令开关',
     'webSettings.title': '网页面板',
@@ -115,12 +186,38 @@ const translations = {
     'webSettings.f3ServerName': 'F3 服务器名称',
     'webSettings.bind': '绑定地址',
     'webSettings.port': '网页端口',
+    'webSettings.externalUrl': '公开面板域名，例如 https://panel.example.com',
     'webSettings.mapUrl': '地图地址，例如 http://%host%:8100/',
     'webSettings.publicMap': '公开地图',
+    'auth.title': 'HunterAuth',
+    'auth.enabled': '登录保护',
+    'auth.registrationRequired': '必须创建账号密码',
+    'auth.webRegistrationRequired': '必须网页登录后才能进服',
+    'auth.webRegistrationEnabled': '开放网页注册',
+    'auth.webLoginEnabled': '允许玩家用游戏密码登录网页',
+    'auth.guiEnabled': '登录 GUI',
+    'auth.openGuiOnJoin': '进服打开登录 GUI',
+    'auth.minimumPasswordLength': '最小密码长度',
+    'auth.registrationUrl': '网页登录地址（踢出提示使用）',
     'webSettings.save': '保存网页设置',
     'webSettings.saved': '网页设置已保存。',
     'webSettings.restarting': '网页设置已保存，面板会切换到新地址。',
     'webSettings.threadingSaved': '线程策略已保存，核心线程参数重启后会完全生效。',
+    'display.title': '显示',
+    'display.tpsEnabled': 'TPS 显示',
+    'display.tpsActionbar': 'Actionbar TPS',
+    'display.intervalTicks': '刷新间隔 ticks',
+    'display.actionbarFormat': 'Actionbar 文案模板',
+    'display.sidebarEnabled': '侧边栏',
+    'display.sidebarTitle': '侧边栏标题',
+    'display.dirtyOnly': '仅变化时刷新',
+    'display.sidebarLines': '侧边栏行文案',
+    'display.placeholders': '占位符：%server%、%tps%、%mspt%、%online%、%max%、%world%、%player%、%ping%、%memory%',
+    'motd.title': 'MOTD',
+    'motd.enabled': 'MOTD 模块',
+    'motd.line1': 'MOTD 第一行',
+    'motd.line2': 'MOTD 第二行',
+    'motd.maxPlayers': '显示最大人数，-1 使用默认',
     'ai.approvals': '高危动作授权',
     'ai.approvalsNone': '当前没有待授权的高危假人动作。',
     'ai.approve': '批准一次',
@@ -135,6 +232,19 @@ const translations = {
     'commandMessages.save': '保存命令文案',
     'commandMessages.saved': '命令文案已保存。',
     'ai.title': '原生 AI',
+    'ai.eyebrow': '原生 AI 控制',
+    'ai.tab.provider': '模型服务',
+    'ai.tab.providerHint': '模型地址与密钥',
+    'ai.tab.chatNpc': '聊天和 NPC',
+    'ai.tab.chatNpcHint': '回复与 NPC 动作范围',
+    'ai.tab.fakePlayers': 'PlayerBot AI',
+    'ai.tab.fakePlayersHint': '移动、挖掘和放置',
+    'ai.tab.test': '测试',
+    'ai.tab.testHint': '发送一次性提示词',
+    'ai.providerTitle': '模型服务',
+    'ai.chatNpcTitle': '聊天和 NPC',
+    'ai.fakePlayersTitle': '真实假人 AI',
+    'ai.testTitle': '测试',
     'ai.enabled': 'AI 模块',
     'ai.baseUrl': 'OpenAI 兼容 Base URL',
     'ai.model': '模型',
@@ -159,8 +269,10 @@ const translations = {
     'ai.fakePlayersMaxMoveTicks': '最大移动 ticks',
     'ai.fakePlayersMaxActionTicks': '最大挖掘/交互 ticks',
     'ai.fakePlayersRadius': '假人感知半径',
+    'ai.fakePlayersMaxPlaceDistance': '最大放置距离',
     'ai.fakePlayersMovement': '允许移动',
     'ai.fakePlayersBreaking': '允许挖掘',
+    'ai.fakePlayersPlacing': '允许放置方块',
     'ai.fakePlayersInteraction': '允许交互/使用工具',
     'ai.fakePlayersChatControl': '聊天控制假人',
     'ai.fakePlayersChatPrefix': '聊天控制前缀，如 @bot',
@@ -190,6 +302,9 @@ const translations = {
     'webUsers.hunterAuthOnly': '仅 HunterAuth',
     'webUsers.commandsOn': '命令开',
     'webUsers.commandsOff': '命令关',
+    'admin.tab.modules': '模块',
+    'admin.tab.modulesHint': '开启模块和命令',
+    'admin.tab.luckHint': '权限辅助命令',
     'allowed.inherit': '继承',
     'allowed.custom': '自定义',
     'allowed.none': '无',
@@ -257,14 +372,37 @@ const translations = {
     'nav.runtime': 'Runtime',
     'nav.plugins': 'Plugins',
     'nav.tools': 'Tools',
+    'nav.settings': 'Settings',
+    'nav.access': 'Access',
+    'nav.ai': 'AI',
     'nav.admin': 'Admin',
     'language.switch': 'Switch to Chinese',
     'session.eyebrow': 'Web console',
     'session.guest': 'Guest view',
-    'login.username': 'HunterAuth username',
-    'login.password': 'Password',
+    'login.username': 'Player name / panel admin',
+    'login.password': 'Game password / panel password',
     'login.action': 'Login',
+    'register.description': 'Register before joining; this password is the in-game /login password and can also sign in here when enabled.',
+    'register.username': 'Player name (3-16 chars)',
+    'register.password': 'Password',
+    'register.confirm': 'Confirm password',
+    'register.action': 'Register player',
+    'register.closed': 'Web registration is closed.',
+    'register.done': 'Registered. You can now join and use the same password with /login.',
     'logout.action': 'Logout',
+    'remote.description': 'Detached frontend mode: fill backend URL and optional API key.',
+    'remote.backendUrl': 'Backend URL, e.g. http://127.0.0.1:8088',
+    'remote.apiKey': 'Optional API key',
+    'remote.connect': 'Connect backend',
+    'remote.clear': 'Use local panel',
+    'remote.connected': 'Connected backend: {url}',
+    'remote.local': 'Using the same-origin panel.',
+    'remote.saved': 'Backend connection saved.',
+    'remote.title': 'Remote frontend/API',
+    'remote.corsEnabled': 'CORS for standalone frontend',
+    'remote.corsAllowOrigin': 'Allowed origin, e.g. * or https://panel.example.com',
+    'remote.apiKeyEnabled': 'API key management',
+    'remote.clearApiKey': 'Clear API key',
     'metric.online': 'Online',
     'metric.memory': 'Memory',
     'map.open': 'Open map in new tab',
@@ -331,6 +469,24 @@ const translations = {
     'admin.required': 'Admin session required.',
     'admin.eyebrow': 'Operator controls',
     'admin.title': 'Admin',
+    'settings.eyebrow': 'Server presentation',
+    'settings.title': 'Settings',
+    'settings.tab.web': 'Web panel',
+    'settings.tab.webHint': 'Name, F3 and panel address',
+    'settings.tab.display': 'Game display',
+    'settings.tab.displayHint': 'Sidebar and TPS text',
+    'settings.tab.motd': 'MOTD',
+    'settings.tab.motdHint': 'Server list message',
+    'settings.tab.messages': 'Command text',
+    'settings.tab.messagesHint': 'Public command copy',
+    'access.eyebrow': 'Login and remote access',
+    'access.title': 'Access',
+    'access.tab.auth': 'HunterAuth',
+    'access.tab.authHint': 'Game login and web registration',
+    'access.tab.remote': 'Remote API',
+    'access.tab.remoteHint': 'CORS and API key',
+    'access.tab.users': 'Web roles',
+    'access.tab.usersHint': 'Panel users and commands',
     'modules.title': 'Modules',
     'commands.title': 'Command gates',
     'webSettings.title': 'Web panel',
@@ -339,12 +495,38 @@ const translations = {
     'webSettings.f3ServerName': 'F3 server name',
     'webSettings.bind': 'Bind address',
     'webSettings.port': 'Web port',
+    'webSettings.externalUrl': 'Public panel domain, e.g. https://panel.example.com',
     'webSettings.mapUrl': 'Map URL, for example http://%host%:8100/',
     'webSettings.publicMap': 'public map',
+    'auth.title': 'HunterAuth',
+    'auth.enabled': 'Login protection',
+    'auth.registrationRequired': 'Require account password',
+    'auth.webRegistrationRequired': 'Require web pre-registration',
+    'auth.webRegistrationEnabled': 'Open web registration',
+    'auth.webLoginEnabled': 'Allow players to web-login with game password',
+    'auth.guiEnabled': 'Login GUI',
+    'auth.openGuiOnJoin': 'Open GUI on join',
+    'auth.minimumPasswordLength': 'Minimum password length',
+    'auth.registrationUrl': 'Web registration URL for kick message',
     'webSettings.save': 'Save web settings',
     'webSettings.saved': 'Web settings saved.',
     'webSettings.restarting': 'Web settings saved. Panel is restarting on the new address.',
     'webSettings.threadingSaved': 'Thread policy saved. Core thread parameters fully apply after restart.',
+    'display.title': 'Display',
+    'display.tpsEnabled': 'TPS display',
+    'display.tpsActionbar': 'Actionbar TPS',
+    'display.intervalTicks': 'Refresh interval ticks',
+    'display.actionbarFormat': 'Actionbar text template',
+    'display.sidebarEnabled': 'Sidebar',
+    'display.sidebarTitle': 'Sidebar title',
+    'display.dirtyOnly': 'Dirty updates only',
+    'display.sidebarLines': 'Sidebar line text',
+    'display.placeholders': 'Placeholders: %server%, %tps%, %mspt%, %online%, %max%, %world%, %player%, %ping%, %memory%',
+    'motd.title': 'MOTD',
+    'motd.enabled': 'MOTD module',
+    'motd.line1': 'MOTD line 1',
+    'motd.line2': 'MOTD line 2',
+    'motd.maxPlayers': 'Displayed max players, -1 uses default',
     'ai.approvals': 'High-risk action approvals',
     'ai.approvalsNone': 'There are no pending high-risk fake player actions.',
     'ai.approve': 'Approve once',
@@ -359,6 +541,19 @@ const translations = {
     'commandMessages.save': 'Save command text',
     'commandMessages.saved': 'Command text saved.',
     'ai.title': 'Native AI',
+    'ai.eyebrow': 'Native AI controls',
+    'ai.tab.provider': 'Provider',
+    'ai.tab.providerHint': 'Model endpoint and key',
+    'ai.tab.chatNpc': 'Chat and NPC',
+    'ai.tab.chatNpcHint': 'Replies and NPC action scope',
+    'ai.tab.fakePlayers': 'PlayerBot AI',
+    'ai.tab.fakePlayersHint': 'Movement, mining and placing',
+    'ai.tab.test': 'Test',
+    'ai.tab.testHint': 'Send a one-off prompt',
+    'ai.providerTitle': 'Provider',
+    'ai.chatNpcTitle': 'Chat and NPC',
+    'ai.fakePlayersTitle': 'Real fake player AI',
+    'ai.testTitle': 'Test',
     'ai.enabled': 'AI module',
     'ai.baseUrl': 'OpenAI-compatible Base URL',
     'ai.model': 'Model',
@@ -383,8 +578,10 @@ const translations = {
     'ai.fakePlayersMaxMoveTicks': 'Max move ticks',
     'ai.fakePlayersMaxActionTicks': 'Max mine/use ticks',
     'ai.fakePlayersRadius': 'Fake player sensing radius',
+    'ai.fakePlayersMaxPlaceDistance': 'Max place distance',
     'ai.fakePlayersMovement': 'allow movement',
     'ai.fakePlayersBreaking': 'allow breaking',
+    'ai.fakePlayersPlacing': 'allow block placing',
     'ai.fakePlayersInteraction': 'allow interaction/tools',
     'ai.fakePlayersChatControl': 'chat control',
     'ai.fakePlayersChatPrefix': 'Chat control prefix, e.g. @bot',
@@ -414,6 +611,9 @@ const translations = {
     'webUsers.hunterAuthOnly': 'HunterAuth only',
     'webUsers.commandsOn': 'commands on',
     'webUsers.commandsOff': 'commands off',
+    'admin.tab.modules': 'Modules',
+    'admin.tab.modulesHint': 'Enable modules and commands',
+    'admin.tab.luckHint': 'Permissions helper commands',
     'allowed.inherit': 'inherit',
     'allowed.custom': 'custom',
     'allowed.none': 'none',
@@ -503,6 +703,27 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   "'": '&#39;'
 })[char]);
 
+function apiUrl(path) {
+  const value = String(path || '');
+  if (/^https?:\/\//i.test(value)) return value;
+  return state.backendUrl ? `${state.backendUrl}${value.startsWith('/') ? value : `/${value}`}` : value;
+}
+
+function assetUrl(path) {
+  const cleanPath = String(path || '').startsWith('/') ? path : `/${path}`;
+  return state.backendUrl ? apiUrl(cleanPath) : cleanPath.replace(/^\/+/, '');
+}
+
+function renderBackendConnection() {
+  const line = $('backendLine');
+  if (!line) return;
+  line.textContent = state.backendUrl
+    ? t('remote.connected', { url: state.backendUrl })
+    : t('remote.local');
+  if ($('backendUrl')) $('backendUrl').value = state.backendUrl;
+  if ($('backendApiKey')) $('backendApiKey').value = state.apiKey;
+}
+
 const severityClass = (value) => ['ok', 'warning', 'critical', 'disabled'].includes(value) ? value : 'ok';
 const liquidGlassSelector = [
   '.topNav',
@@ -519,6 +740,7 @@ const liquidGlassSelector = [
   'select',
   'textarea',
   '.navButton',
+  '.configTab',
   '.productMark',
   '.statusPill',
   '.roleBadge',
@@ -592,6 +814,8 @@ function applyTranslations() {
   translateOptions('actorKind', { villager: t('actors.villager'), mannequin: t('actors.mannequin') });
   const commandResult = $('commandResult');
   if (commandResult?.dataset.placeholder !== 'false') setCommandPlaceholder();
+  renderBackendConnection();
+  if (state.lastData?.auth) renderAuthPublic(state.lastData.auth);
 }
 
 function rerenderCachedStatus() {
@@ -623,11 +847,11 @@ function setLanguage(lang) {
 
 function pageFromLocation() {
   const value = window.location.hash.replace(/^#\/?/, '');
-  return ['map', 'overview', 'runtime', 'plugins', 'tools', 'admin'].includes(value) ? value : 'map';
+  return PAGES.includes(value) ? value : 'map';
 }
 
 function showPage(page, push = true) {
-  const targetPage = page === 'admin' && !state.session?.admin ? 'overview' : page;
+  const targetPage = ADMIN_PAGES.includes(page) && !state.session?.admin ? 'overview' : page;
   state.page = targetPage;
   $$('.pageView').forEach((view) => {
     const active = view.id === targetPage;
@@ -746,13 +970,33 @@ function pluginLine(plugin, admin) {
 async function json(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (state.csrf) headers['X-HunterCore-CSRF'] = state.csrf;
+  if (state.sessionToken) headers['X-HunterCore-Session'] = state.sessionToken;
+  if (state.apiKey) headers['X-HunterCore-Api-Key'] = state.apiKey;
   if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-  const response = await fetch(url, { credentials: 'same-origin', ...options, headers });
+  const response = await fetch(apiUrl(url), {
+    credentials: state.backendUrl ? 'omit' : 'same-origin',
+    ...options,
+    headers
+  });
   const payload = await response.json();
   if (!response.ok) {
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
   return payload;
+}
+
+function renderAuthPublic(auth) {
+  const form = $('registerForm');
+  if (!form) return;
+  const enabled = Boolean(auth?.enabled && auth?.registrationRequired && auth?.webRegistrationEnabled);
+  form.hidden = !enabled;
+  $('registerButton').disabled = !enabled;
+  const description = form.querySelector('.subtleLine');
+  if (description) {
+    description.textContent = enabled
+      ? t('register.description')
+      : t('register.closed');
+  }
 }
 
 function setAdminVisibility(admin) {
@@ -769,7 +1013,7 @@ function updateSessionChrome() {
   const session = state.session;
   const admin = Boolean(session?.admin);
   setAdminVisibility(admin);
-  if (!admin && state.page === 'admin') showPage('overview');
+  if (!admin && ADMIN_PAGES.includes(state.page)) showPage('overview');
   $('logoutButton').hidden = !session;
   $('loginForm').hidden = Boolean(session);
   $('sessionTitle').textContent = session
@@ -879,14 +1123,42 @@ function renderWebUsers(users) {
 
 function renderWebSettings(settings) {
   if (!state.session?.admin || !settings) return;
-  if (document.activeElement && $('webSettingsForm').contains(document.activeElement)) return;
+  if (document.activeElement && document.activeElement.closest('[data-settings-scope="web"]')) return;
   $('webServerName').value = settings.serverName || '';
   $('webCpuMode').value = settings.cpuMode || 'single-thread';
   $('webF3ServerName').value = settings.f3ServerName || '';
   $('webBindAddress').value = settings.bindAddress || '';
   $('webPort').value = settings.port || '';
+  $('webExternalUrl').value = settings.externalUrl || '';
   $('webMapUrl').value = settings.mapUrl || '';
   $('webPublicMap').checked = Boolean(settings.publicMap);
+  $('tpsDisplayEnabled').checked = Boolean(settings.tpsDisplayEnabled);
+  $('tpsActionbar').checked = Boolean(settings.tpsActionbar);
+  $('tpsIntervalTicks').value = settings.tpsIntervalTicks ?? '';
+  $('tpsActionbarFormat').value = settings.tpsActionbarFormat || '';
+  $('sidebarEnabled').checked = Boolean(settings.sidebarEnabled);
+  $('sidebarTitle').value = settings.sidebarTitle || '';
+  $('sidebarIntervalTicks').value = settings.sidebarIntervalTicks ?? '';
+  $('sidebarDirtyUpdatesOnly').checked = Boolean(settings.sidebarDirtyUpdatesOnly);
+  $('sidebarLines').value = (settings.sidebarLines || []).join('\n');
+  $('motdEnabled').checked = Boolean(settings.motdEnabled);
+  $('motdLine1').value = settings.motdLine1 || '';
+  $('motdLine2').value = settings.motdLine2 || '';
+  $('motdMaxPlayers').value = settings.motdMaxPlayers ?? '';
+  $('authEnabled').checked = Boolean(settings.authEnabled);
+  $('authRegistrationRequired').checked = Boolean(settings.authRegistrationRequired);
+  $('authWebRegistrationRequired').checked = Boolean(settings.authWebRegistrationRequired);
+  $('authWebRegistrationEnabled').checked = Boolean(settings.authWebRegistrationEnabled);
+  $('authWebLoginEnabled').checked = Boolean(settings.authWebLoginEnabled);
+  $('authGuiEnabled').checked = Boolean(settings.authGuiEnabled);
+  $('authOpenGuiOnJoin').checked = Boolean(settings.authOpenGuiOnJoin);
+  $('authMinimumPasswordLength').value = settings.authMinimumPasswordLength ?? '';
+  $('authRegistrationUrl').value = settings.authRegistrationUrl || '';
+  $('webCorsEnabled').checked = Boolean(settings.corsEnabled);
+  $('webCorsAllowOrigin').value = settings.corsAllowOrigin || '*';
+  $('webApiKeyEnabled').checked = Boolean(settings.apiKeyEnabled);
+  $('webApiKey').placeholder = settings.apiKeyConfigured ? 'API key configured' : t('remote.apiKey');
+  $('webClearApiKey').checked = false;
   $('webAddressLine').textContent = settings.address || '';
   $('webThreadingLine').textContent = `${t('webSettings.cpuMode')}: ${settings.cpuMode || 'single-thread'} · ${settings.asyncEnabled ? 'async' : 'sync'} · workers ${settings.recommendedWorkers || '--'} · F3 ${settings.f3ServerName || ''}`;
 }
@@ -909,7 +1181,7 @@ function renderCommandMessages(messages) {
 
 function renderAiSettings(settings) {
   if (!state.session?.admin || !settings) return;
-  if (document.activeElement && $('aiSettingsForm').contains(document.activeElement)) return;
+  if (document.activeElement && document.activeElement.closest('[data-settings-scope="ai"]')) return;
   $('aiEnabled').checked = Boolean(settings.enabled);
   $('aiBaseUrl').value = settings.baseUrl || '';
   $('aiModel').value = settings.model || '';
@@ -934,8 +1206,10 @@ function renderAiSettings(settings) {
   $('aiFakePlayersMaxMoveTicks').value = settings.fakePlayersMaxMoveTicks ?? '';
   $('aiFakePlayersMaxActionTicks').value = settings.fakePlayersMaxActionTicks ?? '';
   $('aiFakePlayersNearbyRadiusBlocks').value = settings.fakePlayersNearbyRadiusBlocks ?? '';
+  $('aiFakePlayersMaxPlaceDistanceBlocks').value = settings.fakePlayersMaxPlaceDistanceBlocks ?? '';
   $('aiFakePlayersAllowMovement').checked = Boolean(settings.fakePlayersAllowMovement);
   $('aiFakePlayersAllowBreaking').checked = Boolean(settings.fakePlayersAllowBreaking);
+  $('aiFakePlayersAllowPlacing').checked = Boolean(settings.fakePlayersAllowPlacing);
   $('aiFakePlayersAllowInteraction').checked = Boolean(settings.fakePlayersAllowInteraction);
   $('aiFakePlayersChatControlEnabled').checked = Boolean(settings.fakePlayersChatControlEnabled);
   $('aiFakePlayersChatControlPrefix').value = settings.fakePlayersChatControlPrefix || '';
@@ -953,6 +1227,8 @@ async function refresh() {
   state.lastData = data;
   state.session = data.session;
   state.csrf = data.session?.csrf || state.csrf;
+  state.sessionToken = data.session?.token || state.sessionToken;
+  if (state.backendUrl && state.sessionToken) storeValue(SESSION_TOKEN_KEY, state.sessionToken);
   $('serverNameTitle').textContent = data.server.name || 'HunterCore';
   $('serverLine').textContent = `${data.server.software || 'Minecraft'} · ${data.server.version}`;
   $('tps').textContent = Number(data.server.tps1).toFixed(2);
@@ -961,6 +1237,8 @@ async function refresh() {
   $('memory').textContent = data.server.memory;
   updateSessionChrome();
   renderHealth(data.health);
+  renderAuthPublic(data.auth);
+  renderBackendConnection();
   renderOverview(data);
   renderActorWorlds(data.worlds);
   renderActors(data.actorDetails);
@@ -1012,6 +1290,35 @@ function updateActorKind() {
   const fake = $('actorModule').value === 'fake-players' || $('actorModule').value === 'real-fake-players';
   $('actorKind').disabled = fake;
   if (fake) $('actorKind').value = 'mannequin';
+}
+
+function setConfigPanel(workbench, targetName) {
+  const buttons = Array.from(workbench.querySelectorAll('[data-config-target]'));
+  const panels = Array.from(workbench.querySelectorAll('[data-config-panel]'));
+  const fallback = buttons[0]?.dataset.configTarget || panels[0]?.dataset.configPanel || '';
+  const selected = panels.some((panel) => panel.dataset.configPanel === targetName) ? targetName : fallback;
+  buttons.forEach((button) => {
+    const active = button.dataset.configTarget === selected;
+    button.classList.toggle('isActive', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  panels.forEach((panel) => {
+    panel.hidden = panel.dataset.configPanel !== selected;
+  });
+}
+
+function bindConfigWorkbenches() {
+  $$('[data-config-workbench]').forEach((workbench) => {
+    const storageKey = `${CONFIG_WORKBENCH_KEY_PREFIX}${workbench.dataset.configWorkbench || 'default'}`;
+    workbench.querySelectorAll('[data-config-target]').forEach((button) => {
+      button.addEventListener('click', () => {
+        storeValue(storageKey, button.dataset.configTarget || '');
+        setConfigPanel(workbench, button.dataset.configTarget);
+      });
+    });
+    const active = workbench.querySelector('.configTab.isActive');
+    setConfigPanel(workbench, storedValue(storageKey) || active?.dataset.configTarget);
+  });
 }
 
 function liquidGlassElement(target) {
@@ -1086,7 +1393,7 @@ function bindServerIcon() {
     mark.classList.remove('hasIcon');
     image.hidden = true;
   });
-  image.src = `/assets/server-icon.png?${Date.now()}`;
+  image.src = `${assetUrl('/assets/server-icon.png')}?${Date.now()}`;
 }
 
 function bindEvents() {
@@ -1110,6 +1417,8 @@ function bindEvents() {
       $('password').value = '';
       state.session = result.session;
       state.csrf = result.session?.csrf || '';
+      state.sessionToken = result.session?.token || '';
+      storeValue(SESSION_TOKEN_KEY, state.backendUrl ? state.sessionToken : '');
       setOutput(t('command.loggedIn', { username: result.session.username, role: roleLabel(result.session.role) }));
       await refresh();
     } catch {
@@ -1122,8 +1431,61 @@ function bindEvents() {
     await json('/api/logout', { method: 'POST' });
     state.session = null;
     state.csrf = '';
+    state.sessionToken = '';
+    storeValue(SESSION_TOKEN_KEY, '');
     setOutput(t('command.loggedOut'));
     await refresh();
+  });
+
+  $('registerForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await json('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: $('registerUsername').value,
+          password: $('registerPassword').value,
+          confirmPassword: $('registerConfirmPassword').value
+        })
+      });
+      $('registerPassword').value = '';
+      $('registerConfirmPassword').value = '';
+      setOutput(t('register.done'));
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('connectionForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    state.backendUrl = normalizeBackendUrl($('backendUrl').value);
+    state.apiKey = $('backendApiKey').value.trim();
+    state.csrf = '';
+    state.sessionToken = state.backendUrl ? state.sessionToken : '';
+    storeValue(BACKEND_URL_KEY, state.backendUrl);
+    storeValue(BACKEND_API_KEY_KEY, state.apiKey);
+    storeValue(SESSION_TOKEN_KEY, state.sessionToken);
+    renderBackendConnection();
+    bindServerIcon();
+    setOutput(t('remote.saved'));
+    await refresh();
+    await refreshMap();
+  });
+
+  $('clearConnectionButton').addEventListener('click', async () => {
+    state.backendUrl = '';
+    state.apiKey = '';
+    state.sessionToken = '';
+    state.csrf = '';
+    storeValue(BACKEND_URL_KEY, '');
+    storeValue(BACKEND_API_KEY_KEY, '');
+    storeValue(SESSION_TOKEN_KEY, '');
+    $('backendApiKey').value = '';
+    renderBackendConnection();
+    bindServerIcon();
+    setOutput(t('remote.local'));
+    await refresh();
+    await refreshMap();
   });
 
   $('commandForm').addEventListener('submit', async (event) => {
@@ -1245,12 +1607,41 @@ function bindEvents() {
       f3ServerName: $('webF3ServerName').value,
       bindAddress: $('webBindAddress').value,
       port: $('webPort').value,
+      externalUrl: $('webExternalUrl').value,
       mapUrl: $('webMapUrl').value,
-      publicMap: String($('webPublicMap').checked)
+      publicMap: String($('webPublicMap').checked),
+      tpsDisplayEnabled: String($('tpsDisplayEnabled').checked),
+      tpsActionbar: String($('tpsActionbar').checked),
+      tpsIntervalTicks: $('tpsIntervalTicks').value,
+      tpsActionbarFormat: $('tpsActionbarFormat').value,
+      sidebarEnabled: String($('sidebarEnabled').checked),
+      sidebarTitle: $('sidebarTitle').value,
+      sidebarIntervalTicks: $('sidebarIntervalTicks').value,
+      sidebarDirtyUpdatesOnly: String($('sidebarDirtyUpdatesOnly').checked),
+      sidebarLines: $('sidebarLines').value,
+      motdEnabled: String($('motdEnabled').checked),
+      motdLine1: $('motdLine1').value,
+      motdLine2: $('motdLine2').value,
+      motdMaxPlayers: $('motdMaxPlayers').value,
+      authEnabled: String($('authEnabled').checked),
+      authRegistrationRequired: String($('authRegistrationRequired').checked),
+      authWebRegistrationRequired: String($('authWebRegistrationRequired').checked),
+      authWebRegistrationEnabled: String($('authWebRegistrationEnabled').checked),
+      authWebLoginEnabled: String($('authWebLoginEnabled').checked),
+      authGuiEnabled: String($('authGuiEnabled').checked),
+      authOpenGuiOnJoin: String($('authOpenGuiOnJoin').checked),
+      authMinimumPasswordLength: $('authMinimumPasswordLength').value,
+      authRegistrationUrl: $('authRegistrationUrl').value,
+      corsEnabled: String($('webCorsEnabled').checked),
+      corsAllowOrigin: $('webCorsAllowOrigin').value,
+      apiKeyEnabled: String($('webApiKeyEnabled').checked),
+      apiKey: $('webApiKey').value,
+      clearApiKey: String($('webClearApiKey').checked)
     };
     try {
       const result = await json('/api/admin/web-settings', { method: 'POST', body: JSON.stringify(payload) });
       setOutput(result.restart ? t('webSettings.restarting') : (result.threadingChanged ? t('webSettings.threadingSaved') : t('webSettings.saved')));
+      $('webApiKey').value = '';
       if (result.settings) renderWebSettings(result.settings);
       await refresh();
       await refreshMap();
@@ -1306,8 +1697,10 @@ function bindEvents() {
       fakePlayersMaxMoveTicks: $('aiFakePlayersMaxMoveTicks').value,
       fakePlayersMaxActionTicks: $('aiFakePlayersMaxActionTicks').value,
       fakePlayersNearbyRadiusBlocks: $('aiFakePlayersNearbyRadiusBlocks').value,
+      fakePlayersMaxPlaceDistanceBlocks: $('aiFakePlayersMaxPlaceDistanceBlocks').value,
       fakePlayersAllowMovement: String($('aiFakePlayersAllowMovement').checked),
       fakePlayersAllowBreaking: String($('aiFakePlayersAllowBreaking').checked),
+      fakePlayersAllowPlacing: String($('aiFakePlayersAllowPlacing').checked),
       fakePlayersAllowInteraction: String($('aiFakePlayersAllowInteraction').checked),
       fakePlayersChatControlEnabled: String($('aiFakePlayersChatControlEnabled').checked),
       fakePlayersChatControlPrefix: $('aiFakePlayersChatControlPrefix').value,
@@ -1437,6 +1830,8 @@ function bindEvents() {
 }
 
 applyTranslations();
+renderBackendConnection();
+bindConfigWorkbenches();
 bindLiquidGlass();
 bindServerIcon();
 bindEvents();

@@ -33,6 +33,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.block.BlockFace;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.huntercore.api.fakeplayer.FakePlayerActionResult;
 import org.huntercore.api.fakeplayer.FakePlayerSnapshot;
@@ -252,6 +253,44 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             }
             player.inventoryMenu.broadcastChanges();
             return FakePlayerActionResult.ok(player.getGameProfile().name() + " used main hand (" + result + ").");
+        });
+    }
+
+    @Override
+    public @NotNull FakePlayerActionResult placeBlock(@NotNull final String name, @NotNull final Location clickedBlock, @NotNull final BlockFace face) {
+        return this.withPlayer(name, player -> {
+            if (clickedBlock.getWorld() == null) {
+                return FakePlayerActionResult.fail("Clicked block location has no world.");
+            }
+            if (!player.getBukkitEntity().getWorld().equals(clickedBlock.getWorld())) {
+                return FakePlayerActionResult.fail(player.getGameProfile().name() + " is not in world " + clickedBlock.getWorld().getName() + ".");
+            }
+            final Direction direction = direction(face);
+            if (direction == null) {
+                return FakePlayerActionResult.fail("Unsupported block face: " + face.name().toLowerCase(Locale.ROOT) + ".");
+            }
+            this.abortMining(id(name), player);
+            final BlockPos pos = new BlockPos(clickedBlock.getBlockX(), clickedBlock.getBlockY(), clickedBlock.getBlockZ());
+            final Vec3 hit = new Vec3(
+                pos.getX() + 0.5D + direction.getStepX() * 0.5D,
+                pos.getY() + 0.5D + direction.getStepY() * 0.5D,
+                pos.getZ() + 0.5D + direction.getStepZ() * 0.5D
+            );
+            final InteractionHand hand = InteractionHand.MAIN_HAND;
+            final InteractionResult result = player.gameMode.useItemOn(
+                player,
+                player.level(),
+                player.getItemInHand(hand),
+                hand,
+                new BlockHitResult(hit, direction, pos, false)
+            );
+            if (result.consumesAction()) {
+                player.swing(hand, true);
+            }
+            player.inventoryMenu.broadcastChanges();
+            return result.consumesAction()
+                ? FakePlayerActionResult.ok(player.getGameProfile().name() + " placed/used block at " + blockLine(pos) + " face " + face.name().toLowerCase(Locale.ROOT) + " (" + result + ").")
+                : FakePlayerActionResult.fail(player.getGameProfile().name() + " could not place/use block at " + blockLine(pos) + " face " + face.name().toLowerCase(Locale.ROOT) + " (" + result + ").");
         });
     }
 
@@ -510,6 +549,18 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
 
     private static String blockLine(final BlockPos pos) {
         return pos.getX() + " " + pos.getY() + " " + pos.getZ();
+    }
+
+    private static @Nullable Direction direction(final BlockFace face) {
+        return switch (face) {
+            case NORTH -> Direction.NORTH;
+            case SOUTH -> Direction.SOUTH;
+            case EAST -> Direction.EAST;
+            case WEST -> Direction.WEST;
+            case UP -> Direction.UP;
+            case DOWN -> Direction.DOWN;
+            default -> null;
+        };
     }
 
     private static int gameTick(final ServerPlayer player) {

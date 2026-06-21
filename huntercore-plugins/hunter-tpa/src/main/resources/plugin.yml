@@ -9,6 +9,10 @@ commands:
     description: Request to teleport to another player.
     usage: /tpa <player>
     permission: huntertpa.command.tpa
+  tpahere:
+    description: Request another player to teleport to you.
+    usage: /tpahere <player>
+    permission: huntertpa.command.tpahere
   tpaccept:
     description: Accept a teleport request.
     usage: /tpaccept [player]
@@ -21,12 +25,38 @@ commands:
     description: Cancel your outgoing teleport request.
     usage: /tpcancel
     permission: huntertpa.command.tpcancel
+  sethome:
+    description: Set a named home.
+    usage: /sethome [name]
+    permission: huntertpa.command.sethome
+  home:
+    description: Teleport to a named home.
+    usage: /home [name]
+    permission: huntertpa.command.home
+  delhome:
+    description: Delete a named home.
+    usage: /delhome [name]
+    permission: huntertpa.command.delhome
+  homes:
+    description: List your homes.
+    usage: /homes
+    permission: huntertpa.command.homes
 permissions:
   huntertpa.command.tpa:
+    default: true
+  huntertpa.command.tpahere:
     default: true
   huntertpa.command.tpaccept:
     default: true
   huntertpa.command.tpdeny:
     default: true
   huntertpa.command.tpcancel:
+    default: true
+  huntertpa.command.sethome:
+    default: true
+  huntertpa.command.home:
+    default: true
+  huntertpa.command.delhome:
+    default: true
+  huntertpa.command.homes:
     default: true

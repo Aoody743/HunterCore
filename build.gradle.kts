@@ -2,6 +2,13 @@ import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.register
+import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 plugins {
     java
@@ -13,6 +20,88 @@ val huntercoreVersionName = providers.gradleProperty("huntercoreVersion").get().
 val huntercoreReleaseChannel = providers.gradleProperty("releaseChannel").get().trim()
 val huntercoreMcVersion = providers.gradleProperty("mcVersion").get().trim()
 val huntercoreReleaseJarName = "HunterCore-$huntercoreVersionName-MinecraftServer-$huntercoreMcVersion-$huntercoreReleaseChannel.jar"
+
+data class EmbeddedLibraryTrim(
+    val embeddedPath: String,
+    val libraryListPath: String,
+    val keepEntry: (String) -> Boolean,
+)
+
+fun sha256Hex(bytes: ByteArray): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(bytes)
+        .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+fun trimNestedJar(bytes: ByteArray, keepEntry: (String) -> Boolean): ByteArray {
+    val output = ByteArrayOutputStream(bytes.size)
+    ZipInputStream(bytes.inputStream()).use { input ->
+        ZipOutputStream(output).use { zip ->
+            while (true) {
+                val entry = input.nextEntry ?: break
+                val name = entry.name
+                if (entry.isDirectory || !keepEntry(name)) {
+                    input.closeEntry()
+                    continue
+                }
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(input.readBytes())
+                zip.closeEntry()
+                input.closeEntry()
+            }
+        }
+    }
+    return output.toByteArray()
+}
+
+fun writeCommonNativePaperclip(sourceJar: File, outputJar: File, trims: List<EmbeddedLibraryTrim>) {
+    val trimByEmbeddedPath = trims.associateBy { it.embeddedPath }
+    val newHashes = linkedMapOf<String, String>()
+    val entries = mutableListOf<Triple<String, Boolean, ByteArray>>()
+
+    ZipInputStream(sourceJar.inputStream().buffered()).use { input ->
+        while (true) {
+            val entry = input.nextEntry ?: break
+            val name = entry.name
+            val data = if (entry.isDirectory) ByteArray(0) else input.readBytes()
+            val trim = trimByEmbeddedPath[name]
+            val finalData = if (trim != null) {
+                trimNestedJar(data, trim.keepEntry).also {
+                    newHashes[trim.libraryListPath] = sha256Hex(it)
+                }
+            } else {
+                data
+            }
+            entries.add(Triple(name, entry.isDirectory, finalData))
+            input.closeEntry()
+        }
+    }
+
+    outputJar.parentFile.mkdirs()
+    ZipOutputStream(outputJar.outputStream().buffered()).use { output ->
+        entries.forEach { (name, directory, data) ->
+            output.putNextEntry(ZipEntry(name))
+            if (!directory) {
+                val finalData = if (name == "META-INF/libraries.list" && newHashes.isNotEmpty()) {
+                    val text = data.toString(Charsets.UTF_8)
+                    val trailingNewline = text.endsWith("\n")
+                    val body = if (trailingNewline) text.dropLast(1) else text
+                    body.lines().joinToString("\n") { line ->
+                        val parts = line.split("\t")
+                        if (parts.size == 3 && newHashes.containsKey(parts[2])) {
+                            "${newHashes.getValue(parts[2])}\t${parts[1]}\t${parts[2]}"
+                        } else {
+                            line
+                        }
+                    }.let { if (trailingNewline) "$it\n" else it }.toByteArray(Charsets.UTF_8)
+                } else {
+                    data
+                }
+                output.write(finalData)
+            }
+            output.closeEntry()
+        }
+    }
+}
 
 paperweight {
     upstreams.register("purpur") {
@@ -156,11 +245,63 @@ tasks.register("printMinecraftVersion") {
     }
 }
 
-tasks.register<Copy>("packageHunterCoreRelease") {
+tasks.register("packageHunterCoreRelease") {
     group = "huntercore"
-    description = "Builds the paperclip jar and copies it to the HunterCore release naming scheme."
+    description = "Builds the paperclip jar, trims bundled native libraries to common server platforms, and copies it to the HunterCore release naming scheme."
     dependsOn(":divinemc-server:createPaperclipJar")
-    from(layout.projectDirectory.file("divinemc-server/build/libs/divinemc-paperclip-${huntercoreMcVersion}.local-SNAPSHOT.jar"))
-    into(layout.projectDirectory.dir("divinemc-server/build/libs"))
-    rename { huntercoreReleaseJarName }
+    val sourceJar = layout.projectDirectory.file("divinemc-server/build/libs/divinemc-paperclip-${huntercoreMcVersion}.local-SNAPSHOT.jar")
+    val releaseJar = layout.projectDirectory.file("divinemc-server/build/libs/$huntercoreReleaseJarName")
+    inputs.file(sourceJar)
+    outputs.file(releaseJar)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val commonNativePrefixes = listOf(
+            "linux/amd64/",
+            "linux/aarch64/",
+            "darwin/x86_64/",
+            "darwin/aarch64/",
+            "win/amd64/",
+            "win/aarch64/",
+        )
+        val sqliteNativePrefixes = listOf(
+            "org/sqlite/native/Linux/x86_64/",
+            "org/sqlite/native/Linux/aarch64/",
+            "org/sqlite/native/Linux-Musl/x86_64/",
+            "org/sqlite/native/Linux-Musl/aarch64/",
+            "org/sqlite/native/Mac/x86_64/",
+            "org/sqlite/native/Mac/aarch64/",
+            "org/sqlite/native/Windows/x86_64/",
+            "org/sqlite/native/Windows/aarch64/",
+        )
+        val trims = listOf(
+            EmbeddedLibraryTrim(
+                embeddedPath = "META-INF/libraries/com/github/luben/zstd-jni/1.5.7-3/zstd-jni-1.5.7-3.jar",
+                libraryListPath = "com/github/luben/zstd-jni/1.5.7-3/zstd-jni-1.5.7-3.jar",
+                keepEntry = { entry ->
+                    entry.startsWith("META-INF/") ||
+                        entry.startsWith("com/github/luben/") ||
+                        commonNativePrefixes.any { prefix -> entry.startsWith(prefix) }
+                },
+            ),
+            EmbeddedLibraryTrim(
+                embeddedPath = "META-INF/libraries/org/xerial/sqlite-jdbc/3.49.1.0/sqlite-jdbc-3.49.1.0.jar",
+                libraryListPath = "org/xerial/sqlite-jdbc/3.49.1.0/sqlite-jdbc-3.49.1.0.jar",
+                keepEntry = { entry ->
+                    entry.startsWith("META-INF/") ||
+                        (entry.startsWith("org/sqlite/") && !entry.startsWith("org/sqlite/native/")) ||
+                        sqliteNativePrefixes.any { prefix -> entry.startsWith(prefix) }
+                },
+            ),
+        )
+        val output = releaseJar.asFile
+        val temporaryOutput = output.resolveSibling("${output.name}.tmp")
+        writeCommonNativePaperclip(sourceJar.asFile, temporaryOutput, trims)
+        Files.move(temporaryOutput.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        val size = output.length()
+        check(size < 100_000_000L) {
+            "HunterCore release jar is ${"%.2f".format(size / 1_000_000.0)} MB, expected less than 100 MB"
+        }
+        println("HunterCore release jar: ${output.name} (${"%.2f".format(size / 1_000_000.0)} MB)")
+    }
 }

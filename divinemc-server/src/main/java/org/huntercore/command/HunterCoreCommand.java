@@ -17,6 +17,8 @@ import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionDefault;
 import org.bukkit.plugin.PluginManager;
 import org.huntercore.api.HunterCommandExtension;
+import org.huntercore.api.HunterHelp;
+import org.huntercore.api.HunterLanguage;
 import org.huntercore.bootstrap.HunterCoreBootstrap;
 import org.huntercore.bootstrap.HunterCoreRuntime;
 import org.huntercore.config.HunterPreferences;
@@ -25,19 +27,20 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class HunterCoreCommand extends Command {
-    public static final String COMMAND_LABEL = "huntercore";
+    public static final String COMMAND_LABEL = "hc";
     public static final String BASE_PERMISSION = "huntercore.command";
 
     private final Map<String, HunterCommandExtension> builtIns = new LinkedHashMap<>();
 
     public HunterCoreCommand() {
-        super(COMMAND_LABEL, "HunterCore related commands", "/huntercore [about|system|plugins|preferences|reload]", List.of("hc"));
+        super(COMMAND_LABEL, "HunterCore command hub", "/hc <help|language|about|system|plugins|preferences|reload|admin>", List.of("huntercore"));
         HunterCoreBootstrap.init();
         this.setPermission(BASE_PERMISSION);
         this.registerBuiltIn(new AboutExtension());
         this.registerBuiltIn(new SystemExtension());
         this.registerBuiltIn(new PluginsExtension());
         this.registerBuiltIn(new PreferencesExtension());
+        this.registerBuiltIn(new LanguageExtension());
         this.registerBuiltIn(new ReloadExtension());
         this.registerPermissions();
     }
@@ -50,13 +53,18 @@ public final class HunterCoreCommand extends Command {
         }
 
         if (args.length == 0) {
-            sender.sendMessage(HunterMessages.about());
+            this.sendHelp(sender, new String[0]);
+            return true;
+        }
+
+        if (args[0].equalsIgnoreCase("help")) {
+            this.sendHelp(sender, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
 
         final HunterCommandExtension extension = this.resolve(args[0]);
         if (extension == null) {
-            sender.sendMessage("Usage: " + this.usageMessage);
+            this.sendHelp(sender, new String[] {args[0]});
             return true;
         }
 
@@ -78,6 +86,7 @@ public final class HunterCoreCommand extends Command {
     ) {
         if (args.length <= 1) {
             final List<String> labels = new ArrayList<>();
+            labels.add("help");
             for (final HunterCommandExtension extension : this.availableExtensions(sender)) {
                 labels.add(extension.name());
                 labels.addAll(extension.aliases());
@@ -85,11 +94,19 @@ public final class HunterCoreCommand extends Command {
             return CommandUtil.getListMatchingLast(sender, args, labels);
         }
 
+        if (args.length == 2 && args[0].equalsIgnoreCase("help")) {
+            return CommandUtil.getListMatchingLast(sender, args, HunterHelp.topics());
+        }
+
         final HunterCommandExtension extension = this.resolve(args[0]);
         if (extension == null || !this.canUse(sender, extension)) {
             return List.of();
         }
         return extension.tabComplete(sender, args[0].toLowerCase(Locale.ROOT), Arrays.copyOfRange(args, 1, args.length));
+    }
+
+    private void sendHelp(final CommandSender sender, final String[] args) {
+        HunterHelp.send(sender, language(), args);
     }
 
     private void registerBuiltIn(final HunterCommandExtension extension) {
@@ -138,7 +155,10 @@ public final class HunterCoreCommand extends Command {
         for (final HunterCommandExtension extension : this.builtIns.values()) {
             final String permission = extension.permission();
             if (permission != null) {
-                this.addPermission(pluginManager, new Permission(permission, PermissionDefault.TRUE));
+                this.addPermission(pluginManager, new Permission(
+                    permission,
+                    permission.equals(BASE_PERMISSION + ".language") ? PermissionDefault.OP : PermissionDefault.TRUE
+                ));
             }
         }
     }
@@ -147,6 +167,14 @@ public final class HunterCoreCommand extends Command {
         if (pluginManager.getPermission(permission.getName()) == null) {
             pluginManager.addPermission(permission);
         }
+    }
+
+    private static String language() {
+        return HunterCoreRuntime.get().language();
+    }
+
+    private static String text(final String zhCn, final String enUs) {
+        return HunterLanguage.choose(language(), zhCn, enUs);
     }
 
     private static final class AboutExtension implements HunterCommandExtension {
@@ -161,13 +189,18 @@ public final class HunterCoreCommand extends Command {
         }
 
         @Override
+        public @NotNull String description() {
+            return "show server about text";
+        }
+
+        @Override
         public @Nullable String permission() {
             return BASE_PERMISSION + ".about";
         }
 
         @Override
         public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
-            sender.sendMessage(HunterMessages.about());
+            sender.sendMessage(HunterMessages.about(language()));
             return true;
         }
     }
@@ -184,13 +217,18 @@ public final class HunterCoreCommand extends Command {
         }
 
         @Override
+        public @NotNull String description() {
+            return "show system and runtime status";
+        }
+
+        @Override
         public @Nullable String permission() {
             return BASE_PERMISSION + ".system";
         }
 
         @Override
         public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
-            sender.sendMessage(HunterMessages.systemInfo());
+            sender.sendMessage(HunterMessages.systemInfo(language()));
             return true;
         }
     }
@@ -207,9 +245,14 @@ public final class HunterCoreCommand extends Command {
         }
 
         @Override
+        public @NotNull String description() {
+            return "show bundled plugin status";
+        }
+
+        @Override
         public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
             final HunterBundledPluginInstaller.InstallReport report = HunterCoreRuntime.get().lastInstallReport();
-            sender.sendMessage("HunterCore bundled plugins (" + report.plugins().size() + "):");
+            sender.sendMessage(text("HunterCore 内置插件 (" + report.plugins().size() + "):", "HunterCore bundled plugins (" + report.plugins().size() + "):"));
             if (report.results().isEmpty()) {
                 for (final var plugin : HunterCoreRuntime.get().bundledPlugins()) {
                     sender.sendMessage("- " + plugin.name() + " " + plugin.version() + " -> " + plugin.fileName());
@@ -235,10 +278,84 @@ public final class HunterCoreCommand extends Command {
         }
 
         @Override
+        public @NotNull String description() {
+            return "reload HunterCore bundled plugin preferences";
+        }
+
+        @Override
         public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
             HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
-            sender.sendMessage("HunterCore preferences reloaded. Restart the server to unload disabled bundled plugin jars.");
+            sender.sendMessage(text(
+                "HunterCore 偏好已重载。要卸载已禁用的内置插件 jar，请重启服务器。",
+                "HunterCore preferences reloaded. Restart the server to unload disabled bundled plugin jars."
+            ));
             return true;
+        }
+    }
+
+    private static final class LanguageExtension implements HunterCommandExtension {
+        @Override
+        public @NotNull String name() {
+            return "language";
+        }
+
+        @Override
+        public @NotNull Collection<String> aliases() {
+            return List.of("lang");
+        }
+
+        @Override
+        public @Nullable String permission() {
+            return BASE_PERMISSION + ".language";
+        }
+
+        @Override
+        public @NotNull String description() {
+            return "change HunterCore command language";
+        }
+
+        @Override
+        public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
+            final HunterPreferences preferences = preferences();
+            if (preferences == null) {
+                sender.sendMessage(text("HunterCore 偏好尚未加载。", "HunterCore preferences are not loaded yet."));
+                return true;
+            }
+            if (args.length == 0) {
+                sender.sendMessage(text(
+                    "当前语言：" + preferences.language() + "。用法：/hc language <zh_cn|en_us>",
+                    "Current language: " + preferences.language() + ". Usage: /hc language <zh_cn|en_us>"
+                ));
+                return true;
+            }
+            final String normalized = HunterLanguage.normalizeOrNull(args[0]);
+            if (normalized == null) {
+                sender.sendMessage(text(
+                    "未知语言。可用语言：zh_cn, en_us",
+                    "Unknown language. Available languages: zh_cn, en_us"
+                ));
+                return true;
+            }
+            try {
+                preferences.setLanguage(normalized);
+                sender.sendMessage(HunterLanguage.choose(
+                    normalized,
+                    "HunterCore 语言已切换为 zh_cn。/hc help 会显示中文说明。",
+                    "HunterCore language set to en_us. /hc help will show English descriptions."
+                ));
+            } catch (final IOException ex) {
+                sender.sendMessage(HunterLanguage.choose(
+                    normalized,
+                    "保存语言失败：" + ex.getMessage(),
+                    "Failed to save language: " + ex.getMessage()
+                ));
+            }
+            return true;
+        }
+
+        @Override
+        public @NotNull List<String> tabComplete(@NotNull final CommandSender sender, @NotNull final String alias, @NotNull final String[] args) {
+            return args.length == 1 ? CommandUtil.getListMatchingLast(sender, args, HunterLanguage.supportedLanguages()) : List.of();
         }
     }
 
@@ -263,6 +380,11 @@ public final class HunterCoreCommand extends Command {
         }
 
         @Override
+        public @NotNull String description() {
+            return "view and edit core preferences";
+        }
+
+        @Override
         public @Nullable String permission() {
             return BASE_PERMISSION + ".preferences";
         }
@@ -271,7 +393,7 @@ public final class HunterCoreCommand extends Command {
         public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
             final HunterPreferences preferences = preferences();
             if (preferences == null) {
-                sender.sendMessage("HunterCore preferences are not loaded yet.");
+                sender.sendMessage(text("HunterCore 偏好尚未加载。", "HunterCore preferences are not loaded yet."));
                 return true;
             }
             if (args.length == 0 || args[0].equalsIgnoreCase("list")) {
@@ -283,15 +405,15 @@ public final class HunterCoreCommand extends Command {
                 switch (sub) {
                     case "reload" -> {
                         HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
-                        sender.sendMessage("HunterCore preferences reloaded from disk.");
+                        sender.sendMessage(text("HunterCore 偏好已从磁盘重载。", "HunterCore preferences reloaded from disk."));
                     }
                     case "bundled" -> this.toggleBundled(sender, preferences, args);
                     case "module" -> this.toggleModule(sender, preferences, args);
                     case "command" -> this.toggleCommand(sender, preferences, args);
-                    default -> sender.sendMessage("Usage: /huntercore preferences <list|reload|bundled|module|command>");
+                    default -> HunterHelp.send(sender, language(), new String[] {"hc preferences"});
                 }
             } catch (final IOException ex) {
-                sender.sendMessage("Failed to save HunterCore preferences: " + ex.getMessage());
+                sender.sendMessage(text("保存 HunterCore 偏好失败：", "Failed to save HunterCore preferences: ") + ex.getMessage());
             }
             return true;
         }
@@ -337,83 +459,75 @@ public final class HunterCoreCommand extends Command {
         }
 
         private void list(final CommandSender sender, final HunterPreferences preferences) {
-            sender.sendMessage("HunterCore preferences: " + preferences.path());
-            sender.sendMessage("Bundled plugin installer: " + (preferences.bundledPluginsEnabled() ? "enabled" : "disabled")
+            sender.sendMessage(text("HunterCore 偏好：", "HunterCore preferences: ") + preferences.path());
+            sender.sendMessage(text("语言：", "Language: ") + preferences.language());
+            sender.sendMessage(text("内置插件安装器：", "Bundled plugin installer: ") + (preferences.bundledPluginsEnabled() ? text("启用", "enabled") : text("停用", "disabled"))
                 + ", update-existing=" + preferences.updateExistingBundledPlugins()
                 + ", parallel-install=" + preferences.parallelBundledPluginInstall()
                 + " (" + preferences.bundledPluginInstallWorkers() + " workers)");
             sender.sendMessage("CPU mode: " + preferences.stringValue("optimizations.cpu.mode", "single-thread")
                 + ", experimental-region-ticking=" + preferences.booleanValue("optimizations.cpu.allow-experimental-region-ticking", false));
-            sender.sendMessage("Bundled plugins:");
+            sender.sendMessage(text("内置插件：", "Bundled plugins:"));
             for (final var plugin : HunterCoreRuntime.get().bundledPlugins()) {
-                sender.sendMessage("- " + plugin.id() + ": " + (preferences.bundledPluginEnabled(plugin.id()) ? "enabled" : "disabled"));
+                sender.sendMessage("- " + plugin.id() + ": " + (preferences.bundledPluginEnabled(plugin.id()) ? text("启用", "enabled") : text("停用", "disabled")));
             }
-            sender.sendMessage("Modules:");
+            sender.sendMessage(text("模块：", "Modules:"));
             for (final String module : MODULES) {
-                sender.sendMessage("- " + module + ": " + (preferences.moduleEnabled(module) ? "enabled" : "disabled"));
+                sender.sendMessage("- " + module + ": " + (preferences.moduleEnabled(module) ? text("启用", "enabled") : text("停用", "disabled")));
             }
         }
 
         private void toggleBundled(final CommandSender sender, final HunterPreferences preferences, final String[] args) throws IOException {
             if (args.length != 3) {
-                sender.sendMessage("Usage: /huntercore preferences bundled <plugin-id> <on|off>");
+                HunterHelp.send(sender, language(), new String[] {"hc preferences bundled"});
                 return;
             }
             final Boolean enabled = parseToggle(args[2]);
             if (enabled == null) {
-                sender.sendMessage("Use on/off.");
+                sender.sendMessage(text("请使用 on/off。", "Use on/off."));
                 return;
             }
             preferences.setBundledPluginEnabled(args[1], enabled);
             HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
-            sender.sendMessage("Bundled plugin " + HunterPreferences.normalize(args[1]) + " set to " + enabled + ". Restart to unload already loaded jars.");
+            sender.sendMessage(text("内置插件 ", "Bundled plugin ") + HunterPreferences.normalize(args[1]) + text(" 已设置为 ", " set to ") + enabled + text("。已加载 jar 需要重启后卸载。", ". Restart to unload already loaded jars."));
         }
 
         private void toggleModule(final CommandSender sender, final HunterPreferences preferences, final String[] args) throws IOException {
             if (args.length != 3) {
-                sender.sendMessage("Usage: /huntercore preferences module <module> <on|off>");
+                HunterHelp.send(sender, language(), new String[] {"hc preferences module"});
                 return;
             }
             final String module = HunterPreferences.normalize(args[1]);
             if (!MODULES.contains(module)) {
-                sender.sendMessage("Unknown module. Available: " + String.join(", ", MODULES));
+                sender.sendMessage(text("未知模块。可用：", "Unknown module. Available: ") + String.join(", ", MODULES));
                 return;
             }
             final Boolean enabled = parseToggle(args[2]);
             if (enabled == null) {
-                sender.sendMessage("Use on/off.");
+                sender.sendMessage(text("请使用 on/off。", "Use on/off."));
                 return;
             }
             preferences.setModuleEnabled(module, enabled);
-            sender.sendMessage("Module " + module + " set to " + enabled + ". Run /hunteradmin reload if HunterTools is already loaded.");
+            sender.sendMessage(text("模块 ", "Module ") + module + text(" 已设置为 ", " set to ") + enabled + text("。如果 HunterTools 已加载，请运行 /hc admin reload。", ". Run /hc admin reload if HunterTools is already loaded."));
         }
 
         private void toggleCommand(final CommandSender sender, final HunterPreferences preferences, final String[] args) throws IOException {
             if (args.length != 4) {
-                sender.sendMessage("Usage: /huntercore preferences command <essentials|management|fake-players|real-fake-players|npcs> <command> <on|off>");
+                HunterHelp.send(sender, language(), new String[] {"hc preferences command"});
                 return;
             }
             final String module = HunterPreferences.normalize(args[1]);
             if (!module.equals("essentials") && !module.equals("management") && !module.equals("fake-players") && !module.equals("real-fake-players") && !module.equals("npcs")) {
-                sender.sendMessage("Command toggles are available for essentials, management, fake-players, real-fake-players, and npcs.");
+                sender.sendMessage(text("可切换指令的模块：essentials, management, fake-players, real-fake-players, npcs。", "Command toggles are available for essentials, management, fake-players, real-fake-players, and npcs."));
                 return;
             }
             final Boolean enabled = parseToggle(args[3]);
             if (enabled == null) {
-                sender.sendMessage("Use on/off.");
+                sender.sendMessage(text("请使用 on/off。", "Use on/off."));
                 return;
             }
             preferences.setCommandEnabled(module, args[2], enabled);
-            sender.sendMessage("Command " + module + "." + HunterPreferences.normalize(args[2]) + " set to " + enabled + ". Run /hunteradmin reload if needed.");
-        }
-
-        private static HunterPreferences preferences() {
-            HunterPreferences preferences = HunterCoreRuntime.get().preferences();
-            if (preferences == null) {
-                HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
-                preferences = HunterCoreRuntime.get().preferences();
-            }
-            return preferences;
+            sender.sendMessage(text("指令 ", "Command ") + module + "." + HunterPreferences.normalize(args[2]) + text(" 已设置为 ", " set to ") + enabled + text("。需要时运行 /hc admin reload。", ". Run /hc admin reload if needed."));
         }
 
         private static Boolean parseToggle(final String input) {
@@ -423,5 +537,14 @@ public final class HunterCoreCommand extends Command {
                 default -> null;
             };
         }
+    }
+
+    private static HunterPreferences preferences() {
+        HunterPreferences preferences = HunterCoreRuntime.get().preferences();
+        if (preferences == null) {
+            HunterBundledPluginInstaller.install(Bukkit.getPluginsFolder().toPath());
+            preferences = HunterCoreRuntime.get().preferences();
+        }
+        return preferences;
     }
 }

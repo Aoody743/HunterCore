@@ -19,6 +19,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
@@ -53,11 +54,16 @@ import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.ScoreboardManager;
+import org.huntercore.api.HunterCommandExtension;
+import org.huntercore.api.HunterCoreProvider;
+import org.huntercore.api.HunterHelp;
+import org.huntercore.api.HunterLanguage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class HunterToolsPlugin extends JavaPlugin implements CommandExecutor, TabCompleter, Listener {
-    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "web-panel");
+    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
+    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "auth", "web-panel");
     private static final String MOTD = "motd";
     private static final String COMMAND_OVERRIDES = "command-overrides";
     private static final String ESSENTIALS = "essentials";
@@ -66,7 +72,13 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private static final String REAL_FAKE_PLAYERS = "real-fake-players";
     private static final String NPCS = "npcs";
     private static final String AI = "ai";
+    private static final String AUTH = "auth";
     private static final String WEB_PANEL = "web-panel";
+    private static final List<String> HUNTERCORE_SHORTCUTS = List.of(
+        "tps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
+        "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
+        "hat", "craft", "enderchest", "trash", "fakeplayer"
+    );
     private static final String[] SIDEBAR_KEYS = {
         "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a", "§b", "§c", "§d", "§e", "§f"
     };
@@ -95,6 +107,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.realFakePlayerManager = new HunterRealFakePlayerManager(this, this.preferences, this.aiManager);
         this.webPanelManager = new HunterWebPanelManager(this, this.preferences);
         this.registerCommands();
+        this.registerHunterCoreCommands();
         this.getServer().getPluginManager().registerEvents(this, this);
         this.startTasks();
         this.actorManager.reload();
@@ -136,7 +149,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         final String name = command.getName().toLowerCase(Locale.ROOT);
         return switch (name) {
             case "htps" -> this.showTps(sender);
-            case "hunteradmin" -> this.admin(sender, args);
             case "heal" -> this.heal(sender, args);
             case "feed" -> this.feed(sender, args);
             case "fly" -> this.fly(sender, args);
@@ -153,9 +165,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft" -> this.craft(sender);
             case "enderchest" -> this.enderChest(sender, args);
             case "trash" -> this.trash(sender);
-            case "fakeplayer" -> this.fakePlayer(sender, args);
             case "hplayer" -> this.realFakePlayer(sender, label, args);
-            case "npc" -> this.npc(sender, args);
+            case "hnpc", "npc" -> this.npc(sender, "hnpc", args);
             default -> false;
         };
     }
@@ -168,40 +179,13 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         @NotNull final String[] args
     ) {
         final String name = command.getName().toLowerCase(Locale.ROOT);
-        if (name.equals("hunteradmin")) {
-            return this.adminCompletions(args);
-        }
-        if (name.equals("fakeplayer")) {
-            return this.actorManager == null ? List.of() : this.actorManager.completions(FAKE_PLAYERS, args);
-        }
         if (name.equals("hplayer")) {
             return this.realFakePlayerManager == null ? List.of() : this.realFakePlayerManager.completions(args);
         }
-        if (name.equals("npc")) {
+        if (name.equals("hnpc") || name.equals("npc")) {
             return this.actorManager == null ? List.of() : this.actorManager.completions(NPCS, args);
         }
-        if (name.equals("gm") && args.length == 1) {
-            return matching(args[0], List.of("survival", "creative", "adventure", "spectator"));
-        }
-        if (name.equals("fly") && args.length == 2) {
-            return matching(args[1], List.of("on", "off"));
-        }
-        if ((name.equals("day") || name.equals("night") || name.equals("sun") || name.equals("rain") || name.equals("thunder")) && args.length == 1) {
-            return matching(args[0], Bukkit.getWorlds().stream().map(World::getName).toList());
-        }
-        if (name.equals("enderchest") && args.length == 1 && sender.hasPermission("huntertools.command.enderchest.other")) {
-            return matching(args[0], this.onlinePlayerNames());
-        }
-        if (List.of("heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp", "spawn", "speed").contains(name)) {
-            final int playerArg = name.equals("speed") ? 1 : args.length - 1;
-            if (args.length - 1 == playerArg) {
-                return matching(args[args.length - 1], this.onlinePlayerNames());
-            }
-        }
-        if (name.equals("speed") && args.length == 3) {
-            return matching(args[2], List.of("walk", "fly"));
-        }
-        return List.of();
+        return this.shortcutCompletions(sender, name, args);
     }
 
     @EventHandler
@@ -247,10 +231,15 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onCommandPreprocess(final PlayerCommandPreprocessEvent event) {
+        final String root = commandRoot(event.getMessage());
+        if (root.equals("help") || root.equals("?")) {
+            event.setCancelled(true);
+            this.sendHelp(event.getPlayer(), commandArguments(event.getMessage()));
+            return;
+        }
         if (!this.preferences.moduleEnabled(COMMAND_OVERRIDES)) {
             return;
         }
-        final String root = commandRoot(event.getMessage());
         switch (root) {
             case "about" -> {
                 event.setCancelled(true);
@@ -303,16 +292,167 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private void registerCommands() {
         for (final String command : List.of(
-            "htps", "hunteradmin", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
+            "htps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
             "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
             "hat", "craft", "enderchest", "trash",
-            "fakeplayer", "hplayer", "npc"
+            "hplayer", "hnpc"
         )) {
             final org.bukkit.command.PluginCommand pluginCommand = this.getCommand(command);
             if (pluginCommand != null) {
                 pluginCommand.setExecutor(this);
                 pluginCommand.setTabCompleter(this);
             }
+        }
+    }
+
+    private void registerHunterCoreCommands() {
+        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("admin", List.of(), "huntertools.command.admin", "manage HunterCore modules, web, MOTD, AI and runtime"));
+        for (final String command : HUNTERCORE_SHORTCUTS) {
+            HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand(command, this.hunterCoreShortcutAliases(command), this.hunterCoreShortcutPermission(command), this.hunterCoreShortcutDescription(command)));
+        }
+    }
+
+    private boolean executeHunterCoreCommand(final CommandSender sender, final String label, final String[] args) {
+        return switch (label) {
+            case "admin" -> this.admin(sender, args);
+            case "tps", "htps" -> this.showTps(sender);
+            case "heal" -> this.heal(sender, args);
+            case "feed" -> this.feed(sender, args);
+            case "fly" -> this.fly(sender, args);
+            case "gm", "gms", "gmc", "gma", "gmsp" -> this.gameMode(sender, label, args);
+            case "day", "night" -> this.time(sender, label, args);
+            case "sun", "rain", "thunder" -> this.weather(sender, label, args);
+            case "broadcast", "bc" -> this.broadcast(sender, args);
+            case "clearchat", "cc" -> this.clearChat(sender);
+            case "speed" -> this.speed(sender, args);
+            case "spawn" -> this.spawn(sender, args);
+            case "setspawn" -> this.setSpawn(sender);
+            case "back" -> this.back(sender);
+            case "hat" -> this.hat(sender);
+            case "craft", "workbench", "wb" -> this.craft(sender);
+            case "enderchest", "ec" -> this.enderChest(sender, args);
+            case "trash", "disposal" -> this.trash(sender);
+            case "fakeplayer" -> this.fakePlayer(sender, "hc fakeplayer", args);
+            default -> false;
+        };
+    }
+
+    private List<String> hunterCoreCompletions(final CommandSender sender, final String label, final String[] args) {
+        if (label.equals("admin")) {
+            return this.adminCompletions(args);
+        }
+        if (label.equals("fakeplayer")) {
+            return this.actorManager == null ? List.of() : this.actorManager.completions(FAKE_PLAYERS, args);
+        }
+        return this.shortcutCompletions(sender, label, args);
+    }
+
+    private List<String> shortcutCompletions(final CommandSender sender, final String name, final String[] args) {
+        if (name.equals("gm") && args.length == 1) {
+            return matching(args[0], List.of("survival", "creative", "adventure", "spectator"));
+        }
+        if (name.equals("fly") && args.length == 2) {
+            return matching(args[1], List.of("on", "off"));
+        }
+        if ((name.equals("day") || name.equals("night") || name.equals("sun") || name.equals("rain") || name.equals("thunder")) && args.length == 1) {
+            return matching(args[0], Bukkit.getWorlds().stream().map(World::getName).toList());
+        }
+        if ((name.equals("enderchest") || name.equals("ec")) && args.length == 1 && sender.hasPermission("huntertools.command.enderchest.other")) {
+            return matching(args[0], this.onlinePlayerNames());
+        }
+        if (List.of("heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp", "spawn", "speed").contains(name)) {
+            final int playerArg = name.equals("speed") ? 1 : args.length - 1;
+            if (args.length - 1 == playerArg) {
+                return matching(args[args.length - 1], this.onlinePlayerNames());
+            }
+        }
+        if (name.equals("speed") && args.length == 3) {
+            return matching(args[2], List.of("walk", "fly"));
+        }
+        return List.of();
+    }
+
+    private Collection<String> hunterCoreShortcutAliases(final String command) {
+        return switch (command) {
+            case "tps" -> List.of("htps");
+            case "broadcast" -> List.of("bc");
+            case "clearchat" -> List.of("cc");
+            case "craft" -> List.of("workbench", "wb");
+            case "enderchest" -> List.of("ec");
+            case "trash" -> List.of("disposal");
+            default -> List.of();
+        };
+    }
+
+    private String hunterCoreShortcutPermission(final String command) {
+        return switch (command) {
+            case "tps" -> "huntertools.command.tps";
+            case "gm", "gms", "gmc", "gma", "gmsp" -> "huntertools.command.gamemode";
+            case "day", "night" -> "huntertools.command.time";
+            case "sun", "rain", "thunder" -> "huntertools.command.weather";
+            case "broadcast" -> "huntertools.command.broadcast";
+            case "clearchat" -> "huntertools.command.clearchat";
+            case "fakeplayer" -> "huntertools.command.fakeplayer";
+            default -> "huntertools.command." + command;
+        };
+    }
+
+    private String hunterCoreShortcutDescription(final String command) {
+        return switch (command) {
+            case "tps" -> "show TPS and MSPT";
+            case "gm", "gms", "gmc", "gma", "gmsp" -> "change game mode";
+            case "day", "night" -> "change world time";
+            case "sun", "rain", "thunder" -> "change weather";
+            case "broadcast" -> "broadcast a message";
+            case "clearchat" -> "clear chat";
+            case "setspawn" -> "set server spawn";
+            case "enderchest" -> "open an ender chest";
+            case "fakeplayer" -> "manage lightweight fake actors";
+            default -> "run /" + command;
+        };
+    }
+
+    private final class HunterToolsCoreCommand implements HunterCommandExtension {
+        private final String name;
+        private final Collection<String> aliases;
+        private final String permission;
+        private final String description;
+
+        private HunterToolsCoreCommand(final String name, final Collection<String> aliases, final String permission, final String description) {
+            this.name = name;
+            this.aliases = aliases;
+            this.permission = permission;
+            this.description = description;
+        }
+
+        @Override
+        public @NotNull String name() {
+            return this.name;
+        }
+
+        @Override
+        public @NotNull Collection<String> aliases() {
+            return this.aliases;
+        }
+
+        @Override
+        public @Nullable String permission() {
+            return this.permission;
+        }
+
+        @Override
+        public @NotNull String description() {
+            return this.description;
+        }
+
+        @Override
+        public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
+            return HunterToolsPlugin.this.executeHunterCoreCommand(sender, HunterToolsPreferences.normalize(label), args);
+        }
+
+        @Override
+        public @NotNull List<String> tabComplete(@NotNull final CommandSender sender, @NotNull final String alias, @NotNull final String[] args) {
+            return HunterToolsPlugin.this.hunterCoreCompletions(sender, HunterToolsPreferences.normalize(alias), args);
         }
     }
 
@@ -357,6 +497,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.metricsTask = null;
         this.actionbarTask = null;
         this.sidebarTask = null;
+    }
+
+    void restartDisplayTasks() {
+        this.startTasks();
     }
 
     private void sampleMetrics() {
@@ -410,17 +554,14 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return;
         }
         final MetricsSnapshot current = this.snapshot;
-        final Component message = Component.text()
-            .append(Component.text("TPS ", NamedTextColor.GRAY))
-            .append(Component.text(MetricsSnapshot.formatTps(current.tps1()), tpsColor(current.tps1())))
-            .append(Component.text("  MSPT ", NamedTextColor.GRAY))
-            .append(Component.text(String.format(Locale.ROOT, "%.1f", current.mspt()), current.mspt() > 50.0D ? NamedTextColor.RED : NamedTextColor.GREEN))
-            .append(Component.text("  Players ", NamedTextColor.GRAY))
-            .append(Component.text(current.onlinePlayers() + "/" + current.maxPlayers(), NamedTextColor.WHITE))
-            .build();
+        final String serverName = this.preferences.stringValue("modules.web-panel.server-name", "HunterCore");
+        final String template = this.preferences.stringValue(
+            "modules.tps-display.actionbar-format",
+            "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%"
+        );
         for (final Player player : Bukkit.getOnlinePlayers()) {
             if (player.hasPermission("huntertools.display.tps")) {
-                player.sendActionBar(message);
+                player.sendActionBar(LEGACY.deserialize(renderDisplayLine(template, current, playerView(player), serverName)));
             }
         }
     }
@@ -432,18 +573,21 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         final List<PlayerView> players = Bukkit.getOnlinePlayers().stream()
             .filter(player -> player.hasPermission("huntertools.display.sidebar"))
-            .map(player -> new PlayerView(player.getUniqueId(), player.getName(), player.getWorld().getName(), player.getPing()))
+            .map(HunterToolsPlugin::playerView)
             .toList();
         final MetricsSnapshot current = this.snapshot;
+        final String title = this.preferences.stringValue("modules.sidebar.title", "&6HunterCore");
+        final List<String> templates = this.sidebarLines();
+        final String serverName = this.preferences.stringValue("modules.web-panel.server-name", "HunterCore");
         if (players.isEmpty()) {
             return;
         }
         if (this.preferences.booleanValue("optimizations.enabled", true) && this.preferences.booleanValue("optimizations.hunter-tools.async-rendering", true)) {
             CompletableFuture
-                .supplyAsync(() -> renderSidebars(current, players), this.workerExecutor)
-                .thenAccept(rendered -> this.getServer().getScheduler().runTask(this, () -> applySidebars(rendered)));
+                .supplyAsync(() -> renderSidebars(current, players, templates, serverName), this.workerExecutor)
+                .thenAccept(rendered -> this.getServer().getScheduler().runTask(this, () -> applySidebars(title, rendered)));
         } else {
-            this.applySidebars(renderSidebars(current, players));
+            this.applySidebars(title, renderSidebars(current, players, templates, serverName));
         }
     }
 
@@ -452,36 +596,38 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             if (!player.isOnline() || !this.preferences.moduleEnabled("sidebar")) {
                 return;
             }
-            this.applySidebar(player, buildSidebarLines(this.snapshot, new PlayerView(player.getUniqueId(), player.getName(), player.getWorld().getName(), player.getPing())));
+            this.applySidebar(player, this.preferences.stringValue("modules.sidebar.title", "&6HunterCore"), this.buildSidebarLines(
+                this.snapshot,
+                playerView(player),
+                this.sidebarLines(),
+                this.preferences.stringValue("modules.web-panel.server-name", "HunterCore")
+            ));
         }, 20L);
     }
 
-    private static Map<UUID, List<String>> renderSidebars(final MetricsSnapshot snapshot, final List<PlayerView> players) {
+    private static Map<UUID, List<String>> renderSidebars(final MetricsSnapshot snapshot, final List<PlayerView> players, final List<String> templates, final String serverName) {
         final Map<UUID, List<String>> rendered = new HashMap<>();
         for (final PlayerView player : players) {
-            rendered.put(player.uuid(), buildSidebarLines(snapshot, player));
+            rendered.put(player.uuid(), buildSidebarLines(snapshot, player, templates, serverName));
         }
         return rendered;
     }
 
-    private static List<String> buildSidebarLines(final MetricsSnapshot snapshot, final PlayerView player) {
-        return List.of(
-            ChatColor.GRAY + "TPS: " + colorCode(snapshot.tps1()) + MetricsSnapshot.formatTps(snapshot.tps1()),
-            ChatColor.GRAY + "MSPT: " + ChatColor.WHITE + String.format(Locale.ROOT, "%.1f", snapshot.mspt()),
-            ChatColor.GRAY + "Players: " + ChatColor.WHITE + snapshot.onlinePlayers() + "/" + snapshot.maxPlayers(),
-            ChatColor.GRAY + "Memory: " + ChatColor.WHITE + snapshot.memoryLine(),
-            ChatColor.GRAY + "World: " + ChatColor.WHITE + player.world(),
-            ChatColor.GRAY + "Ping: " + ChatColor.WHITE + player.ping() + "ms"
-        );
+    private static List<String> buildSidebarLines(final MetricsSnapshot snapshot, final PlayerView player, final List<String> templates, final String serverName) {
+        return templates.stream()
+            .map(template -> renderDisplayLine(template, snapshot, player, serverName))
+            .filter(line -> !line.isBlank())
+            .limit(SIDEBAR_KEYS.length)
+            .toList();
     }
 
-    private void applySidebars(final Map<UUID, List<String>> rendered) {
+    private void applySidebars(final String title, final Map<UUID, List<String>> rendered) {
         final Set<UUID> seen = new HashSet<>();
         for (final Map.Entry<UUID, List<String>> entry : rendered.entrySet()) {
             final Player player = Bukkit.getPlayer(entry.getKey());
             if (player != null && player.isOnline()) {
                 seen.add(player.getUniqueId());
-                this.applySidebar(player, entry.getValue());
+                this.applySidebar(player, title, entry.getValue());
             }
         }
         this.sidebars.keySet().removeIf(uuid -> {
@@ -496,9 +642,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         });
     }
 
-    private void applySidebar(final Player player, final List<String> lines) {
+    private void applySidebar(final Player player, final String title, final List<String> lines) {
         final boolean dirtyOnly = this.preferences.booleanValue("modules.sidebar.dirty-updates-only", true);
         final SidebarBoard board = this.sidebars.computeIfAbsent(player.getUniqueId(), ignored -> this.createSidebar());
+        board.objective.setDisplayName(color(renderDisplayLine(title, this.snapshot, playerView(player), this.preferences.stringValue("modules.web-panel.server-name", "HunterCore"))));
         final List<String> encoded = new ArrayList<>(lines.size());
         for (int i = 0; i < lines.size() && i < SIDEBAR_KEYS.length; i++) {
             encoded.add(SIDEBAR_KEYS[i] + lines.get(i));
@@ -562,11 +709,15 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.GOLD + "HunterAdmin: " + ChatColor.YELLOW + "reload, modules, module, command, plugins, memory, gc, threads, optimize, motd, web, ai");
+            this.sendHelp(sender, "admin");
             return true;
         }
         final String sub = args[0].toLowerCase(Locale.ROOT);
         return switch (sub) {
+            case "help" -> {
+                this.sendHelp(sender, java.util.Arrays.copyOfRange(args, 1, args.length));
+                yield true;
+            }
             case "reload" -> this.adminReload(sender);
             case "modules" -> this.adminModules(sender);
             case "module" -> this.adminToggleModule(sender, args);
@@ -580,7 +731,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "web" -> this.adminWeb(sender, args);
             case "ai" -> this.adminAi(sender, args);
             default -> {
-                sender.sendMessage("Usage: /hunteradmin <reload|modules|module|command|plugins|memory|gc|threads|optimize|motd|web|ai>");
+                this.sendHelp(sender, "admin");
                 yield true;
             }
         };
@@ -609,31 +760,31 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             this.webPanelManager.restart();
         }
         this.startTasks();
-        sender.sendMessage("HunterCore preferences reloaded from " + this.preferences.file().getPath() + ".");
+        sender.sendMessage(this.text("HunterCore 偏好已从 " + this.preferences.file().getPath() + " 重载。", "HunterCore preferences reloaded from " + this.preferences.file().getPath() + "."));
         return true;
     }
 
     private boolean adminModules(final CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "HunterCore modules:");
+        sender.sendMessage(ChatColor.GOLD + this.text("HunterCore 模块：", "HunterCore modules:"));
         for (final String module : MODULES) {
-            sender.sendMessage("- " + module + ": " + (this.preferences.moduleEnabled(module) ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled"));
+            sender.sendMessage("- " + module + ": " + (this.preferences.moduleEnabled(module) ? ChatColor.GREEN + this.text("启用", "enabled") : ChatColor.RED + this.text("停用", "disabled")));
         }
         return true;
     }
 
     private boolean adminToggleModule(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            sender.sendMessage("Usage: /hunteradmin module <module> <on|off>");
+            this.sendHelp(sender, "hc admin module");
             return true;
         }
         final String module = HunterToolsPreferences.normalize(args[1]);
         if (!MODULES.contains(module)) {
-            sender.sendMessage("Unknown module. Available: " + String.join(", ", MODULES));
+            sender.sendMessage(this.text("未知模块。可用：", "Unknown module. Available: ") + String.join(", ", MODULES));
             return true;
         }
         final Boolean enabled = parseToggle(args[2]);
         if (enabled == null) {
-            sender.sendMessage("Use on/off.");
+            sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
             return true;
         }
         this.preferences.setModuleEnabled(module, enabled);
@@ -648,29 +799,29 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (this.webPanelManager != null && module.equals(WEB_PANEL)) {
             this.webPanelManager.restart();
         }
-        sender.sendMessage("HunterCore module " + module + " set to " + enabled + ".");
+        sender.sendMessage(this.text("HunterCore 模块 ", "HunterCore module ") + module + this.text(" 已设置为 ", " set to ") + enabled + ".");
         return true;
     }
 
     private boolean adminToggleCommand(final CommandSender sender, final String[] args) {
         if (args.length != 4) {
-            sender.sendMessage("Usage: /hunteradmin command <essentials|management|fake-players|real-fake-players|npcs> <command> <on|off>");
+            this.sendHelp(sender, "hc admin command");
             return true;
         }
         final String module = HunterToolsPreferences.normalize(args[1]);
         final String command = HunterToolsPreferences.normalize(args[2]);
         if (!module.equals(ESSENTIALS) && !module.equals(MANAGEMENT) && !module.equals(FAKE_PLAYERS) && !module.equals(REAL_FAKE_PLAYERS) && !module.equals(NPCS)) {
-            sender.sendMessage("Command toggles are available for essentials, management, fake-players, real-fake-players, and npcs.");
+            sender.sendMessage(this.text("可切换指令的模块：essentials, management, fake-players, real-fake-players, npcs。", "Command toggles are available for essentials, management, fake-players, real-fake-players, and npcs."));
             return true;
         }
         final Boolean enabled = parseToggle(args[3]);
         if (enabled == null) {
-            sender.sendMessage("Use on/off.");
+            sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
             return true;
         }
         this.preferences.setCommandEnabled(module, command, enabled);
         this.preferences.save(this.workerExecutor);
-        sender.sendMessage("HunterCore command " + module + "." + command + " set to " + enabled + ".");
+        sender.sendMessage(this.text("HunterCore 指令 ", "HunterCore command ") + module + "." + command + this.text(" 已设置为 ", " set to ") + enabled + ".");
         return true;
     }
 
@@ -726,7 +877,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (args.length >= 2 && !args[1].equalsIgnoreCase("status")) {
             if (!validCpuMode(args[1])) {
-                sender.sendMessage("Usage: /hunteradmin optimize <single-thread|high-clock|high-core|multi-thread|status>");
+                sender.sendMessage("Usage: /hc admin optimize <single-thread|high-clock|high-core|multi-thread|status>");
                 return true;
             }
             final String mode = normalizeCpuMode(args[1]);
@@ -755,7 +906,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         sender.sendMessage(ChatColor.GRAY + "Web panel workers: " + ChatColor.WHITE + this.preferences.intValue("optimizations.hunter-tools.web-panel-workers", 4));
         sender.sendMessage(ChatColor.GRAY + "Experimental region ticking: " + ChatColor.WHITE + this.preferences.booleanValue("optimizations.cpu.allow-experimental-region-ticking", false));
         sender.sendMessage(ChatColor.GRAY + "Guest status cache: " + ChatColor.WHITE + this.preferences.intValue("modules.web-panel.status-cache-millis", 1000) + "ms");
-        sender.sendMessage(ChatColor.DARK_GRAY + "Use /hunteradmin optimize single-thread, high-clock, high-core, or multi-thread, then restart.");
+        sender.sendMessage(ChatColor.DARK_GRAY + "Use /hc admin optimize single-thread, high-clock, high-core, or multi-thread, then restart.");
         return true;
     }
 
@@ -807,7 +958,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 return true;
             }
         }
-        sender.sendMessage("Usage: /hunteradmin motd <status|line1 <text>|line2 <text>|max <number|default>>");
+        this.sendHelp(sender, "hc admin motd");
         return true;
     }
 
@@ -816,7 +967,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length < 2) {
-            sender.sendMessage("Usage: /hunteradmin web <status|restart|bind|port|map|public-map|user|remove|users|allow|execution>");
+            this.sendHelp(sender, "hc admin web");
             return true;
         }
         final String sub = args[1].toLowerCase(Locale.ROOT);
@@ -859,7 +1010,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "allow" -> this.adminWebAllow(sender, args);
             case "execution" -> this.adminWebExecution(sender, args);
             default -> {
-                sender.sendMessage("Usage: /hunteradmin web <status|restart|bind|port|map|public-map|user|remove|users|allow|execution>");
+                this.sendHelp(sender, "hc admin web");
                 yield true;
             }
         };
@@ -867,39 +1018,39 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminWebUser(final CommandSender sender, final String[] args) {
         if (args.length != 5) {
-            sender.sendMessage("Usage: /hunteradmin web user <name> <admin|player> <password>");
+            this.sendHelp(sender, "hc admin web user");
             return true;
         }
         final String role = HunterToolsPreferences.normalize(args[3]);
         if (!role.equals("admin") && !role.equals("player")) {
-            sender.sendMessage("Role must be admin or player.");
+            sender.sendMessage(this.text("角色必须是 admin 或 player。", "Role must be admin or player."));
             return true;
         }
         this.preferences.setWebUser(args[2], role, HunterWebPanelManager.hashPassword(args[4]));
         this.preferences.save(this.workerExecutor);
-        sender.sendMessage("HunterCore web user " + HunterToolsPreferences.webUserId(args[2]) + " saved as " + role + ".");
+        sender.sendMessage(this.text("HunterCore 网页用户 ", "HunterCore web user ") + HunterToolsPreferences.webUserId(args[2]) + this.text(" 已保存为 ", " saved as ") + role + ".");
         return true;
     }
 
     private boolean adminWebRemove(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            sender.sendMessage("Usage: /hunteradmin web remove <name>");
+            this.sendHelp(sender, "hc admin web remove");
             return true;
         }
         this.preferences.removeWebUser(args[2]);
         this.preferences.save(this.workerExecutor);
-        sender.sendMessage("HunterCore web user " + HunterToolsPreferences.webUserId(args[2]) + " removed.");
+        sender.sendMessage(this.text("HunterCore 网页用户 ", "HunterCore web user ") + HunterToolsPreferences.webUserId(args[2]) + this.text(" 已删除。", " removed."));
         return true;
     }
 
     private boolean adminWebAllow(final CommandSender sender, final String[] args) {
         if (args.length < 4) {
-            sender.sendMessage("Usage: /hunteradmin web allow <name> <inherit|none|*|command...>");
+            this.sendHelp(sender, "hc admin web allow");
             return true;
         }
         final HunterToolsPreferences.WebUser user = this.preferences.webUser(args[2]);
         if (user == null) {
-            sender.sendMessage("Unknown web user.");
+            sender.sendMessage(this.text("未知网页用户。", "Unknown web user."));
             return true;
         }
         final String mode = args[3].toLowerCase(Locale.ROOT);
@@ -922,33 +1073,33 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         this.preferences.setWebUserAllowedCommands(args[2], commands);
         this.preferences.save(this.workerExecutor);
-        sender.sendMessage("HunterCore web user " + HunterToolsPreferences.webUserId(args[2]) + " allowed commands set to " + (commands == null ? "inherit" : commands) + ".");
+        sender.sendMessage(this.text("HunterCore 网页用户 ", "HunterCore web user ") + HunterToolsPreferences.webUserId(args[2]) + this.text(" 可执行命令已设置为 ", " allowed commands set to ") + (commands == null ? "inherit" : commands) + ".");
         return true;
     }
 
     private boolean adminWebExecution(final CommandSender sender, final String[] args) {
         if (args.length != 4) {
-            sender.sendMessage("Usage: /hunteradmin web execution <name> <on|off>");
+            this.sendHelp(sender, "hc admin web execution");
             return true;
         }
         if (this.preferences.webUser(args[2]) == null) {
-            sender.sendMessage("Unknown web user.");
+            sender.sendMessage(this.text("未知网页用户。", "Unknown web user."));
             return true;
         }
         final Boolean enabled = parseToggle(args[3]);
         if (enabled == null) {
-            sender.sendMessage("Use on/off.");
+            sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
             return true;
         }
         this.preferences.setWebUserCommandExecution(args[2], enabled);
         this.preferences.save(this.workerExecutor);
-        sender.sendMessage("HunterCore web user " + HunterToolsPreferences.webUserId(args[2]) + " command execution set to " + enabled + ".");
+        sender.sendMessage(this.text("HunterCore 网页用户 ", "HunterCore web user ") + HunterToolsPreferences.webUserId(args[2]) + this.text(" 命令执行已设置为 ", " command execution set to ") + enabled + ".");
         return true;
     }
 
     private boolean adminWebBind(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            sender.sendMessage("Usage: /hunteradmin web bind <address>");
+            this.sendHelp(sender, "hc admin web bind");
             return true;
         }
         final String bindAddress = args[2].trim();
@@ -961,13 +1112,13 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (this.webPanelManager != null) {
             this.webPanelManager.restart();
         }
-        sender.sendMessage("HunterCore web bind address set to " + bindAddress + " and panel restarted.");
+        sender.sendMessage(this.text("HunterCore 网页面板监听地址已设置为 ", "HunterCore web bind address set to ") + bindAddress + this.text("，面板已重启。", " and panel restarted."));
         return true;
     }
 
     private boolean adminWebPort(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            sender.sendMessage("Usage: /hunteradmin web port <1-65535>");
+            this.sendHelp(sender, "hc admin web port");
             return true;
         }
         final int port;
@@ -986,13 +1137,13 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (this.webPanelManager != null) {
             this.webPanelManager.restart();
         }
-        sender.sendMessage("HunterCore web port set to " + port + " and panel restarted.");
+        sender.sendMessage(this.text("HunterCore 网页面板端口已设置为 ", "HunterCore web port set to ") + port + this.text("，面板已重启。", " and panel restarted."));
         return true;
     }
 
     private boolean adminWebMap(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            sender.sendMessage("Usage: /hunteradmin web map <url>");
+            this.sendHelp(sender, "hc admin web map");
             return true;
         }
         final String mapUrl = args[2].trim();
@@ -1002,23 +1153,23 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         this.preferences.setValue("modules.web-panel.map-url", mapUrl);
         this.preferences.save(this.workerExecutor);
-        sender.sendMessage("HunterCore web map URL set to " + mapUrl + ".");
+        sender.sendMessage(this.text("HunterCore 网页面板地图 URL 已设置为 ", "HunterCore web map URL set to ") + mapUrl + ".");
         return true;
     }
 
     private boolean adminWebPublicMap(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            sender.sendMessage("Usage: /hunteradmin web public-map <on|off>");
+            this.sendHelp(sender, "hc admin web public-map");
             return true;
         }
         final Boolean enabled = parseToggle(args[2]);
         if (enabled == null) {
-            sender.sendMessage("Use on/off.");
+            sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
             return true;
         }
         this.preferences.setValue("modules.web-panel.public-map", enabled);
         this.preferences.save(this.workerExecutor);
-        sender.sendMessage("HunterCore public map access set to " + enabled + ".");
+        sender.sendMessage(this.text("HunterCore 公开地图访问已设置为 ", "HunterCore public map access set to ") + enabled + ".");
         return true;
     }
 
@@ -1055,7 +1206,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "model" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 128) {
-                    sender.sendMessage("Usage: /hunteradmin ai model <model>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.model", args[2].trim());
@@ -1065,7 +1216,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "base-url", "baseurl", "url" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 512) {
-                    sender.sendMessage("Usage: /hunteradmin ai base-url <url>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.base-url", args[2].trim());
@@ -1075,7 +1226,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "key", "api-key" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 512) {
-                    sender.sendMessage("Usage: /hunteradmin ai key <api-key>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.api-key", args[2].trim());
@@ -1091,7 +1242,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "env", "api-key-env" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 128) {
-                    sender.sendMessage("Usage: /hunteradmin ai env <ENV_NAME>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.api-key-env", args[2].trim());
@@ -1101,7 +1252,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "prefix" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 32) {
-                    sender.sendMessage("Usage: /hunteradmin ai prefix <trigger>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.chat.trigger-prefix", args[2].trim());
@@ -1111,12 +1262,12 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "chat", "npc" -> {
                 if (args.length != 3) {
-                    sender.sendMessage("Usage: /hunteradmin ai " + sub + " <on|off>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 final Boolean enabled = parseToggle(args[2]);
                 if (enabled == null) {
-                    sender.sendMessage("Use on/off.");
+                    sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
                     return true;
                 }
                 this.preferences.setValue("modules.ai." + sub + ".enabled", enabled);
@@ -1126,7 +1277,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "temperature" -> {
                 if (args.length != 3) {
-                    sender.sendMessage("Usage: /hunteradmin ai temperature <0.0-2.0>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 try {
@@ -1145,7 +1296,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "max-tokens", "maxtokens" -> {
                 if (args.length != 3) {
-                    sender.sendMessage("Usage: /hunteradmin ai max-tokens <16-4096>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 try {
@@ -1164,7 +1315,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "test" -> {
                 if (args.length < 3) {
-                    sender.sendMessage("Usage: /hunteradmin ai test <prompt>");
+                    this.sendHelp(sender, "hc admin ai");
                     return true;
                 }
                 final String prompt = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)).trim();
@@ -1179,7 +1330,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 return true;
             }
             default -> {
-                sender.sendMessage("Usage: /hunteradmin ai <status|enable|disable|model|base-url|key|clear-key|env|prefix|chat|npc|temperature|max-tokens|test>");
+                this.sendHelp(sender, "hc admin ai");
                 return true;
             }
         }
@@ -1488,11 +1639,11 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         return true;
     }
 
-    private boolean fakePlayer(final CommandSender sender, final String[] args) {
+    private boolean fakePlayer(final CommandSender sender, final String label, final String[] args) {
         if (!this.require(sender, "huntertools.command.fakeplayer")) {
             return true;
         }
-        return this.actorManager != null && this.actorManager.fakePlayerCommand(sender, args);
+        return this.actorManager != null && this.actorManager.fakePlayerCommand(sender, label, args);
     }
 
     private boolean realFakePlayer(final CommandSender sender, final String label, final String[] args) {
@@ -1502,11 +1653,11 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         return this.realFakePlayerManager != null && this.realFakePlayerManager.command(sender, label, args);
     }
 
-    private boolean npc(final CommandSender sender, final String[] args) {
+    private boolean npc(final CommandSender sender, final String label, final String[] args) {
         if (!this.require(sender, "huntertools.command.npc")) {
             return true;
         }
-        return this.actorManager != null && this.actorManager.npcCommand(sender, args);
+        return this.actorManager != null && this.actorManager.npcCommand(sender, label, args);
     }
 
     private boolean essentialsCommandEnabled(final CommandSender sender, final String command) {
@@ -1634,7 +1785,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private List<String> adminCompletions(final String[] args) {
         if (args.length == 1) {
-            return matching(args[0], List.of("reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize", "motd", "web", "ai"));
+            return matching(args[0], List.of("help", "reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize", "motd", "web", "ai"));
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("help")) {
+            return matching(args[1], HunterHelp.topics());
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("motd")) {
             return matching(args[1], List.of("status", "line1", "line2", "max"));
@@ -1762,6 +1916,18 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         return this.aiManager != null && this.aiManager.apiKeyConfigured();
     }
 
+    private String language() {
+        return this.preferences == null ? HunterCoreProvider.get().language() : this.preferences.language();
+    }
+
+    private String text(final String zhCn, final String enUs) {
+        return HunterLanguage.choose(this.language(), zhCn, enUs);
+    }
+
+    private void sendHelp(final CommandSender sender, final String... args) {
+        HunterHelp.send(sender, this.language(), args);
+    }
+
     private void sendCommandOverride(final Player player, final String target) {
         final List<String> lines = this.preferences.stringList(
             "modules.command-overrides.messages." + target,
@@ -1783,6 +1949,33 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             .replace("%version%", Bukkit.getVersion())
             .replace("%plugins%", pluginCount)
             .replace("%plugin_count%", pluginCount);
+    }
+
+    private List<String> sidebarLines() {
+        return this.preferences.stringList("modules.sidebar.lines", HunterToolsPreferences.defaultSidebarLines());
+    }
+
+    private static PlayerView playerView(final Player player) {
+        return new PlayerView(player.getUniqueId(), player.getName(), player.getWorld().getName(), player.getPing());
+    }
+
+    private static String renderDisplayLine(final String template, final MetricsSnapshot snapshot, final PlayerView player, final String serverName) {
+        final String source = template == null ? "" : template;
+        return source
+            .replace("%player%", player.name())
+            .replace("%world%", player.world())
+            .replace("%ping%", String.valueOf(player.ping()))
+            .replace("%server%", serverName == null || serverName.isBlank() ? "HunterCore" : serverName)
+            .replace("%version%", Bukkit.getVersion())
+            .replace("%tps_color%", tpsLegacyColor(snapshot.tps1()))
+            .replace("%tps%", MetricsSnapshot.formatTps(snapshot.tps1()))
+            .replace("%tps_1%", MetricsSnapshot.formatTps(snapshot.tps1()))
+            .replace("%tps_5%", MetricsSnapshot.formatTps(snapshot.tps5()))
+            .replace("%tps_15%", MetricsSnapshot.formatTps(snapshot.tps15()))
+            .replace("%mspt%", String.format(Locale.ROOT, "%.1f", snapshot.mspt()))
+            .replace("%online%", String.valueOf(snapshot.onlinePlayers()))
+            .replace("%max%", String.valueOf(snapshot.maxPlayers()))
+            .replace("%memory%", snapshot.memoryLine());
     }
 
     private boolean canUseOp(final Player player) {
@@ -1820,6 +2013,16 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         return namespace >= 0 && namespace + 1 < root.length() ? root.substring(namespace + 1) : root;
     }
 
+    private static String[] commandArguments(final String message) {
+        final String command = message.replaceFirst("^/+", "").trim();
+        final int space = command.indexOf(' ');
+        if (space < 0 || space + 1 >= command.length()) {
+            return new String[0];
+        }
+        final String arguments = command.substring(space + 1).trim();
+        return arguments.isBlank() ? new String[0] : arguments.split("\\s+");
+    }
+
     private static boolean isAir(final ItemStack item) {
         return item == null || item.getType().isAir() || item.getAmount() <= 0;
     }
@@ -1846,6 +2049,16 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return ChatColor.YELLOW;
         }
         return ChatColor.RED;
+    }
+
+    private static String tpsLegacyColor(final double tps) {
+        if (tps >= 18.0D) {
+            return "&a";
+        }
+        if (tps >= 15.0D) {
+            return "&e";
+        }
+        return "&c";
     }
 
     private record PlayerView(UUID uuid, String name, String world, int ping) {

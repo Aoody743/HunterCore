@@ -7,6 +7,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Locale;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.huntercore.api.HunterLanguage;
 import org.huntercore.plugin.HunterBundledPluginRecord;
 
 public final class HunterPreferences {
@@ -93,6 +94,15 @@ public final class HunterPreferences {
         return this.config.getString(path, fallback);
     }
 
+    public String language() {
+        return HunterLanguage.normalize(this.config.getString("language", HunterLanguage.DEFAULT));
+    }
+
+    public void setLanguage(final String language) throws IOException {
+        this.config.set("language", HunterLanguage.normalize(language));
+        this.save();
+    }
+
     public boolean parallelBundledPluginInstall() {
         return this.config.getBoolean("optimizations.bundled-plugin-parallel-install.enabled", true);
     }
@@ -122,6 +132,7 @@ public final class HunterPreferences {
 
     private boolean applyDefaults(final List<HunterBundledPluginRecord> bundledPlugins) {
         boolean changed = false;
+        changed |= this.setDefault("language", HunterLanguage.DEFAULT);
         changed |= this.setDefault("bundled-plugins.enabled", true);
         changed |= this.setDefault("bundled-plugins.update-existing", true);
         changed |= this.setDefault("bundled-plugins.write-disabled-marker", true);
@@ -131,8 +142,18 @@ public final class HunterPreferences {
 
         changed |= this.setDefault("modules.tps-display.enabled", true);
         changed |= this.setDefault("modules.tps-display.actionbar", true);
+        changed |= this.setDefault("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%");
         changed |= this.setDefault("modules.tps-display.interval-ticks", 40);
         changed |= this.setDefault("modules.sidebar.enabled", true);
+        changed |= this.setDefault("modules.sidebar.title", "&6HunterCore");
+        changed |= this.setDefault("modules.sidebar.lines", List.of(
+            "&7TPS: %tps_color%%tps%",
+            "&7MSPT: &f%mspt%",
+            "&7Players: &f%online%/%max%",
+            "&7Memory: &f%memory%",
+            "&7World: &f%world%",
+            "&7Ping: &f%ping%ms"
+        ));
         changed |= this.setDefault("modules.sidebar.interval-ticks", 40);
         changed |= this.setDefault("modules.sidebar.dirty-updates-only", true);
         changed |= this.setDefault("modules.motd.enabled", true);

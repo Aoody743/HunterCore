@@ -8,7 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Extension point for adding subcommands under /huntercore.
+ * Extension point for adding subcommands under /hc.
  */
 public interface HunterCommandExtension {
 

@@ -18,7 +18,7 @@
   --glass-shadow-close: 0 8px 24px rgba(18, 28, 45, 0.12);
   --radius: 22px;
   --radius-control: 15px;
-  --chrome-space: 94px;
+  --chrome-space: 128px;
 }
 
 * {
@@ -37,7 +37,7 @@ body {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(222, 239, 245, 0.16) 28%, rgba(187, 221, 215, 0.30)),
     linear-gradient(90deg, rgba(244, 248, 255, 0.36), rgba(244, 248, 255, 0.08) 42%, rgba(244, 248, 255, 0.22)),
-    url("/assets/panel-bg.jpg") center / cover fixed,
+    url("panel-bg.jpg") center / cover fixed,
     linear-gradient(135deg, #edf3f7 0%, #f7f8f6 44%, #dfeae4 100%);
   color: var(--ink);
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
@@ -363,6 +363,7 @@ small {
 
 .topNav {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-height: 50px;
@@ -412,7 +413,7 @@ small {
 .sessionDock {
   z-index: 3;
   width: min(430px, calc(100% - 32px));
-  margin: 112px 0 0 max(16px, calc((100vw - 1440px) / 2 + 16px));
+  margin: calc(var(--chrome-space) + 18px) 0 0 max(16px, calc((100vw - 1440px) / 2 + 16px));
   padding: 20px;
 }
 
@@ -503,6 +504,18 @@ small {
 
 .loginForm {
   grid-template-columns: 1fr;
+}
+
+.registerForm,
+.remoteForm {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.36);
+}
+
+.registerForm .secondaryButton,
+.remoteForm .secondaryButton {
+  margin-top: 0;
 }
 
 input,
@@ -685,6 +698,84 @@ small {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: 14px;
+}
+
+.adminGrid .panel {
+  align-self: start;
+}
+
+.configWorkbench {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.configRail {
+  position: sticky;
+  top: calc(var(--chrome-space) + 16px);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.configPanels {
+  display: grid;
+  min-width: 0;
+}
+
+.configPanels .panel {
+  min-height: min(620px, calc(100svh - var(--chrome-space) - 80px));
+}
+
+.configPanels .panel[hidden] {
+  display: none !important;
+}
+
+.configTab {
+  --glass-x: 50%;
+  --glass-y: 0%;
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --press: 0;
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 12px;
+  text-align: left;
+}
+
+.configTab strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.15;
+}
+
+.configTab span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.configTab.isActive,
+.configTab:hover {
+  border-color: rgba(255, 255, 255, 0.62);
+  background:
+    radial-gradient(circle at var(--glass-x) var(--glass-y), rgba(255, 255, 255, 0.72), transparent 42%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0.16)),
+    rgba(10, 132, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 10px 24px rgba(18, 28, 45, 0.10);
+}
+
+.configTab.isActive strong {
+  color: var(--accent-deep);
 }
 
 .toolsLayout {
@@ -1039,6 +1130,7 @@ textarea {
   .quickRow button,
   .toggleItem,
   .pluginItem,
+  .configTab,
   input,
   select {
     transition:
@@ -1055,6 +1147,7 @@ textarea {
   .quickRow button:hover,
   .toggleItem:hover,
   .pluginItem:hover,
+  .configTab:hover,
   input:hover,
   select:hover {
     transform:
@@ -1136,14 +1229,28 @@ textarea {
   }
 
   .sessionDock {
-    margin: 26px auto 0;
+    margin: calc(var(--chrome-space) + 12px) auto 0;
   }
 
   .overviewGrid,
   .adminGrid,
+  .configWorkbench,
   .toolsLayout,
   .pluginGrid {
     grid-template-columns: 1fr;
+  }
+
+  .configRail {
+    position: relative;
+    top: auto;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px;
+  }
+
+  .configTab {
+    flex: 0 0 min(240px, 72vw);
   }
 
   #opsPanel {
@@ -1199,6 +1306,14 @@ textarea {
   .pluginUpdateForm,
   .quickRow {
     grid-template-columns: 1fr;
+  }
+
+  .configPanels .panel {
+    min-height: auto;
+  }
+
+  .configTab {
+    min-height: 64px;
   }
 
   .sectionHead,

@@ -10,6 +10,7 @@ import java.util.Map;
 import org.huntercore.api.HunterBundledPlugin;
 import org.huntercore.api.HunterCommandExtension;
 import org.huntercore.api.HunterCoreApi;
+import org.huntercore.api.HunterLanguage;
 import org.huntercore.api.fakeplayer.HunterFakePlayerService;
 import org.huntercore.config.HunterPreferences;
 import org.huntercore.fakeplayer.HunterFakePlayerManager;
@@ -62,6 +63,12 @@ public final class HunterCoreRuntime implements HunterCoreApi {
         return this.fakePlayers;
     }
 
+    @Override
+    public @NotNull String language() {
+        final HunterPreferences currentPreferences = this.preferences;
+        return currentPreferences == null ? HunterLanguage.DEFAULT : currentPreferences.language();
+    }
+
     public HunterBundledPluginInstaller.InstallReport lastInstallReport() {
         return this.lastInstallReport;
     }
@@ -82,9 +89,6 @@ public final class HunterCoreRuntime implements HunterCoreApi {
     @Override
     public synchronized void registerCommandExtension(@NotNull final HunterCommandExtension extension) {
         final String key = extension.name().toLowerCase(Locale.ROOT);
-        if (this.commandExtensions.containsKey(key)) {
-            throw new IllegalArgumentException("HunterCore command extension already registered: " + extension.name());
-        }
         this.commandExtensions.put(key, extension);
     }
 

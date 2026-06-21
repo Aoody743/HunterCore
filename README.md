@@ -35,13 +35,13 @@ HunterCore 很适合下面这些场景：
 从 [GitHub Releases](https://github.com/AndyXeCM/HunterCore/releases) 下载最新的：
 
 ```text
-HunterCore-<version>-paperclip.jar
+HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
 ```
 
 然后启动：
 
 ```bash
-java -Xms2G -Xmx4G -jar HunterCore-<version>-paperclip.jar nogui
+java -Xms2G -Xmx4G -jar HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar nogui
 ```
 
 首次启动会生成 EULA 和配置文件。接受 Minecraft EULA 后再次启动即可。
@@ -49,7 +49,7 @@ java -Xms2G -Xmx4G -jar HunterCore-<version>-paperclip.jar nogui
 如果你要开启网页管理账号，进控制台输入：
 
 ```text
-/hunteradmin web user admin admin <你的密码>
+/hc admin web user admin admin <你的密码>
 ```
 
 默认网页面板地址：
@@ -61,9 +61,9 @@ http://127.0.0.1:8088/
 需要对局域网或公网开放时，可以在游戏内或控制台调整：
 
 ```text
-/hunteradmin web bind 0.0.0.0
-/hunteradmin web port 8088
-/hunteradmin web restart
+/hc admin web bind 0.0.0.0
+/hc admin web port 8088
+/hc admin web restart
 ```
 
 ## 网页面板
@@ -114,9 +114,9 @@ HunterCore 现在自带 AI 接入系统，不需要额外写插件就能把 Chat
 快速启用：
 
 ```text
-/hunteradmin ai key <你的 API key>
-/hunteradmin ai model gpt-4o-mini
-/hunteradmin ai enable
+/hc admin ai key <你的 API key>
+/hc admin ai model gpt-4o-mini
+/hc admin ai enable
 ```
 
 如果你更喜欢用环境变量，可以设置 `OPENAI_API_KEY`，或者在网页后台修改 `api-key-env`。
@@ -143,8 +143,8 @@ plugins/BlueMap/core.conf
 
 HunterCore 现在有三类可控实体，适合不同场景：
 
-- `/fakeplayer`：轻量模型假人，适合大厅展示、占位、视觉交互和简单点击命令。
-- `/npc`：支持 villager 和 mannequin 类型，适合做功能 NPC、传送 NPC、菜单 NPC。
+- `/hc fakeplayer`：轻量模型假人，适合大厅展示、占位、视觉交互和简单点击命令。
+- `/hnpc`：支持 villager 和 mannequin 类型，适合做功能 NPC、传送 NPC、菜单 NPC。
 - `/hplayer`：真实 `ServerPlayer` 假人，适合红石、农场、刷怪、区块加载和玩家行为调试。
 
 真实假人支持：
@@ -171,8 +171,8 @@ HunterCore 现在有三类可控实体，适合不同场景：
 
 ```text
 /hplayer click <name> say %player% clicked %actor%
-/fakeplayer click <name> spawn
-/npc click <name> lp user %player% permission set example.node true
+/hc fakeplayer click <name> spawn
+/hnpc click <name> lp user %player% permission set example.node true
 ```
 
 可用占位符包括：
@@ -196,15 +196,15 @@ HunterTools 内置了一组轻量实用功能，覆盖很多小服和测试服�
 
 ```text
 /htps
-/hunteradmin modules
-/hunteradmin module <module> <on|off>
-/hunteradmin command <module> <command> <on|off>
-/hunteradmin memory
-/hunteradmin gc
-/hunteradmin threads
-/hunteradmin optimize
-/hunteradmin motd <status|line1|line2|max>
-/hunteradmin web <status|restart|bind|port|map|public-map|user|remove|users|allow|execution>
+/hc admin modules
+/hc admin module <module> <on|off>
+/hc admin command <module> <command> <on|off>
+/hc admin memory
+/hc admin gc
+/hc admin threads
+/hc admin optimize
+/hc admin motd <status|line1|line2|max>
+/hc admin web <status|restart|bind|port|map|public-map|user|remove|users|allow|execution>
 /heal [player]
 /feed [player]
 /fly [player] [on|off]
@@ -226,7 +226,7 @@ HunterTools 内置了一组轻量实用功能，覆盖很多小服和测试服�
 /trash
 ```
 
-这些功能可以通过 `preferences.yml` 或 `/hunteradmin` 开关。你可以只保留自己需要的部分，把不用的模块关掉。
+这些功能可以通过 `preferences.yml` 或 `/hc admin` 开关。你可以只保留自己需要的部分，把不用的模块关掉。
 
 ## 内置插件
 
@@ -300,31 +300,33 @@ modules:
 常用游戏内管理命令：
 
 ```text
-/hunteradmin web status
-/hunteradmin web bind <address>
-/hunteradmin web port <1-65535>
-/hunteradmin web map <url>
-/hunteradmin web public-map <on|off>
-/hunteradmin web user <name> <admin|player> <password>
-/hunteradmin web allow <name> <inherit|none|*|command...>
-/hunteradmin web execution <name> <on|off>
+/hc admin web status
+/hc admin web bind <address>
+/hc admin web port <1-65535>
+/hc admin web map <url>
+/hc admin web public-map <on|off>
+/hc admin web user <name> <admin|player> <password>
+/hc admin web allow <name> <inherit|none|*|command...>
+/hc admin web execution <name> <on|off>
 ```
 
 ## 下载、发布和校验
 
-推荐始终从 [Releases](https://github.com/AndyXeCM/HunterCore/releases) 下载 `HunterCore-*-paperclip.jar`。
+推荐始终从 [Releases](https://github.com/AndyXeCM/HunterCore/releases) 下载 `HunterCore-*-MinecraftServer-*-release.jar`。
 
 每个发布版本都会附带：
 
 ```text
-HunterCore-<version>-paperclip.jar
-SHA256SUMS.txt
+HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
+HunterCore-<version>-WebPanel-<mcVersion>-release.zip
 ```
+
+发行 jar 默认控制在 100MB 以内，并保留 Linux、macOS、Windows 的 x86_64/aarch64 常见原生库；SQLite 额外保留 Linux-Musl x86_64/aarch64。非常规架构可以从源码构建未瘦身的 `divinemc-paperclip` jar。
 
 如果你要检查文件完整性：
 
 ```bash
-shasum -a 256 HunterCore-<version>-paperclip.jar
+shasum -a 256 HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
 ```
 
 ## 从源码构建
@@ -335,7 +337,7 @@ shasum -a 256 HunterCore-<version>-paperclip.jar
 GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
 GIT_CONFIG_VALUE_0=https://github.com/ \
-./gradlew applyAllPatches createPaperclipJar --no-daemon
+./gradlew packageHunterCoreRelease --no-daemon --no-configuration-cache
 ```
 
 构建产物会生成在：
@@ -344,13 +346,13 @@ GIT_CONFIG_VALUE_0=https://github.com/ \
 divinemc-server/build/libs/
 ```
 
-可直接运行的 paperclip jar 通常类似：
+可直接发布的 HunterCore jar 会生成在：
 
 ```text
-divinemc-server/build/libs/divinemc-paperclip-26.1.2.local-SNAPSHOT.jar
+divinemc-server/build/libs/HunterCore-1.0-MinecraftServer-26.1.2-release.jar
 ```
 
-GitHub Actions 发布流程会把它重命名为 `HunterCore-<version>-paperclip.jar`。
+如果你需要未瘦身的通用 paperclip jar，也可以单独运行 `./gradlew :divinemc-server:createPaperclipJar`，产物是 `divinemc-server/build/libs/divinemc-paperclip-<mcVersion>.local-SNAPSHOT.jar`。
 
 ## 开发者 API
 
@@ -360,7 +362,7 @@ HunterCore 提供 API 入口：
 org.huntercore.api.HunterCoreProvider.get()
 ```
 
-插件可以注册 `/huntercore` 子命令扩展：
+插件可以注册 `/hc` 子命令扩展：
 
 ```java
 HunterCoreProvider.get().registerCommandExtension(extension);

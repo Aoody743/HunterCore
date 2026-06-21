@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HunterCore Panel</title>
-  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
   <svg class="liquidGlassDefs" width="0" height="0" aria-hidden="true" focusable="false">
@@ -30,7 +30,7 @@
     <header class="topChrome">
       <div class="brandBlock">
         <span id="productMark" class="productMark" aria-hidden="true">
-          <img id="serverIcon" src="/assets/server-icon.png" alt="">
+          <img id="serverIcon" src="assets/server-icon.png" alt="">
           <span id="serverIconFallback">HC</span>
         </span>
         <div>
@@ -44,6 +44,9 @@
         <button type="button" class="navButton" data-page-target="runtime" data-i18n="nav.runtime">Runtime</button>
         <button type="button" class="navButton" data-page-target="plugins" data-i18n="nav.plugins">Plugins</button>
         <button type="button" class="navButton" data-page-target="tools" data-i18n="nav.tools">Tools</button>
+        <button type="button" class="navButton adminOnly" data-page-target="settings" data-i18n="nav.settings" hidden>Settings</button>
+        <button type="button" class="navButton adminOnly" data-page-target="access" data-i18n="nav.access" hidden>Access</button>
+        <button type="button" class="navButton adminOnly" data-page-target="ai" data-i18n="nav.ai" hidden>AI</button>
         <button type="button" class="navButton adminOnly" data-page-target="admin" data-i18n="nav.admin" hidden>Admin</button>
         <button id="languageToggle" type="button" class="navButton langButton" data-i18n-title="language.switch">EN</button>
       </nav>
@@ -68,6 +71,21 @@
           <button type="submit" class="primaryButton" data-i18n="login.action">Login</button>
         </form>
         <button id="logoutButton" type="button" class="secondaryButton" data-i18n="logout.action" hidden>Logout</button>
+        <form id="registerForm" class="loginForm registerForm" hidden>
+          <p class="subtleLine" data-i18n="register.description">Register here before joining the server.</p>
+          <input id="registerUsername" autocomplete="username" placeholder="Player name" data-i18n-placeholder="register.username">
+          <input id="registerPassword" type="password" autocomplete="new-password" placeholder="Password" data-i18n-placeholder="register.password">
+          <input id="registerConfirmPassword" type="password" autocomplete="new-password" placeholder="Confirm password" data-i18n-placeholder="register.confirm">
+          <button id="registerButton" type="submit" class="secondaryButton" data-i18n="register.action">Register player</button>
+        </form>
+        <form id="connectionForm" class="loginForm remoteForm">
+          <p class="subtleLine" data-i18n="remote.description">Standalone mode: fill backend URL and optional API key.</p>
+          <input id="backendUrl" autocomplete="url" placeholder="http://127.0.0.1:8088" data-i18n-placeholder="remote.backendUrl">
+          <input id="backendApiKey" type="password" autocomplete="new-password" placeholder="Optional API key" data-i18n-placeholder="remote.apiKey">
+          <button type="submit" class="secondaryButton" data-i18n="remote.connect">Connect backend</button>
+          <button id="clearConnectionButton" type="button" class="secondaryButton" data-i18n="remote.clear">Use local panel</button>
+        </form>
+        <p id="backendLine" class="subtleLine"></p>
         <div class="miniMetrics">
           <div><span>TPS</span><strong id="tps">--</strong></div>
           <div><span>MSPT</span><strong id="mspt">--</strong></div>
@@ -192,6 +210,294 @@
       </div>
     </section>
 
+    <section id="settings" class="pageView workspace adminOnly" hidden>
+      <div class="sectionHead">
+        <div>
+          <span class="eyebrow" data-i18n="settings.eyebrow">Server presentation</span>
+          <h2 data-i18n="settings.title">Settings</h2>
+        </div>
+      </div>
+      <form id="webSettingsForm" hidden></form>
+      <div class="configWorkbench" data-config-workbench="settings">
+        <aside class="configRail panel" aria-label="Settings sections">
+          <button type="button" class="configTab isActive" data-config-target="web">
+            <strong data-i18n="settings.tab.web">Web panel</strong>
+            <span data-i18n="settings.tab.webHint">Name, F3 and panel address</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="display">
+            <strong data-i18n="settings.tab.display">Display</strong>
+            <span data-i18n="settings.tab.displayHint">Sidebar and TPS text</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="motd">
+            <strong data-i18n="settings.tab.motd">MOTD</strong>
+            <span data-i18n="settings.tab.motdHint">Server list message</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="messages">
+            <strong data-i18n="settings.tab.messages">Command text</strong>
+            <span data-i18n="settings.tab.messagesHint">Public command copy</span>
+          </button>
+        </aside>
+        <div class="configPanels">
+        <section id="webSettingsPanel" class="panel" data-config-panel="web" data-settings-scope="web">
+          <h3 data-i18n="webSettings.title">Web panel</h3>
+          <div class="formGrid">
+            <input id="webServerName" form="webSettingsForm" placeholder="HunterCore" data-i18n-placeholder="webSettings.serverName">
+            <input id="webF3ServerName" form="webSettingsForm" placeholder="&quot;HunterCraft&quot; Server" data-i18n-placeholder="webSettings.f3ServerName">
+            <select id="webCpuMode" form="webSettingsForm">
+              <option value="single-thread">single-thread</option>
+              <option value="high-clock">high-clock</option>
+              <option value="high-core">high-core</option>
+              <option value="multi-thread">multi-thread</option>
+            </select>
+            <input id="webBindAddress" form="webSettingsForm" placeholder="127.0.0.1" data-i18n-placeholder="webSettings.bind">
+            <input id="webPort" form="webSettingsForm" inputmode="numeric" placeholder="8088" data-i18n-placeholder="webSettings.port">
+            <input id="webExternalUrl" form="webSettingsForm" placeholder="https://panel.example.com" data-i18n-placeholder="webSettings.externalUrl">
+            <input id="webMapUrl" form="webSettingsForm" placeholder="http://%host%:8100/" data-i18n-placeholder="webSettings.mapUrl">
+            <label class="checkLine"><input id="webPublicMap" form="webSettingsForm" type="checkbox"> <span data-i18n="webSettings.publicMap">public map</span></label>
+            <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
+          </div>
+          <p id="webAddressLine" class="subtleLine"></p>
+          <p id="webThreadingLine" class="subtleLine"></p>
+        </section>
+
+        <section id="displaySettingsPanel" class="panel" data-config-panel="display" data-settings-scope="web" hidden>
+          <h3 data-i18n="display.title">Display</h3>
+          <div class="formGrid">
+            <label class="checkLine"><input id="tpsDisplayEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="display.tpsEnabled">TPS display</span></label>
+            <label class="checkLine"><input id="tpsActionbar" form="webSettingsForm" type="checkbox"> <span data-i18n="display.tpsActionbar">Actionbar TPS</span></label>
+            <input id="tpsIntervalTicks" form="webSettingsForm" inputmode="numeric" placeholder="40" data-i18n-placeholder="display.intervalTicks">
+            <input id="tpsActionbarFormat" form="webSettingsForm" placeholder="&7TPS %tps_color%%tps%" data-i18n-placeholder="display.actionbarFormat">
+            <label class="checkLine"><input id="sidebarEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="display.sidebarEnabled">Sidebar</span></label>
+            <input id="sidebarTitle" form="webSettingsForm" placeholder="&6HunterCore" data-i18n-placeholder="display.sidebarTitle">
+            <input id="sidebarIntervalTicks" form="webSettingsForm" inputmode="numeric" placeholder="40" data-i18n-placeholder="display.intervalTicks">
+            <label class="checkLine"><input id="sidebarDirtyUpdatesOnly" form="webSettingsForm" type="checkbox"> <span data-i18n="display.dirtyOnly">Dirty updates only</span></label>
+          </div>
+          <label class="textEditorLabel">
+            <span data-i18n="display.sidebarLines">Sidebar lines</span>
+            <textarea id="sidebarLines" form="webSettingsForm" rows="7" spellcheck="false"></textarea>
+          </label>
+          <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
+        </section>
+
+        <section id="motdPanel" class="panel" data-config-panel="motd" data-settings-scope="web" hidden>
+          <h3 data-i18n="motd.title">MOTD</h3>
+          <div class="formGrid">
+            <label class="checkLine"><input id="motdEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="motd.enabled">MOTD module</span></label>
+            <input id="motdLine1" form="webSettingsForm" placeholder="&bServer" data-i18n-placeholder="motd.line1">
+            <input id="motdLine2" form="webSettingsForm" placeholder="&7%online%/%max%" data-i18n-placeholder="motd.line2">
+            <input id="motdMaxPlayers" form="webSettingsForm" inputmode="numeric" placeholder="-1" data-i18n-placeholder="motd.maxPlayers">
+            <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
+          </div>
+          <p class="subtleLine" data-i18n="display.placeholders">Placeholders: %server%, %tps%, %mspt%, %online%, %max%, %world%, %player%, %ping%, %memory%</p>
+        </section>
+
+        <section id="commandMessagesPanel" class="panel" data-config-panel="messages" hidden>
+          <h3 data-i18n="commandMessages.title">Command text</h3>
+          <form id="commandMessagesForm" class="stackForm commandMessagesForm">
+            <label class="textEditorLabel">
+              <span data-i18n="commandMessages.about">/about</span>
+              <textarea id="commandMessageAbout" rows="4" spellcheck="false" data-i18n-placeholder="commandMessages.aboutPlaceholder"></textarea>
+            </label>
+            <label class="textEditorLabel">
+              <span data-i18n="commandMessages.plugins">/plugins</span>
+              <textarea id="commandMessagePlugins" rows="4" spellcheck="false" data-i18n-placeholder="commandMessages.pluginsPlaceholder"></textarea>
+            </label>
+            <label class="textEditorLabel">
+              <span data-i18n="commandMessages.opDenied">/op</span>
+              <textarea id="commandMessageOpDenied" rows="4" spellcheck="false" data-i18n-placeholder="commandMessages.opDeniedPlaceholder"></textarea>
+            </label>
+            <button type="submit" class="primaryButton" data-i18n="commandMessages.save">Save command text</button>
+          </form>
+        </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="access" class="pageView workspace adminOnly" hidden>
+      <div class="sectionHead">
+        <div>
+          <span class="eyebrow" data-i18n="access.eyebrow">Login and remote access</span>
+          <h2 data-i18n="access.title">Access</h2>
+        </div>
+      </div>
+      <div class="configWorkbench" data-config-workbench="access">
+        <aside class="configRail panel" aria-label="Access sections">
+          <button type="button" class="configTab isActive" data-config-target="auth">
+            <strong data-i18n="access.tab.auth">HunterAuth</strong>
+            <span data-i18n="access.tab.authHint">Game login and web registration</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="remote">
+            <strong data-i18n="access.tab.remote">Remote API</strong>
+            <span data-i18n="access.tab.remoteHint">CORS and API key</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="users">
+            <strong data-i18n="access.tab.users">Web roles</strong>
+            <span data-i18n="access.tab.usersHint">Panel users and commands</span>
+          </button>
+        </aside>
+        <div class="configPanels">
+        <section id="authSettingsPanel" class="panel" data-config-panel="auth" data-settings-scope="web">
+          <h3 data-i18n="auth.title">HunterAuth</h3>
+          <div class="formGrid">
+            <label class="checkLine"><input id="authEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.enabled">Login protection</span></label>
+            <label class="checkLine"><input id="authRegistrationRequired" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.registrationRequired">Require account password</span></label>
+            <label class="checkLine"><input id="authWebRegistrationRequired" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.webRegistrationRequired">Require web pre-registration</span></label>
+            <label class="checkLine"><input id="authWebRegistrationEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.webRegistrationEnabled">Open web registration</span></label>
+            <label class="checkLine"><input id="authWebLoginEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.webLoginEnabled">Allow HunterAuth web login</span></label>
+            <label class="checkLine"><input id="authGuiEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.guiEnabled">Login GUI</span></label>
+            <label class="checkLine"><input id="authOpenGuiOnJoin" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.openGuiOnJoin">Open GUI on join</span></label>
+            <input id="authMinimumPasswordLength" form="webSettingsForm" inputmode="numeric" placeholder="4" data-i18n-placeholder="auth.minimumPasswordLength">
+            <input id="authRegistrationUrl" form="webSettingsForm" placeholder="https://panel.example.com/#register" data-i18n-placeholder="auth.registrationUrl">
+            <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
+          </div>
+        </section>
+
+        <section id="remoteSettingsPanel" class="panel" data-config-panel="remote" data-settings-scope="web" hidden>
+          <h3 data-i18n="remote.title">Remote frontend/API</h3>
+          <div class="formGrid">
+            <label class="checkLine"><input id="webCorsEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="remote.corsEnabled">CORS for standalone frontend</span></label>
+            <input id="webCorsAllowOrigin" form="webSettingsForm" placeholder="*" data-i18n-placeholder="remote.corsAllowOrigin">
+            <label class="checkLine"><input id="webApiKeyEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="remote.apiKeyEnabled">API key access</span></label>
+            <input id="webApiKey" form="webSettingsForm" type="password" autocomplete="new-password" placeholder="API key" data-i18n-placeholder="remote.apiKey">
+            <label class="checkLine"><input id="webClearApiKey" form="webSettingsForm" type="checkbox"> <span data-i18n="remote.clearApiKey">Clear API key</span></label>
+            <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
+          </div>
+        </section>
+
+        <section id="usersPanel" class="panel" data-config-panel="users" hidden>
+          <h3 data-i18n="webUsers.title">Web roles</h3>
+          <form id="webUserForm" class="stackForm">
+            <div class="formGrid">
+              <input id="webUserName" placeholder="Username" data-i18n-placeholder="webUsers.username">
+              <select id="webUserRole">
+                <option value="player">Player</option>
+                <option value="admin">Admin</option>
+              </select>
+              <input id="webUserPassword" type="password" autocomplete="new-password" placeholder="Optional web password" data-i18n-placeholder="webUsers.password">
+              <label class="checkLine"><input id="webUserCommandExecution" type="checkbox" checked> <span data-i18n="webUsers.commands">commands</span></label>
+              <select id="webUserAllowedMode">
+                <option value="inherit">Inherit</option>
+                <option value="custom">Custom</option>
+                <option value="none">None</option>
+              </select>
+              <input id="webUserAllowedCommands" placeholder="list spawn or *" data-i18n-placeholder="webUsers.allowedCommands">
+              <button type="submit" class="primaryButton" data-i18n="webUsers.save">Save role</button>
+            </div>
+          </form>
+          <div id="webUserList" class="dataList mutedState" data-i18n="admin.required">Admin session required.</div>
+        </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="ai" class="pageView workspace adminOnly" hidden>
+      <div class="sectionHead">
+        <div>
+          <span class="eyebrow" data-i18n="ai.eyebrow">Native AI controls</span>
+          <h2 data-i18n="ai.title">Native AI</h2>
+        </div>
+      </div>
+      <form id="aiSettingsForm" hidden></form>
+      <div class="configWorkbench" data-config-workbench="ai">
+        <aside class="configRail panel" aria-label="AI sections">
+          <button type="button" class="configTab isActive" data-config-target="provider">
+            <strong data-i18n="ai.tab.provider">Provider</strong>
+            <span data-i18n="ai.tab.providerHint">Model endpoint and key</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="chatNpc">
+            <strong data-i18n="ai.tab.chatNpc">Chat and NPC</strong>
+            <span data-i18n="ai.tab.chatNpcHint">Replies, NPC action scope</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="fakePlayers">
+            <strong data-i18n="ai.tab.fakePlayers">Playerbot AI</strong>
+            <span data-i18n="ai.tab.fakePlayersHint">Movement, mining and placing</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="test">
+            <strong data-i18n="ai.tab.test">Test</strong>
+            <span data-i18n="ai.tab.testHint">Send a one-off prompt</span>
+          </button>
+        </aside>
+        <div class="configPanels">
+        <section id="aiProviderPanel" class="panel" data-config-panel="provider" data-settings-scope="ai">
+          <h3 data-i18n="ai.providerTitle">Provider</h3>
+          <div class="formGrid">
+            <label class="checkLine"><input id="aiEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.enabled">AI module</span></label>
+            <input id="aiBaseUrl" form="aiSettingsForm" placeholder="https://api.openai.com/v1" data-i18n-placeholder="ai.baseUrl">
+            <input id="aiModel" form="aiSettingsForm" placeholder="gpt-4o-mini" data-i18n-placeholder="ai.model">
+            <input id="aiApiKey" form="aiSettingsForm" type="password" autocomplete="new-password" placeholder="API key" data-i18n-placeholder="ai.apiKey">
+            <input id="aiApiKeyEnv" form="aiSettingsForm" placeholder="OPENAI_API_KEY" data-i18n-placeholder="ai.apiKeyEnv">
+            <label class="checkLine"><input id="aiClearApiKey" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.clearKey">clear key</span></label>
+            <input id="aiTemperature" form="aiSettingsForm" inputmode="decimal" placeholder="0.7" data-i18n-placeholder="ai.temperature">
+            <input id="aiMaxTokens" form="aiSettingsForm" inputmode="numeric" placeholder="300" data-i18n-placeholder="ai.maxTokens">
+            <input id="aiTimeoutSeconds" form="aiSettingsForm" inputmode="numeric" placeholder="30" data-i18n-placeholder="ai.timeout">
+            <button type="submit" form="aiSettingsForm" class="primaryButton" data-i18n="ai.save">Save AI settings</button>
+          </div>
+          <p id="aiKeyStatus" class="subtleLine"></p>
+        </section>
+
+        <section id="aiChatNpcPanel" class="panel" data-config-panel="chatNpc" data-settings-scope="ai" hidden>
+          <h3 data-i18n="ai.chatNpcTitle">Chat and NPC</h3>
+          <div class="formGrid">
+            <label class="checkLine"><input id="aiChatEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.chatEnabled">chat</span></label>
+            <input id="aiChatTriggerPrefix" form="aiSettingsForm" placeholder="@ai" data-i18n-placeholder="ai.chatPrefix">
+            <input id="aiChatCooldownSeconds" form="aiSettingsForm" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.chatCooldown">
+            <label class="checkLine"><input id="aiChatBroadcast" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.chatBroadcast">broadcast</span></label>
+            <label class="checkLine"><input id="aiNpcEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.npcEnabled">NPC</span></label>
+            <label class="checkLine"><input id="aiNpcAllowActions" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.npcActions">NPC actions</span></label>
+            <input id="aiNpcCooldownSeconds" form="aiSettingsForm" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.npcCooldown">
+            <input id="aiNpcResponseRadiusBlocks" form="aiSettingsForm" inputmode="numeric" placeholder="16" data-i18n-placeholder="ai.npcRadius">
+            <input id="aiNpcCommandWhitelist" form="aiSettingsForm" placeholder="say, tell, msg" data-i18n-placeholder="ai.commandWhitelist">
+          </div>
+          <label class="textEditorLabel">
+            <span data-i18n="ai.chatPrompt">Chat system prompt</span>
+            <textarea id="aiChatSystemPrompt" form="aiSettingsForm" rows="4" spellcheck="false"></textarea>
+          </label>
+          <label class="textEditorLabel">
+            <span data-i18n="ai.npcPrompt">NPC system prompt</span>
+            <textarea id="aiNpcSystemPrompt" form="aiSettingsForm" rows="4" spellcheck="false"></textarea>
+          </label>
+          <button type="submit" form="aiSettingsForm" class="primaryButton" data-i18n="ai.save">Save AI settings</button>
+        </section>
+
+        <section id="aiFakePlayerPanel" class="panel" data-config-panel="fakePlayers" data-settings-scope="ai" hidden>
+          <h3 data-i18n="ai.fakePlayersTitle">Real fake player AI</h3>
+          <div id="aiApprovalList" class="dataList mutedState"></div>
+          <div class="formGrid">
+            <label class="checkLine"><input id="aiFakePlayersEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersEnabled">Real fake player AI</span></label>
+            <input id="aiFakePlayersIntervalSeconds" form="aiSettingsForm" inputmode="numeric" placeholder="6" data-i18n-placeholder="ai.fakePlayersInterval">
+            <input id="aiFakePlayersMaxActions" form="aiSettingsForm" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.fakePlayersMaxActions">
+            <input id="aiFakePlayersMaxMoveTicks" form="aiSettingsForm" inputmode="numeric" placeholder="40" data-i18n-placeholder="ai.fakePlayersMaxMoveTicks">
+            <input id="aiFakePlayersMaxActionTicks" form="aiSettingsForm" inputmode="numeric" placeholder="80" data-i18n-placeholder="ai.fakePlayersMaxActionTicks">
+            <input id="aiFakePlayersNearbyRadiusBlocks" form="aiSettingsForm" inputmode="numeric" placeholder="6" data-i18n-placeholder="ai.fakePlayersRadius">
+            <input id="aiFakePlayersMaxPlaceDistanceBlocks" form="aiSettingsForm" inputmode="numeric" placeholder="6" data-i18n-placeholder="ai.fakePlayersMaxPlaceDistance">
+            <label class="checkLine"><input id="aiFakePlayersAllowMovement" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersMovement">allow movement</span></label>
+            <label class="checkLine"><input id="aiFakePlayersAllowBreaking" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersBreaking">allow breaking</span></label>
+            <label class="checkLine"><input id="aiFakePlayersAllowPlacing" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersPlacing">allow placing</span></label>
+            <label class="checkLine"><input id="aiFakePlayersAllowInteraction" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersInteraction">allow interaction</span></label>
+            <label class="checkLine"><input id="aiFakePlayersChatControlEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersChatControl">chat control</span></label>
+            <input id="aiFakePlayersChatControlPrefix" form="aiSettingsForm" placeholder="@bot" data-i18n-placeholder="ai.fakePlayersChatPrefix">
+            <input id="aiFakePlayersChatControlCooldownSeconds" form="aiSettingsForm" inputmode="numeric" placeholder="3" data-i18n-placeholder="ai.fakePlayersChatCooldown">
+            <label class="checkLine"><input id="aiFakePlayersChatControlRequirePermission" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersChatPermissionRequired">require permission</span></label>
+            <input id="aiFakePlayersChatControlPermission" form="aiSettingsForm" placeholder="huntertools.ai.fakeplayer" data-i18n-placeholder="ai.fakePlayersChatPermission">
+          </div>
+          <label class="textEditorLabel">
+            <span data-i18n="ai.fakePlayersPrompt">Real fake player system prompt</span>
+            <textarea id="aiFakePlayersSystemPrompt" form="aiSettingsForm" rows="5" spellcheck="false"></textarea>
+          </label>
+          <button type="submit" form="aiSettingsForm" class="primaryButton" data-i18n="ai.save">Save AI settings</button>
+        </section>
+
+        <section id="aiTestPanel" class="panel" data-config-panel="test" hidden>
+          <h3 data-i18n="ai.testTitle">Test</h3>
+          <form id="aiTestForm" class="inlineForm aiTestForm">
+            <input id="aiTestPrompt" placeholder="Say HunterCore AI is ready." data-i18n-placeholder="ai.testPrompt">
+            <button type="submit" class="secondaryButton" data-i18n="ai.test">Test</button>
+          </form>
+        </section>
+        </div>
+      </div>
+    </section>
+
     <section id="admin" class="pageView workspace adminOnly" hidden>
       <div class="sectionHead">
         <div>
@@ -199,15 +505,26 @@
           <h2 data-i18n="admin.title">Admin</h2>
         </div>
       </div>
-      <div class="adminGrid">
-        <section id="opsPanel" class="panel">
+      <div class="configWorkbench" data-config-workbench="admin">
+        <aside class="configRail panel" aria-label="Admin sections">
+          <button type="button" class="configTab isActive" data-config-target="modules">
+            <strong data-i18n="admin.tab.modules">Modules</strong>
+            <span data-i18n="admin.tab.modulesHint">Enable modules and commands</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="luckperms">
+            <strong>LuckPerms</strong>
+            <span data-i18n="admin.tab.luckHint">Permissions helper commands</span>
+          </button>
+        </aside>
+        <div class="configPanels">
+        <section id="opsPanel" class="panel" data-config-panel="modules">
           <h3 data-i18n="modules.title">Modules</h3>
           <div id="moduleControls" class="toggleGrid"></div>
           <h3 data-i18n="commands.title">Command gates</h3>
           <div id="commandControls" class="commandGroups"></div>
         </section>
 
-        <section id="luckPanel" class="panel">
+        <section id="luckPanel" class="panel" data-config-panel="luckperms" hidden>
           <h3>LuckPerms</h3>
           <form id="luckForm" class="stackForm">
             <div class="formGrid">
@@ -233,133 +550,10 @@
             </div>
           </form>
         </section>
-
-        <section id="webSettingsPanel" class="panel">
-          <h3 data-i18n="webSettings.title">Web panel</h3>
-          <form id="webSettingsForm" class="stackForm">
-            <div class="formGrid">
-              <input id="webServerName" placeholder="HunterCore" data-i18n-placeholder="webSettings.serverName">
-              <select id="webCpuMode">
-                <option value="single-thread">single-thread</option>
-                <option value="high-clock">high-clock</option>
-                <option value="high-core">high-core</option>
-                <option value="multi-thread">multi-thread</option>
-              </select>
-              <input id="webF3ServerName" placeholder="&quot;HunterCraft&quot; Server" data-i18n-placeholder="webSettings.f3ServerName">
-              <input id="webBindAddress" placeholder="127.0.0.1" data-i18n-placeholder="webSettings.bind">
-              <input id="webPort" inputmode="numeric" placeholder="8088" data-i18n-placeholder="webSettings.port">
-              <input id="webMapUrl" placeholder="http://%host%:8100/" data-i18n-placeholder="webSettings.mapUrl">
-              <label class="checkLine"><input id="webPublicMap" type="checkbox"> <span data-i18n="webSettings.publicMap">public map</span></label>
-              <button type="submit" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
-            </div>
-          </form>
-          <p id="webAddressLine" class="subtleLine"></p>
-          <p id="webThreadingLine" class="subtleLine"></p>
-        </section>
-
-        <section id="aiSettingsPanel" class="panel">
-          <h3 data-i18n="ai.title">Native AI</h3>
-          <div id="aiApprovalList" class="dataList mutedState"></div>
-          <form id="aiSettingsForm" class="stackForm aiSettingsForm">
-            <div class="formGrid">
-              <label class="checkLine"><input id="aiEnabled" type="checkbox"> <span data-i18n="ai.enabled">AI module</span></label>
-              <input id="aiBaseUrl" placeholder="https://api.openai.com/v1" data-i18n-placeholder="ai.baseUrl">
-              <input id="aiModel" placeholder="gpt-4o-mini" data-i18n-placeholder="ai.model">
-              <input id="aiApiKey" type="password" autocomplete="new-password" placeholder="API key" data-i18n-placeholder="ai.apiKey">
-              <input id="aiApiKeyEnv" placeholder="OPENAI_API_KEY" data-i18n-placeholder="ai.apiKeyEnv">
-              <label class="checkLine"><input id="aiClearApiKey" type="checkbox"> <span data-i18n="ai.clearKey">clear key</span></label>
-              <input id="aiTemperature" inputmode="decimal" placeholder="0.7" data-i18n-placeholder="ai.temperature">
-              <input id="aiMaxTokens" inputmode="numeric" placeholder="300" data-i18n-placeholder="ai.maxTokens">
-              <input id="aiTimeoutSeconds" inputmode="numeric" placeholder="30" data-i18n-placeholder="ai.timeout">
-              <label class="checkLine"><input id="aiChatEnabled" type="checkbox"> <span data-i18n="ai.chatEnabled">chat</span></label>
-              <input id="aiChatTriggerPrefix" placeholder="@ai" data-i18n-placeholder="ai.chatPrefix">
-              <input id="aiChatCooldownSeconds" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.chatCooldown">
-              <label class="checkLine"><input id="aiChatBroadcast" type="checkbox"> <span data-i18n="ai.chatBroadcast">broadcast</span></label>
-              <label class="checkLine"><input id="aiNpcEnabled" type="checkbox"> <span data-i18n="ai.npcEnabled">NPC</span></label>
-              <label class="checkLine"><input id="aiNpcAllowActions" type="checkbox"> <span data-i18n="ai.npcActions">NPC actions</span></label>
-              <input id="aiNpcCooldownSeconds" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.npcCooldown">
-              <input id="aiNpcResponseRadiusBlocks" inputmode="numeric" placeholder="16" data-i18n-placeholder="ai.npcRadius">
-              <input id="aiNpcCommandWhitelist" placeholder="say, tell, msg" data-i18n-placeholder="ai.commandWhitelist">
-              <label class="checkLine"><input id="aiFakePlayersEnabled" type="checkbox"> <span data-i18n="ai.fakePlayersEnabled">Real fake player AI</span></label>
-              <input id="aiFakePlayersIntervalSeconds" inputmode="numeric" placeholder="6" data-i18n-placeholder="ai.fakePlayersInterval">
-              <input id="aiFakePlayersMaxActions" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.fakePlayersMaxActions">
-              <input id="aiFakePlayersMaxMoveTicks" inputmode="numeric" placeholder="40" data-i18n-placeholder="ai.fakePlayersMaxMoveTicks">
-              <input id="aiFakePlayersMaxActionTicks" inputmode="numeric" placeholder="80" data-i18n-placeholder="ai.fakePlayersMaxActionTicks">
-              <input id="aiFakePlayersNearbyRadiusBlocks" inputmode="numeric" placeholder="6" data-i18n-placeholder="ai.fakePlayersRadius">
-              <label class="checkLine"><input id="aiFakePlayersAllowMovement" type="checkbox"> <span data-i18n="ai.fakePlayersMovement">allow movement</span></label>
-              <label class="checkLine"><input id="aiFakePlayersAllowBreaking" type="checkbox"> <span data-i18n="ai.fakePlayersBreaking">allow breaking</span></label>
-              <label class="checkLine"><input id="aiFakePlayersAllowInteraction" type="checkbox"> <span data-i18n="ai.fakePlayersInteraction">allow interaction</span></label>
-              <label class="checkLine"><input id="aiFakePlayersChatControlEnabled" type="checkbox"> <span data-i18n="ai.fakePlayersChatControl">chat control</span></label>
-              <input id="aiFakePlayersChatControlPrefix" placeholder="@bot" data-i18n-placeholder="ai.fakePlayersChatPrefix">
-              <input id="aiFakePlayersChatControlCooldownSeconds" inputmode="numeric" placeholder="3" data-i18n-placeholder="ai.fakePlayersChatCooldown">
-              <label class="checkLine"><input id="aiFakePlayersChatControlRequirePermission" type="checkbox"> <span data-i18n="ai.fakePlayersChatPermissionRequired">require permission</span></label>
-              <input id="aiFakePlayersChatControlPermission" placeholder="huntertools.ai.fakeplayer" data-i18n-placeholder="ai.fakePlayersChatPermission">
-            </div>
-            <label class="textEditorLabel">
-              <span data-i18n="ai.chatPrompt">Chat system prompt</span>
-              <textarea id="aiChatSystemPrompt" rows="4" spellcheck="false"></textarea>
-            </label>
-            <label class="textEditorLabel">
-              <span data-i18n="ai.npcPrompt">NPC system prompt</span>
-              <textarea id="aiNpcSystemPrompt" rows="4" spellcheck="false"></textarea>
-            </label>
-            <label class="textEditorLabel">
-              <span data-i18n="ai.fakePlayersPrompt">Real fake player system prompt</span>
-              <textarea id="aiFakePlayersSystemPrompt" rows="5" spellcheck="false"></textarea>
-            </label>
-            <button type="submit" class="primaryButton" data-i18n="ai.save">Save AI settings</button>
-          </form>
-          <form id="aiTestForm" class="inlineForm aiTestForm">
-            <input id="aiTestPrompt" placeholder="Say HunterCore AI is ready." data-i18n-placeholder="ai.testPrompt">
-            <button type="submit" class="secondaryButton" data-i18n="ai.test">Test</button>
-          </form>
-          <p id="aiKeyStatus" class="subtleLine"></p>
-        </section>
-
-        <section id="commandMessagesPanel" class="panel">
-          <h3 data-i18n="commandMessages.title">Command text</h3>
-          <form id="commandMessagesForm" class="stackForm commandMessagesForm">
-            <label class="textEditorLabel">
-              <span data-i18n="commandMessages.about">/about</span>
-              <textarea id="commandMessageAbout" rows="4" spellcheck="false" data-i18n-placeholder="commandMessages.aboutPlaceholder"></textarea>
-            </label>
-            <label class="textEditorLabel">
-              <span data-i18n="commandMessages.plugins">/plugins</span>
-              <textarea id="commandMessagePlugins" rows="4" spellcheck="false" data-i18n-placeholder="commandMessages.pluginsPlaceholder"></textarea>
-            </label>
-            <label class="textEditorLabel">
-              <span data-i18n="commandMessages.opDenied">/op</span>
-              <textarea id="commandMessageOpDenied" rows="4" spellcheck="false" data-i18n-placeholder="commandMessages.opDeniedPlaceholder"></textarea>
-            </label>
-            <button type="submit" class="primaryButton" data-i18n="commandMessages.save">Save command text</button>
-          </form>
-        </section>
-
-        <section id="usersPanel" class="panel">
-          <h3 data-i18n="webUsers.title">Web roles</h3>
-          <form id="webUserForm" class="stackForm">
-            <div class="formGrid">
-              <input id="webUserName" placeholder="Username" data-i18n-placeholder="webUsers.username">
-              <select id="webUserRole">
-                <option value="player">Player</option>
-                <option value="admin">Admin</option>
-              </select>
-              <input id="webUserPassword" type="password" autocomplete="new-password" placeholder="Optional web password" data-i18n-placeholder="webUsers.password">
-              <label class="checkLine"><input id="webUserCommandExecution" type="checkbox" checked> <span data-i18n="webUsers.commands">commands</span></label>
-              <select id="webUserAllowedMode">
-                <option value="inherit">Inherit</option>
-                <option value="custom">Custom</option>
-                <option value="none">None</option>
-              </select>
-              <input id="webUserAllowedCommands" placeholder="list spawn or *" data-i18n-placeholder="webUsers.allowedCommands">
-              <button type="submit" class="primaryButton" data-i18n="webUsers.save">Save role</button>
-            </div>
-          </form>
-          <div id="webUserList" class="dataList mutedState" data-i18n="admin.required">Admin session required.</div>
-        </section>
+        </div>
       </div>
     </section>
   </main>
-  <script src="/assets/app.js"></script>
+  <script src="assets/app.js"></script>
 </body>
 </html>

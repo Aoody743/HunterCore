@@ -5,6 +5,7 @@ import java.time.Duration;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.huntercore.api.HunterLanguage;
 import org.huntercore.bootstrap.HunterCoreRuntime;
 
 public final class HunterMessages {
@@ -12,12 +13,20 @@ public final class HunterMessages {
     }
 
     public static Component about() {
+        return about(HunterCoreRuntime.get().language());
+    }
+
+    public static Component about(final String language) {
         return Component.text()
             .append(Component.text("HunterCore", NamedTextColor.GOLD))
             .append(Component.text(" ", NamedTextColor.GRAY))
             .append(Component.text(HunterCoreRuntime.get().version(), NamedTextColor.YELLOW))
             .append(Component.newline())
-            .append(Component.text("A private DivineMC/Purpur/Paper based Minecraft server core.", NamedTextColor.GRAY))
+            .append(Component.text(HunterLanguage.choose(
+                language,
+                "基于 DivineMC/Purpur/Paper 的私有 Minecraft 服务器核心。",
+                "A private DivineMC/Purpur/Paper based Minecraft server core."
+            ), NamedTextColor.GRAY))
             .append(Component.newline())
             .append(Component.text("Minecraft: ", NamedTextColor.GRAY))
             .append(Component.text(Bukkit.getMinecraftVersion(), NamedTextColor.WHITE))
@@ -30,6 +39,10 @@ public final class HunterMessages {
     }
 
     public static Component systemInfo() {
+        return systemInfo(HunterCoreRuntime.get().language());
+    }
+
+    public static Component systemInfo(final String language) {
         final Runtime runtime = Runtime.getRuntime();
         final long max = runtime.maxMemory();
         final long total = runtime.totalMemory();
@@ -40,14 +53,14 @@ public final class HunterMessages {
         return Component.text()
             .append(Component.text("HunterCore System", NamedTextColor.GOLD))
             .append(Component.newline())
-            .append(line("Server", Bukkit.getName() + " " + Bukkit.getVersion()))
+            .append(line(HunterLanguage.choose(language, "服务端", "Server"), Bukkit.getName() + " " + Bukkit.getVersion()))
             .append(line("Java", System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")"))
             .append(line("OS", System.getProperty("os.name") + " " + System.getProperty("os.version") + " " + System.getProperty("os.arch")))
-            .append(line("CPU", runtime.availableProcessors() + " threads"))
-            .append(line("Memory", formatBytes(used) + " used / " + formatBytes(total) + " allocated / " + formatBytes(max) + " max"))
-            .append(line("Uptime", formatDuration(uptime)))
-            .append(line("Players", Bukkit.getOnlinePlayers().size() + "/" + Bukkit.getMaxPlayers()))
-            .append(line("Plugins folder", Bukkit.getPluginsFolder().getPath()))
+            .append(line("CPU", runtime.availableProcessors() + HunterLanguage.choose(language, " 线程", " threads")))
+            .append(line(HunterLanguage.choose(language, "内存", "Memory"), formatBytes(used) + HunterLanguage.choose(language, " 已用 / ", " used / ") + formatBytes(total) + HunterLanguage.choose(language, " 已分配 / ", " allocated / ") + formatBytes(max) + HunterLanguage.choose(language, " 最大", " max")))
+            .append(line(HunterLanguage.choose(language, "运行时间", "Uptime"), formatDuration(uptime)))
+            .append(line(HunterLanguage.choose(language, "玩家", "Players"), Bukkit.getOnlinePlayers().size() + "/" + Bukkit.getMaxPlayers()))
+            .append(line(HunterLanguage.choose(language, "插件目录", "Plugins folder"), Bukkit.getPluginsFolder().getPath()))
             .build();
     }
 

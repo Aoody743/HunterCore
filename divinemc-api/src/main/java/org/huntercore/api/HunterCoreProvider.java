@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.Optional;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.block.BlockFace;
 import org.huntercore.api.fakeplayer.FakePlayerActionResult;
 import org.huntercore.api.fakeplayer.FakePlayerSnapshot;
 import org.huntercore.api.fakeplayer.HunterFakePlayerService;
@@ -128,6 +129,11 @@ public final class HunterCoreProvider {
 
         @Override
         public @NotNull FakePlayerActionResult use(@NotNull final String name) {
+            return unavailable();
+        }
+
+        @Override
+        public @NotNull FakePlayerActionResult placeBlock(@NotNull final String name, @NotNull final Location clickedBlock, @NotNull final BlockFace face) {
             return unavailable();
         }
 

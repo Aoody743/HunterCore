@@ -14,6 +14,10 @@ public interface HunterCoreApi {
 
     @NotNull HunterFakePlayerService fakePlayers();
 
+    default @NotNull String language() {
+        return HunterLanguage.DEFAULT;
+    }
+
     void registerCommandExtension(@NotNull HunterCommandExtension extension);
 
     @NotNull Collection<HunterCommandExtension> commandExtensions();

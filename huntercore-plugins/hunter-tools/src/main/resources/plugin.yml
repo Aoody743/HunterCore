@@ -10,11 +10,6 @@ commands:
     usage: /htps
     aliases: [tps]
     permission: huntertools.command.tps
-  hunteradmin:
-    description: Manage HunterCore runtime modules.
-    usage: /hunteradmin <reload|modules|module|command|plugins|memory|gc|threads|optimize|web|ai>
-    aliases: [ha, htools]
-    permission: huntertools.command.admin
   heal:
     description: Heal yourself or another player.
     usage: /heal [player]
@@ -112,20 +107,15 @@ commands:
     usage: /trash
     aliases: [disposal]
     permission: huntertools.command.trash
-  fakeplayer:
-    description: Manage HunterCore lightweight fake players.
-    usage: /fakeplayer <spawn|remove|list|tp|tphere|look|pose|click|info|clear>
-    aliases: [fp, hfake]
-    permission: huntertools.command.fakeplayer
   hplayer:
     description: Manage HunterCore real ServerPlayer fake players.
     usage: /hplayer <spawn|remove|list|tp|tphere|look|move|sneak|sprint|jump|use|attack|stop|click|drop|dropstack|swap|gm|slot|ai|info|clear>
     aliases: [playerbot, realfakeplayer]
     permission: huntertools.command.hplayer
-  npc:
+  hnpc:
     description: Manage HunterCore NPCs.
-    usage: /npc <spawn|remove|list|tp|tphere|look|pose|click|info|clear>
-    aliases: [hnpc]
+    usage: /hnpc <spawn|remove|list|tp|tphere|look|pose|click|info|clear>
+    aliases: [npc]
     permission: huntertools.command.npc
 permissions:
   huntertools.command.tps:

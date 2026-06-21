@@ -16,6 +16,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -510,7 +511,7 @@ final class HunterRealFakePlayerManager {
             sender.sendMessage(ChatColor.GOLD + "HunterCore real fake players");
             sender.sendMessage("- True ServerPlayer instances: online list, chunk loading, player events and plugin visibility.");
             sender.sendMessage("- Commands: spawn, remove, list, tp, tphere, look, move, sneak, sprint, jump, use, attack, stop, click, drop, dropstack, swap, gm, slot, ai, info, clear.");
-            sender.sendMessage("- use/attack/jump support once, continuous, and stop. AI can drive look, move, mine, use, slot and toggles.");
+            sender.sendMessage("- use/attack/jump support once, continuous, and stop. AI can drive look, move, mine, place, use, slot and toggles.");
             sender.sendMessage("- Click command placeholders: %player%, %player_uuid%, %actor%, %actor_name%, %actor_uuid%, %module%, %world%, %x%, %y%, %z%.");
             return true;
         }
@@ -789,6 +790,7 @@ final class HunterRealFakePlayerManager {
             + " pitch=" + format(location.getPitch()) + "\n"
             + "Behave like a cooperative Minecraft helper. For follow/come tasks use [follow:player=" + player.getName() + "]. "
             + "For travel tasks use [goto:x y z]. For mining or tool work, look at the target and use [mine:ticks=40] or [use]. "
+            + "For building tasks, infer a compact style and build it in small steps with [slot:n] and [place:x y z,face=auto] or [place:dx=0,dy=0,dz=1,face=auto]. "
             + "Stop if the task says stop.";
         this.setAi(fake.name(), true, goal);
         final FakeAiProfile profile = this.aiProfiles.get(fake.id());
@@ -886,6 +888,27 @@ final class HunterRealFakePlayerManager {
             .append(" z=").append(format(location.getZ()))
             .append(" yaw=").append(format(location.getYaw()))
             .append(" pitch=").append(format(location.getPitch())).append('\n');
+        final Player liveFakePlayer = Bukkit.getPlayer(snapshot.uuid());
+        if (liveFakePlayer != null) {
+            context.append("Hotbar:");
+            for (int slot = 0; slot < 9; slot++) {
+                final ItemStack item = liveFakePlayer.getInventory().getItem(slot);
+                if (item == null || item.getType().isAir()) {
+                    continue;
+                }
+                context.append(' ')
+                    .append(slot + 1)
+                    .append('=')
+                    .append(item.getType().key().value())
+                    .append('x')
+                    .append(item.getAmount());
+                if (slot == liveFakePlayer.getInventory().getHeldItemSlot()) {
+                    context.append("(selected)");
+                }
+                context.append(';');
+            }
+            context.append('\n');
+        }
 
         final World world = location.getWorld();
         if (world == null) {
@@ -974,7 +997,7 @@ final class HunterRealFakePlayerManager {
             context.append(" none");
         }
         context.append('\n');
-        context.append("Return only action lines. Prefer small steps and continue mining with [mine:ticks=40] when breaking blocks. Use [goto:x y z] or [follow:player=name] for player work requests.");
+        context.append("Return only action lines. Prefer small steps and continue mining with [mine:ticks=40] when breaking blocks. Use [goto:x y z] or [follow:player=name] for player work requests. For building, use hotbar materials with [slot:n], then place one or a few blocks per turn with [place:x y z,face=auto] or relative [place:dx=0,dy=0,dz=1,face=auto].");
         return context.toString();
     }
 
@@ -1029,6 +1052,7 @@ final class HunterRealFakePlayerManager {
             case "mine", "dig", "break" -> this.aiTimedAction(name, "attack", args, "mine", true);
             case "attack", "left-click", "leftclick" -> this.aiTimedAction(name, "attack", args, "attack", true);
             case "use", "right-click", "rightclick", "interact" -> this.aiTimedAction(name, "use", args, "use", false);
+            case "place", "place-block", "placeblock", "build" -> this.aiPlace(name, args);
             case "say", "chat" -> this.aiSay(name, args);
             case "wait", "pause" -> "wait " + Math.max(1, intArg(args, "ticks", 20)) + " ticks";
             case "jump" -> resultLine(this.service().jump(name));
@@ -1083,6 +1107,7 @@ final class HunterRealFakePlayerManager {
 
     private @Nullable HighRiskAction detectHighRiskAction(final String name, final String action) {
         if (!(action.equals("use") || action.equals("right-click") || action.equals("rightclick") || action.equals("interact")
+            || action.equals("place") || action.equals("place-block") || action.equals("placeblock") || action.equals("build")
             || action.equals("attack") || action.equals("left-click") || action.equals("leftclick")
             || action.equals("mine") || action.equals("dig") || action.equals("break"))) {
             return null;
@@ -1117,7 +1142,7 @@ final class HunterRealFakePlayerManager {
             + (pending.controllerName().isBlank() ? "" : ChatColor.GRAY + " requested by " + pending.controllerName())
             + ChatColor.DARK_GRAY + " | /hplayer ai " + pending.fakePlayerName() + " approve";
         for (final Player online : Bukkit.getOnlinePlayers()) {
-            if (online.isOp() || online.hasPermission("huntertools.command.hunteradmin")) {
+            if (online.isOp() || online.hasPermission("huntertools.command.admin")) {
                 online.sendMessage(message);
             }
         }
@@ -1243,6 +1268,45 @@ final class HunterRealFakePlayerManager {
         }
         this.startTimedActionLoop(name, action, ticks);
         return label + " " + ticks + " ticks";
+    }
+
+    private String aiPlace(final String name, final String args) {
+        if (!this.preferences.booleanValue("modules.ai.fake-players.allow-placing", true)) {
+            return "placing disabled";
+        }
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return "";
+        }
+        final Location target = placeTarget(snapshot.get(), args);
+        if (target == null || target.getWorld() == null) {
+            return "";
+        }
+        final int maxDistance = Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-place-distance-blocks", 6));
+        if (snapshot.get().location().getWorld() == null
+            || !snapshot.get().location().getWorld().equals(target.getWorld())
+            || snapshot.get().location().distanceSquared(target) > maxDistance * maxDistance) {
+            return "place target too far";
+        }
+        final int slot = intArg(args, "slot", -1);
+        if (slot >= 1 && slot <= 9) {
+            final FakePlayerActionResult slotResult = this.service().setSelectedSlot(name, slot);
+            if (!slotResult.success()) {
+                return resultLine(slotResult);
+            }
+        }
+        final Block targetBlock = target.getBlock();
+        if (!targetBlock.getType().isAir()) {
+            return "place blocked: target occupied by " + targetBlock.getType().key().value();
+        }
+        final BlockFace requestedFace = blockFaceArg(args);
+        final PlaceSurface surface = requestedFace == null ? autoPlaceSurface(targetBlock) : requestedPlaceSurface(targetBlock, requestedFace);
+        if (surface == null || surface.clickedBlock().getType().isAir()) {
+            return "place blocked: no adjacent support";
+        }
+        final float[] rotation = rotationTo(snapshot.get().location(), targetBlock.getX() + 0.5D, targetBlock.getY() + 0.5D, targetBlock.getZ() + 0.5D);
+        this.service().look(name, rotation[0], rotation[1]);
+        return resultLine(this.service().placeBlock(name, surface.clickedBlock().getLocation(), surface.face()));
     }
 
     private String aiSlot(final String name, final String args) {
@@ -1703,6 +1767,60 @@ final class HunterRealFakePlayerManager {
         return parseNumbers(args, 3);
     }
 
+    private static @Nullable Location placeTarget(final FakePlayerSnapshot snapshot, final String args) {
+        final Location origin = snapshot.location();
+        final World world = origin.getWorld();
+        if (world == null) {
+            return null;
+        }
+        final double dx = doubleArg(args, "dx", Double.NaN);
+        final double dy = doubleArg(args, "dy", Double.NaN);
+        final double dz = doubleArg(args, "dz", Double.NaN);
+        if (!Double.isNaN(dx) && !Double.isNaN(dy) && !Double.isNaN(dz)) {
+            return new Location(world, origin.getBlockX() + dx, origin.getBlockY() + dy, origin.getBlockZ() + dz);
+        }
+        final double[] absolute = coordinateArgs(args);
+        if (absolute.length < 3) {
+            return null;
+        }
+        return new Location(world, absolute[0], absolute[1], absolute[2]);
+    }
+
+    private static @Nullable PlaceSurface autoPlaceSurface(final Block targetBlock) {
+        final PlaceSurface[] candidates = {
+            new PlaceSurface(targetBlock.getRelative(BlockFace.DOWN), BlockFace.UP),
+            new PlaceSurface(targetBlock.getRelative(BlockFace.NORTH), BlockFace.SOUTH),
+            new PlaceSurface(targetBlock.getRelative(BlockFace.SOUTH), BlockFace.NORTH),
+            new PlaceSurface(targetBlock.getRelative(BlockFace.WEST), BlockFace.EAST),
+            new PlaceSurface(targetBlock.getRelative(BlockFace.EAST), BlockFace.WEST),
+            new PlaceSurface(targetBlock.getRelative(BlockFace.UP), BlockFace.DOWN)
+        };
+        for (final PlaceSurface candidate : candidates) {
+            if (!candidate.clickedBlock().getType().isAir()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static PlaceSurface requestedPlaceSurface(final Block targetBlock, final BlockFace face) {
+        return new PlaceSurface(targetBlock.getRelative(face.getOppositeFace()), face);
+    }
+
+    private static @Nullable BlockFace blockFaceArg(final String args) {
+        final String face = valueFor(args, "face").isBlank() ? valueFor(args, "side") : valueFor(args, "face");
+        return switch (HunterToolsPreferences.normalize(face)) {
+            case "", "auto" -> null;
+            case "up", "top" -> BlockFace.UP;
+            case "down", "bottom" -> BlockFace.DOWN;
+            case "north", "n" -> BlockFace.NORTH;
+            case "south", "s" -> BlockFace.SOUTH;
+            case "east", "e" -> BlockFace.EAST;
+            case "west", "w" -> BlockFace.WEST;
+            default -> null;
+        };
+    }
+
     private static String valueFor(final String args, final String key) {
         final String normalizedKey = HunterToolsPreferences.normalize(key);
         for (final String token : tokens(args)) {
@@ -1823,8 +1941,8 @@ final class HunterRealFakePlayerManager {
             + "Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], "
             + "[move:forward=1,sideways=0,ticks=20,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=60,sprint=true], "
             + "[follow:player=name,ticks=80,distance=2.5], [mine:ticks=40], [use], [attack], [jump], [sneak:on], [sprint:off], "
-            + "[slot:1], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
-            + "Use small safe steps. For player chat work requests, act like a cooperative helper. Mine only when the goal requires it and the target block is visible.";
+            + "[slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
+            + "Use small safe steps. For building requests, infer a compact style and dimensions from the player's request, choose suitable hotbar materials with [slot:n], and place one or a few visible nearby blocks per turn. Mine only when the goal requires it and the target block is visible.";
     }
 
     private static String defaultFakeAiGoal(final String name) {
@@ -1917,6 +2035,9 @@ final class HunterRealFakePlayerManager {
     }
 
     private record MovePlan(double forward, double sideways, int ticks, boolean jump, boolean sprinting, boolean sneaking) {
+    }
+
+    private record PlaceSurface(Block clickedBlock, BlockFace face) {
     }
 
     private record TargetTask(FakePlayerSnapshot snapshot, String task) {

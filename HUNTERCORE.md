@@ -10,14 +10,16 @@ Use the same Paperweight flow as DivineMC:
 GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
 GIT_CONFIG_VALUE_0=https://github.com/ \
-./gradlew applyAllPatches createPaperclipJar --no-daemon
+./gradlew packageHunterCoreRelease --no-daemon --no-configuration-cache
 ```
 
-The final runnable jar is generated at:
+The release jar is generated at:
 
 ```text
-divinemc-server/build/libs/divinemc-paperclip-26.1.2.local-SNAPSHOT.jar
+divinemc-server/build/libs/HunterCore-1.0-MinecraftServer-26.1.2-release.jar
 ```
+
+`packageHunterCoreRelease` trims bundled Zstd and SQLite native jars to common server platforms so the release artifact stays below 100MB. It keeps Linux, macOS, and Windows x86_64/aarch64 native libraries, plus Linux-Musl x86_64/aarch64 for SQLite. Use `:divinemc-server:createPaperclipJar` when a fully universal upstream-style paperclip jar is needed.
 
 The `Build HunterCore` GitHub Actions workflow runs on `main`, pull requests targeting `main`, and manual dispatches. Release jars are built by the `Release HunterCore` workflow.
 
@@ -64,41 +66,42 @@ To add another external bundled plugin, extend that script with a download/build
 
 ```text
 /about
-/huntercore
-/huntercore system
-/huntercore plugins
-/huntercore preferences
-/huntercore preferences bundled <plugin-id> <on|off>
-/huntercore preferences module <module> <on|off>
-/huntercore preferences command <essentials|management|fake-players|real-fake-players|npcs> <command> <on|off>
-/huntercore reload
 /hc
+/hc help
+/hc about
+/hc system
+/hc plugins
+/hc preferences
+/hc preferences bundled <plugin-id> <on|off>
+/hc preferences module <module> <on|off>
+/hc preferences command <essentials|management|fake-players|real-fake-players|npcs> <command> <on|off>
+/hc reload
 /htps
-/hunteradmin modules
-/hunteradmin module <module> <on|off>
-/hunteradmin command <essentials|management|fake-players|real-fake-players|npcs> <command> <on|off>
-/hunteradmin memory
-/hunteradmin gc
-/hunteradmin threads
-/hunteradmin optimize
-/hunteradmin motd <status|line1 <text>|line2 <text>|max <number|default>>
-/hunteradmin web status
-/hunteradmin web restart
-/hunteradmin web users
-/hunteradmin web user <name> <admin|player> <password>
-/hunteradmin web allow <name> <inherit|none|*|command...>
-/hunteradmin web execution <name> <on|off>
-/hunteradmin web remove <name>
-/fakeplayer spawn <name> [world x y z [yaw pitch]]
-/fakeplayer remove <name>
-/fakeplayer list
-/fakeplayer tp <name> [world x y z [yaw pitch]]
-/fakeplayer tphere <name>
-/fakeplayer look <name> [yaw pitch|north|south|east|west|up|down]
-/fakeplayer pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
-/fakeplayer click <name> [command|clear]
-/fakeplayer info [name]
-/fakeplayer clear
+/hc admin modules
+/hc admin module <module> <on|off>
+/hc admin command <essentials|management|fake-players|real-fake-players|npcs> <command> <on|off>
+/hc admin memory
+/hc admin gc
+/hc admin threads
+/hc admin optimize
+/hc admin motd <status|line1 <text>|line2 <text>|max <number|default>>
+/hc admin web status
+/hc admin web restart
+/hc admin web users
+/hc admin web user <name> <admin|player> <password>
+/hc admin web allow <name> <inherit|none|*|command...>
+/hc admin web execution <name> <on|off>
+/hc admin web remove <name>
+/hc fakeplayer spawn <name> [world x y z [yaw pitch]]
+/hc fakeplayer remove <name>
+/hc fakeplayer list
+/hc fakeplayer tp <name> [world x y z [yaw pitch]]
+/hc fakeplayer tphere <name>
+/hc fakeplayer look <name> [yaw pitch|north|south|east|west|up|down]
+/hc fakeplayer pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
+/hc fakeplayer click <name> [command|clear]
+/hc fakeplayer info [name]
+/hc fakeplayer clear
 /hplayer spawn <name> [world x y z [yaw pitch]]
 /hplayer remove <name>
 /hplayer list
@@ -119,23 +122,23 @@ To add another external bundled plugin, extend that script with a download/build
 /hplayer slot <name> <1-9>
 /hplayer info [name]
 /hplayer clear
-/npc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]
-/npc remove <name>
-/npc list
-/npc tp <name> [world x y z [yaw pitch]]
-/npc tphere <name>
-/npc look <name> [yaw pitch|north|south|east|west|up|down]
-/npc pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
-/npc click <name> [command|clear]
-/npc info [name]
-/npc clear
+/hnpc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]
+/hnpc remove <name>
+/hnpc list
+/hnpc tp <name> [world x y z [yaw pitch]]
+/hnpc tphere <name>
+/hnpc look <name> [yaw pitch|north|south|east|west|up|down]
+/hnpc pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
+/hnpc click <name> [command|clear]
+/hnpc info [name]
+/hnpc clear
 ```
 
-`/about` is HunterCore-specific. `/huntercore system` prints JVM, OS, CPU, memory, uptime, player count, and plugin directory information.
+`/about` is HunterCore-specific. `/hc system` prints JVM, OS, CPU, memory, uptime, player count, and plugin directory information.
 
 HunterTools provides TPS actionbar/sidebar display, a built-in MOTD module, and essentials-style commands such as `/heal`, `/feed`, `/fly`, `/gm`, `/day`, `/night`, `/sun`, `/rain`, `/thunder`, `/broadcast`, `/clearchat`, `/speed`, `/spawn`, `/setspawn`, `/back`, `/hat`, `/craft`, `/enderchest`, and `/trash`. The client F3 server brand is forced to `"HunterCraft" Server`.
 
-`/fakeplayer` creates lightweight Mannequin-based fake players with placement commands for teleporting, moving to the sender, rotating, fixed poses, click-command actions, and info output. `/npc` creates managed Villager or Mannequin NPCs and shares the same placement/info/click-command commands where the entity type supports them. Both are persisted in `plugins/HunterCore/preferences.yml` and rebuilt on startup/reload.
+`/hc fakeplayer` creates lightweight Mannequin-based fake players with placement commands for teleporting, moving to the sender, rotating, fixed poses, click-command actions, and info output. `/hnpc` creates managed Villager or Mannequin NPCs and shares the same placement/info/click-command commands where the entity type supports them. Both are persisted in `plugins/HunterCore/preferences.yml` and rebuilt on startup/reload.
 
 These lightweight actors are not real `ServerPlayer` connections, so they do not occupy player slots, load chunks, or run Carpet-style continuous use/attack/jump/sneak actions.
 
@@ -150,10 +153,10 @@ Guests can view public status, health alerts, and the configured BlueMap URL. Lo
 Create web users from console or an op account:
 
 ```text
-/hunteradmin web user admin admin <password>
-/hunteradmin web user player player <password>
-/hunteradmin web allow player list spawn
-/hunteradmin web execution player on
+/hc admin web user admin admin <password>
+/hc admin web user player player <password>
+/hc admin web allow player list spawn
+/hc admin web execution player on
 ```
 
 BlueMap is bundled for the web map, and Chunky is bundled for chunk pre-generation/performance prep. BlueMap still requires the server owner to read and set `accept-download` in `plugins/BlueMap/core.conf` on first use because it downloads Mojang client resources for rendering.
@@ -193,7 +196,7 @@ The API entrypoint is:
 org.huntercore.api.HunterCoreProvider.get()
 ```
 
-Plugins can register future `/huntercore` subcommands with:
+Plugins can register future `/hc` subcommands with:
 
 ```java
 HunterCoreProvider.get().registerCommandExtension(extension);

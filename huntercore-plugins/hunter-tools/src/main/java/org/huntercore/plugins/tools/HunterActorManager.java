@@ -85,11 +85,19 @@ final class HunterActorManager {
     }
 
     boolean fakePlayerCommand(final CommandSender sender, final String[] args) {
-        return this.actorCommand(sender, FAKE_PLAYERS, "fakeplayer", args);
+        return this.fakePlayerCommand(sender, "fakeplayer", args);
+    }
+
+    boolean fakePlayerCommand(final CommandSender sender, final String label, final String[] args) {
+        return this.actorCommand(sender, FAKE_PLAYERS, label, args);
     }
 
     boolean npcCommand(final CommandSender sender, final String[] args) {
-        return this.actorCommand(sender, NPCS, "npc", args);
+        return this.npcCommand(sender, "hnpc", args);
+    }
+
+    boolean npcCommand(final CommandSender sender, final String label, final String[] args) {
+        return this.actorCommand(sender, NPCS, label, args);
     }
 
     List<String> completions(final String module, final String[] args) {

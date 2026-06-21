@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,7 +62,9 @@ import org.bukkit.plugin.Plugin;
 
 final class HunterWebPanelManager {
     private static final String SESSION_COOKIE = "HCSESSION";
+    private static final String SESSION_HEADER = "X-HunterCore-Session";
     private static final String CSRF_HEADER = "X-HunterCore-CSRF";
+    private static final String API_KEY_HEADER = "X-HunterCore-Api-Key";
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
         .followRedirects(HttpClient.Redirect.NORMAL)
@@ -69,7 +72,7 @@ final class HunterWebPanelManager {
         .build();
     private static final int HASH_ITERATIONS = 120_000;
     private static final int HASH_BITS = 256;
-    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "web-panel");
+    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "auth", "web-panel");
     private static final Map<String, List<String>> MODULE_COMMANDS = Map.of(
         "essentials", HunterToolsPreferences.essentialsCommands(),
         "management", HunterToolsPreferences.managementCommands(),
@@ -83,6 +86,7 @@ final class HunterWebPanelManager {
     private final Map<String, WebSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, CachedResponse> statusCaches = new ConcurrentHashMap<>();
     private final AtomicLong nextPluginOperationAt = new AtomicLong();
+    private final Object hunterAuthUsersLock = new Object();
     private HttpServer server;
     private ExecutorService executor;
 
@@ -200,7 +204,7 @@ final class HunterWebPanelManager {
         if (username == null || username.isBlank() || password == null || password.isBlank()) {
             return false;
         }
-        final Path usersPath = Bukkit.getPluginsFolder().toPath().resolve("HunterAuth").resolve("users.yml");
+        final Path usersPath = hunterAuthUsersPath();
         if (!Files.isRegularFile(usersPath)) {
             return false;
         }
@@ -231,6 +235,10 @@ final class HunterWebPanelManager {
         return false;
     }
 
+    private static Path hunterAuthUsersPath() {
+        return Bukkit.getPluginsFolder().toPath().resolve("HunterAuth").resolve("users.yml");
+    }
+
     private ExecutorService createExecutor() {
         final int configured = this.preferences.intValue("optimizations.hunter-tools.web-panel-workers", 4);
         final int workers = Math.max(1, Math.min(configured, Math.min(8, Runtime.getRuntime().availableProcessors())));
@@ -247,7 +255,15 @@ final class HunterWebPanelManager {
         try {
             final URI uri = exchange.getRequestURI();
             final String path = normalizePath(uri.getPath());
+            if (exchange.getRequestMethod().equalsIgnoreCase("OPTIONS")) {
+                this.sendNoContent(exchange, 204);
+                return;
+            }
             if (path.equals("/")) {
+                this.send(exchange, 200, "text/html; charset=utf-8", webAsset("index.html", INDEX_HTML));
+                return;
+            }
+            if (path.equals("/remote.html")) {
                 this.send(exchange, 200, "text/html; charset=utf-8", webAsset("index.html", INDEX_HTML));
                 return;
             }
@@ -289,6 +305,11 @@ final class HunterWebPanelManager {
             if (path.equals("/api/login")) {
                 this.requireMethod(exchange, "POST");
                 this.login(exchange);
+                return;
+            }
+            if (path.equals("/api/auth/register")) {
+                this.requireMethod(exchange, "POST");
+                this.authRegister(exchange);
                 return;
             }
             if (path.equals("/api/logout")) {
@@ -503,6 +524,7 @@ final class HunterWebPanelManager {
         json.append(']');
 
         json.append(",\"health\":").append(this.healthJson(snapshot, worlds, detailed));
+        json.append(",\"auth\":").append(this.authPublicJson());
 
         json.append(",\"worlds\":[");
         boolean first = true;
@@ -580,6 +602,20 @@ final class HunterWebPanelManager {
             json.append('}');
         }
         json.append("]}");
+        return json.toString();
+    }
+
+    private String authPublicJson() {
+        final StringBuilder json = new StringBuilder(256);
+        json.append('{');
+        booleanField(json, "enabled", this.preferences.booleanValue("modules.auth.enabled", true)).append(',');
+        booleanField(json, "registrationRequired", this.preferences.booleanValue("modules.auth.registration-required", true)).append(',');
+        booleanField(json, "webRegistrationRequired", this.preferences.booleanValue("modules.auth.web-registration-required", false)).append(',');
+        booleanField(json, "webRegistrationEnabled", this.preferences.booleanValue("modules.auth.web-registration-enabled", false)).append(',');
+        booleanField(json, "webLoginEnabled", this.preferences.booleanValue("modules.auth.web-login-enabled", false)).append(',');
+        numberField(json, "minimumPasswordLength", this.preferences.intValue("modules.auth.minimum-password-length", 4)).append(',');
+        field(json, "registrationUrl", this.registrationUrl());
+        json.append('}');
         return json.toString();
     }
 
@@ -831,11 +867,38 @@ final class HunterWebPanelManager {
         json.append('{');
         field(json, "bindAddress", this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1")).append(',');
         numberField(json, "port", Math.max(1, Math.min(65535, this.preferences.intValue("modules.web-panel.port", 8088)))).append(',');
+        field(json, "externalUrl", this.preferences.stringValue("modules.web-panel.external-url", "")).append(',');
         booleanField(json, "publicMap", this.preferences.booleanValue("modules.web-panel.public-map", true)).append(',');
         field(json, "mapUrl", this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/")).append(',');
         field(json, "serverName", this.webServerName()).append(',');
         field(json, "f3ServerName", this.preferences.stringValue("modules.management.f3-server-name", "\"HunterCraft\" Server")).append(',');
         field(json, "cpuMode", cpuMode).append(',');
+        booleanField(json, "tpsDisplayEnabled", this.preferences.moduleEnabled("tps-display")).append(',');
+        booleanField(json, "tpsActionbar", this.preferences.booleanValue("modules.tps-display.actionbar", true)).append(',');
+        numberField(json, "tpsIntervalTicks", this.preferences.intValue("modules.tps-display.interval-ticks", 40)).append(',');
+        field(json, "tpsActionbarFormat", this.preferences.stringValue("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%")).append(',');
+        booleanField(json, "sidebarEnabled", this.preferences.moduleEnabled("sidebar")).append(',');
+        field(json, "sidebarTitle", this.preferences.stringValue("modules.sidebar.title", "&6HunterCore")).append(',');
+        json.append("\"sidebarLines\":").append(stringArrayJson(this.preferences.stringList("modules.sidebar.lines", HunterToolsPreferences.defaultSidebarLines()))).append(',');
+        numberField(json, "sidebarIntervalTicks", this.preferences.intValue("modules.sidebar.interval-ticks", 40)).append(',');
+        booleanField(json, "sidebarDirtyUpdatesOnly", this.preferences.booleanValue("modules.sidebar.dirty-updates-only", true)).append(',');
+        booleanField(json, "motdEnabled", this.preferences.moduleEnabled("motd")).append(',');
+        field(json, "motdLine1", this.preferences.stringValue("modules.motd.line-1", "&b\"HunterCraft\" Server &8| &fHunterCore")).append(',');
+        field(json, "motdLine2", this.preferences.stringValue("modules.motd.line-2", "&7%online%/%max% players &8- &aTPS %tps% &8- &e%version%")).append(',');
+        numberField(json, "motdMaxPlayers", this.preferences.intValue("modules.motd.max-players", -1)).append(',');
+        booleanField(json, "authEnabled", this.preferences.booleanValue("modules.auth.enabled", true)).append(',');
+        booleanField(json, "authRegistrationRequired", this.preferences.booleanValue("modules.auth.registration-required", true)).append(',');
+        booleanField(json, "authWebRegistrationRequired", this.preferences.booleanValue("modules.auth.web-registration-required", false)).append(',');
+        booleanField(json, "authWebRegistrationEnabled", this.preferences.booleanValue("modules.auth.web-registration-enabled", false)).append(',');
+        booleanField(json, "authWebLoginEnabled", this.preferences.booleanValue("modules.auth.web-login-enabled", false)).append(',');
+        booleanField(json, "authGuiEnabled", this.preferences.booleanValue("modules.auth.gui-enabled", true)).append(',');
+        booleanField(json, "authOpenGuiOnJoin", this.preferences.booleanValue("modules.auth.open-gui-on-join", true)).append(',');
+        numberField(json, "authMinimumPasswordLength", this.preferences.intValue("modules.auth.minimum-password-length", 4)).append(',');
+        field(json, "authRegistrationUrl", this.preferences.stringValue("modules.auth.registration-url", "")).append(',');
+        booleanField(json, "corsEnabled", this.preferences.booleanValue("modules.web-panel.cors-enabled", true)).append(',');
+        field(json, "corsAllowOrigin", this.preferences.stringValue("modules.web-panel.cors-allow-origin", "*")).append(',');
+        booleanField(json, "apiKeyEnabled", this.preferences.booleanValue("modules.web-panel.api-key-enabled", false)).append(',');
+        booleanField(json, "apiKeyConfigured", !this.preferences.stringValue("modules.web-panel.api-key", "").isBlank()).append(',');
         booleanField(json, "asyncEnabled", !cpuMode.equals("single-thread")).append(',');
         numberField(json, "recommendedWorkers", this.preferences.defaultWorkerCount()).append(',');
         field(json, "address", this.addressLine());
@@ -918,7 +981,9 @@ final class HunterWebPanelManager {
         numberField(json, "fakePlayersNearbyRadiusBlocks", this.preferences.intValue("modules.ai.fake-players.nearby-radius-blocks", 6)).append(',');
         booleanField(json, "fakePlayersAllowMovement", this.preferences.booleanValue("modules.ai.fake-players.allow-movement", true)).append(',');
         booleanField(json, "fakePlayersAllowBreaking", this.preferences.booleanValue("modules.ai.fake-players.allow-breaking", true)).append(',');
+        booleanField(json, "fakePlayersAllowPlacing", this.preferences.booleanValue("modules.ai.fake-players.allow-placing", true)).append(',');
         booleanField(json, "fakePlayersAllowInteraction", this.preferences.booleanValue("modules.ai.fake-players.allow-interaction", true)).append(',');
+        numberField(json, "fakePlayersMaxPlaceDistanceBlocks", this.preferences.intValue("modules.ai.fake-players.max-place-distance-blocks", 6)).append(',');
         booleanField(json, "fakePlayersChatControlEnabled", this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true)).append(',');
         field(json, "fakePlayersChatControlPrefix", this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot")).append(',');
         numberField(json, "fakePlayersChatControlCooldownSeconds", this.preferences.intValue("modules.ai.fake-players.chat-control.cooldown-seconds", 3)).append(',');
@@ -945,6 +1010,16 @@ final class HunterWebPanelManager {
         return configured.isBlank() ? "HunterCore" : configured;
     }
 
+    private String registrationUrl() {
+        final String configured = this.preferences.stringValue("modules.auth.registration-url", "").trim();
+        if (!configured.isBlank()) {
+            return configured;
+        }
+        final String external = this.preferences.stringValue("modules.web-panel.external-url", "").trim();
+        final String base = external.isBlank() ? this.addressLine() : external;
+        return base.endsWith("/") ? base + "#register" : base + "/#register";
+    }
+
     private String sessionJson(final HttpExchange exchange) {
         final WebSession session = this.session(exchange);
         return "{\"ok\":true,\"session\":" + (session == null ? "null" : sessionJson(session)) + "}";
@@ -956,17 +1031,17 @@ final class HunterWebPanelManager {
         final String password = body.getOrDefault("password", "");
         final HunterToolsPreferences.WebUser user = this.preferences.webUser(username);
         final boolean webPassword = user != null && user.passwordConfigured() && verifyPassword(password, user.passwordHash());
-        final boolean hunterAuthPassword = verifyHunterAuthPassword(username, password);
+        final boolean hunterAuthPassword = this.preferences.booleanValue("modules.auth.web-login-enabled", false) && verifyHunterAuthPassword(username, password);
         if (!webPassword && !hunterAuthPassword) {
             this.send(exchange, 401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_login\"}");
             return;
         }
-        final String role = user == null ? "player" : normalizeRole(user.role());
-        final String id = user == null ? HunterToolsPreferences.webUserId(username) : user.id();
-        final String displayName = user == null ? username : user.displayName();
-        final boolean commandExecution = user == null || user.commandExecution();
-        final boolean allowedCommandsConfigured = user != null && user.allowedCommandsConfigured();
-        final List<String> allowedCommands = user == null ? List.of() : List.copyOf(user.allowedCommands());
+        final String role = webPassword && user != null ? normalizeRole(user.role()) : "player";
+        final String id = webPassword && user != null ? user.id() : HunterToolsPreferences.webUserId(username);
+        final String displayName = webPassword && user != null ? user.displayName() : username;
+        final boolean commandExecution = webPassword && user != null ? user.commandExecution() : true;
+        final boolean allowedCommandsConfigured = webPassword && user != null && user.allowedCommandsConfigured();
+        final List<String> allowedCommands = webPassword && user != null ? List.copyOf(user.allowedCommands()) : List.of();
         final long minutes = Math.max(5L, this.preferences.intValue("modules.web-panel.session-minutes", 360));
         final WebSession session = new WebSession(
             this.newToken(),
@@ -983,6 +1058,53 @@ final class HunterWebPanelManager {
         this.sessions.put(session.token(), session);
         exchange.getResponseHeaders().add("Set-Cookie", SESSION_COOKIE + "=" + session.token() + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" + (minutes * 60L));
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"session\":" + sessionJson(session) + "}");
+    }
+
+    private void authRegister(final HttpExchange exchange) throws IOException {
+        if (!this.preferences.booleanValue("modules.auth.enabled", true)
+            || !this.preferences.booleanValue("modules.auth.registration-required", true)) {
+            this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"auth_registration_disabled\"}");
+            return;
+        }
+        if (!this.preferences.booleanValue("modules.auth.web-registration-enabled", false)) {
+            this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"web_registration_closed\"}");
+            return;
+        }
+
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 16 * 1024));
+        final String username = body.getOrDefault("username", "").trim();
+        final String password = body.getOrDefault("password", "");
+        final String confirmPassword = body.getOrDefault("confirmPassword", body.getOrDefault("passwordConfirm", ""));
+        final int minimumLength = Math.max(1, this.preferences.intValue("modules.auth.minimum-password-length", 4));
+        if (!validMinecraftUsername(username) || password.length() < minimumLength || password.length() > 256
+            || (!confirmPassword.isBlank() && !password.equals(confirmPassword))) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_registration\"}");
+            return;
+        }
+
+        final UUID uuid = offlineUuid(username);
+        final Path usersPath = hunterAuthUsersPath();
+        synchronized (this.hunterAuthUsersLock) {
+            Files.createDirectories(usersPath.getParent());
+            final YamlConfiguration users = Files.isRegularFile(usersPath)
+                ? YamlConfiguration.loadConfiguration(usersPath.toFile())
+                : new YamlConfiguration();
+            if (users.contains("users." + uuid + ".hash") || hunterAuthNameExists(users, username)) {
+                this.send(exchange, 409, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"already_registered\"}");
+                return;
+            }
+            final byte[] salt = new byte[16];
+            RANDOM.nextBytes(salt);
+            final String path = "users." + uuid;
+            users.set(path + ".name", username);
+            users.set(path + ".salt", Base64.getEncoder().encodeToString(salt));
+            users.set(path + ".hash", hunterAuthHash(password, salt));
+            users.set(path + ".registered-from", "web-panel");
+            users.set(path + ".registered-at", Instant.now().toString());
+            users.save(usersPath.toFile());
+        }
+
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"username\":\"" + escapeJson(username) + "\"}");
     }
 
     private void logout(final HttpExchange exchange) {
@@ -1042,7 +1164,7 @@ final class HunterWebPanelManager {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_enabled\"}");
             return;
         }
-        final CommandResult result = this.dispatchConfiguredCommand("hunteradmin module " + module + " " + onOff(enabled));
+        final CommandResult result = this.dispatchConfiguredCommand("hc admin module " + module + " " + onOff(enabled));
         this.invalidateStatusCaches();
         this.sendCommandResult(exchange, 200, result);
     }
@@ -1069,7 +1191,7 @@ final class HunterWebPanelManager {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_enabled\"}");
             return;
         }
-        final CommandResult result = this.dispatchConfiguredCommand("hunteradmin command " + module + " " + command + " " + onOff(enabled));
+        final CommandResult result = this.dispatchConfiguredCommand("hc admin command " + module + " " + command + " " + onOff(enabled));
         this.invalidateStatusCaches();
         this.sendCommandResult(exchange, 200, result);
     }
@@ -1179,7 +1301,7 @@ final class HunterWebPanelManager {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"ai_only_supports_npcs_and_real_fake_players\"}");
             return;
         }
-        final WebSession session = this.adminOperator(exchange, module.equals("npcs") ? "npc" : "hplayer");
+        final WebSession session = this.adminOperator(exchange, module.equals("npcs") ? "hnpc" : "hplayer");
         if (session == null) {
             return;
         }
@@ -1337,11 +1459,39 @@ final class HunterWebPanelManager {
         final Map<String, String> body = parseJsonObject(this.body(exchange, 16 * 1024));
         final String bindAddress = body.getOrDefault("bindAddress", this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1")).trim();
         final String rawPort = body.getOrDefault("port", String.valueOf(this.preferences.intValue("modules.web-panel.port", 8088))).trim();
+        final String externalUrl = body.getOrDefault("externalUrl", this.preferences.stringValue("modules.web-panel.external-url", "")).trim();
         final String mapUrl = body.getOrDefault("mapUrl", this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/")).trim();
         final String serverName = body.getOrDefault("serverName", this.webServerName()).trim();
         final String f3ServerName = body.getOrDefault("f3ServerName", this.preferences.stringValue("modules.management.f3-server-name", "\"HunterCraft\" Server")).trim();
         final String cpuMode = normalizeCpuMode(body.getOrDefault("cpuMode", this.preferences.stringValue("optimizations.cpu.mode", "single-thread")));
         final Boolean publicMap = parseBoolean(body.getOrDefault("publicMap", String.valueOf(this.preferences.booleanValue("modules.web-panel.public-map", true))));
+        final Boolean tpsDisplayEnabled = parseBoolean(body.getOrDefault("tpsDisplayEnabled", String.valueOf(this.preferences.moduleEnabled("tps-display"))));
+        final Boolean tpsActionbar = parseBoolean(body.getOrDefault("tpsActionbar", String.valueOf(this.preferences.booleanValue("modules.tps-display.actionbar", true))));
+        final Integer tpsIntervalTicks = parseInteger(body.getOrDefault("tpsIntervalTicks", String.valueOf(this.preferences.intValue("modules.tps-display.interval-ticks", 40))), 20, 1200);
+        final String tpsActionbarFormat = body.getOrDefault("tpsActionbarFormat", this.preferences.stringValue("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%")).trim();
+        final Boolean sidebarEnabled = parseBoolean(body.getOrDefault("sidebarEnabled", String.valueOf(this.preferences.moduleEnabled("sidebar"))));
+        final String sidebarTitle = body.getOrDefault("sidebarTitle", this.preferences.stringValue("modules.sidebar.title", "&6HunterCore")).trim();
+        final List<String> sidebarLines = commandMessageLines(body.getOrDefault("sidebarLines", String.join("\n", this.preferences.stringList("modules.sidebar.lines", HunterToolsPreferences.defaultSidebarLines()))));
+        final Integer sidebarIntervalTicks = parseInteger(body.getOrDefault("sidebarIntervalTicks", String.valueOf(this.preferences.intValue("modules.sidebar.interval-ticks", 40))), 20, 1200);
+        final Boolean sidebarDirtyUpdatesOnly = parseBoolean(body.getOrDefault("sidebarDirtyUpdatesOnly", String.valueOf(this.preferences.booleanValue("modules.sidebar.dirty-updates-only", true))));
+        final Boolean motdEnabled = parseBoolean(body.getOrDefault("motdEnabled", String.valueOf(this.preferences.moduleEnabled("motd"))));
+        final String motdLine1 = body.getOrDefault("motdLine1", this.preferences.stringValue("modules.motd.line-1", "&b\"HunterCraft\" Server &8| &fHunterCore")).trim();
+        final String motdLine2 = body.getOrDefault("motdLine2", this.preferences.stringValue("modules.motd.line-2", "&7%online%/%max% players &8- &aTPS %tps% &8- &e%version%")).trim();
+        final Integer motdMaxPlayers = parseInteger(body.getOrDefault("motdMaxPlayers", String.valueOf(this.preferences.intValue("modules.motd.max-players", -1))), -1, 1_000_000);
+        final Boolean authEnabled = parseBoolean(body.getOrDefault("authEnabled", String.valueOf(this.preferences.booleanValue("modules.auth.enabled", true))));
+        final Boolean authRegistrationRequired = parseBoolean(body.getOrDefault("authRegistrationRequired", String.valueOf(this.preferences.booleanValue("modules.auth.registration-required", true))));
+        final Boolean authWebRegistrationRequired = parseBoolean(body.getOrDefault("authWebRegistrationRequired", String.valueOf(this.preferences.booleanValue("modules.auth.web-registration-required", false))));
+        final Boolean authWebRegistrationEnabled = parseBoolean(body.getOrDefault("authWebRegistrationEnabled", String.valueOf(this.preferences.booleanValue("modules.auth.web-registration-enabled", false))));
+        final Boolean authWebLoginEnabled = parseBoolean(body.getOrDefault("authWebLoginEnabled", String.valueOf(this.preferences.booleanValue("modules.auth.web-login-enabled", false))));
+        final Boolean authGuiEnabled = parseBoolean(body.getOrDefault("authGuiEnabled", String.valueOf(this.preferences.booleanValue("modules.auth.gui-enabled", true))));
+        final Boolean authOpenGuiOnJoin = parseBoolean(body.getOrDefault("authOpenGuiOnJoin", String.valueOf(this.preferences.booleanValue("modules.auth.open-gui-on-join", true))));
+        final Integer authMinimumPasswordLength = parseInteger(body.getOrDefault("authMinimumPasswordLength", String.valueOf(this.preferences.intValue("modules.auth.minimum-password-length", 4))), 1, 128);
+        final String authRegistrationUrl = body.getOrDefault("authRegistrationUrl", this.preferences.stringValue("modules.auth.registration-url", "")).trim();
+        final Boolean corsEnabled = parseBoolean(body.getOrDefault("corsEnabled", String.valueOf(this.preferences.booleanValue("modules.web-panel.cors-enabled", true))));
+        final String corsAllowOrigin = body.getOrDefault("corsAllowOrigin", this.preferences.stringValue("modules.web-panel.cors-allow-origin", "*")).trim();
+        final Boolean apiKeyEnabled = parseBoolean(body.getOrDefault("apiKeyEnabled", String.valueOf(this.preferences.booleanValue("modules.web-panel.api-key-enabled", false))));
+        final Boolean clearApiKey = parseBoolean(body.getOrDefault("clearApiKey", "false"));
+        final String apiKey = body.getOrDefault("apiKey", "").trim();
         final int port;
         try {
             port = Integer.parseInt(rawPort);
@@ -1351,7 +1501,16 @@ final class HunterWebPanelManager {
         }
         if (bindAddress.isBlank() || bindAddress.length() > 128 || bindAddress.contains(" ") || port < 1 || port > 65535
             || mapUrl.isBlank() || serverName.isBlank() || serverName.length() > 64 || publicMap == null
-            || f3ServerName.isBlank() || f3ServerName.length() > 96) {
+            || tpsDisplayEnabled == null || tpsActionbar == null || tpsIntervalTicks == null || tpsActionbarFormat.length() > 256
+            || sidebarEnabled == null || sidebarTitle.isBlank() || sidebarTitle.length() > 64 || sidebarLines == null
+            || sidebarIntervalTicks == null || sidebarDirtyUpdatesOnly == null || motdEnabled == null
+            || motdLine1.length() > 256 || motdLine2.length() > 256 || motdMaxPlayers == null
+            || authEnabled == null || authRegistrationRequired == null || authWebRegistrationRequired == null || authWebRegistrationEnabled == null || authWebLoginEnabled == null
+            || authGuiEnabled == null || authOpenGuiOnJoin == null || authMinimumPasswordLength == null
+            || corsEnabled == null || apiKeyEnabled == null || clearApiKey == null
+            || f3ServerName.isBlank() || f3ServerName.length() > 96 || apiKey.length() > 256
+            || invalidOptionalUrl(externalUrl) || invalidOptionalUrl(authRegistrationUrl)
+            || corsAllowOrigin.isBlank() || corsAllowOrigin.length() > 256 || containsHeaderBreak(corsAllowOrigin)) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_web_settings\"}");
             return;
         }
@@ -1365,10 +1524,41 @@ final class HunterWebPanelManager {
         final boolean threadingChanged = !cpuMode.equalsIgnoreCase(this.preferences.stringValue("optimizations.cpu.mode", "single-thread"));
         this.preferences.setValue("modules.web-panel.bind-address", bindAddress);
         this.preferences.setValue("modules.web-panel.port", port);
+        this.preferences.setValue("modules.web-panel.external-url", externalUrl);
         this.preferences.setValue("modules.web-panel.public-map", publicMap);
         this.preferences.setValue("modules.web-panel.map-url", mapUrl);
         this.preferences.setValue("modules.web-panel.server-name", serverName);
         this.preferences.setValue("modules.management.f3-server-name", f3ServerName);
+        this.preferences.setModuleEnabled("tps-display", tpsDisplayEnabled);
+        this.preferences.setValue("modules.tps-display.actionbar", tpsActionbar);
+        this.preferences.setValue("modules.tps-display.interval-ticks", tpsIntervalTicks);
+        this.preferences.setValue("modules.tps-display.actionbar-format", tpsActionbarFormat);
+        this.preferences.setModuleEnabled("sidebar", sidebarEnabled);
+        this.preferences.setValue("modules.sidebar.title", sidebarTitle);
+        this.preferences.setValue("modules.sidebar.lines", sidebarLines);
+        this.preferences.setValue("modules.sidebar.interval-ticks", sidebarIntervalTicks);
+        this.preferences.setValue("modules.sidebar.dirty-updates-only", sidebarDirtyUpdatesOnly);
+        this.preferences.setModuleEnabled("motd", motdEnabled);
+        this.preferences.setValue("modules.motd.line-1", motdLine1);
+        this.preferences.setValue("modules.motd.line-2", motdLine2);
+        this.preferences.setValue("modules.motd.max-players", motdMaxPlayers);
+        this.preferences.setValue("modules.auth.enabled", authEnabled);
+        this.preferences.setValue("modules.auth.registration-required", authRegistrationRequired);
+        this.preferences.setValue("modules.auth.web-registration-required", authWebRegistrationRequired);
+        this.preferences.setValue("modules.auth.web-registration-enabled", authWebRegistrationEnabled);
+        this.preferences.setValue("modules.auth.web-login-enabled", authWebLoginEnabled);
+        this.preferences.setValue("modules.auth.gui-enabled", authGuiEnabled);
+        this.preferences.setValue("modules.auth.open-gui-on-join", authOpenGuiOnJoin);
+        this.preferences.setValue("modules.auth.minimum-password-length", authMinimumPasswordLength);
+        this.preferences.setValue("modules.auth.registration-url", authRegistrationUrl);
+        this.preferences.setValue("modules.web-panel.cors-enabled", corsEnabled);
+        this.preferences.setValue("modules.web-panel.cors-allow-origin", corsAllowOrigin);
+        this.preferences.setValue("modules.web-panel.api-key-enabled", apiKeyEnabled);
+        if (clearApiKey) {
+            this.preferences.setValue("modules.web-panel.api-key", "");
+        } else if (!apiKey.isBlank()) {
+            this.preferences.setValue("modules.web-panel.api-key", apiKey);
+        }
         this.preferences.setValue("optimizations.cpu.mode", cpuMode);
         final boolean asyncEnabled = !cpuMode.equals("single-thread");
         this.preferences.setValue("optimizations.hunter-tools.async-rendering", asyncEnabled);
@@ -1379,6 +1569,7 @@ final class HunterWebPanelManager {
         this.preferences.setValue("optimizations.hunter-tools.web-panel-workers", this.preferences.defaultWorkerCount());
         this.savePreferences();
         this.plugin.applyServerBrand();
+        this.plugin.restartDisplayTasks();
         this.invalidateStatusCaches();
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"restart\":" + restart + ",\"threadingChanged\":" + threadingChanged + ",\"settings\":" + this.webSettingsJson() + "}");
         if (restart) {
@@ -1445,6 +1636,7 @@ final class HunterWebPanelManager {
         final Boolean fakePlayersEnabled = parseBoolean(body.getOrDefault("fakePlayersEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.enabled", true))));
         final Boolean fakePlayersAllowMovement = parseBoolean(body.getOrDefault("fakePlayersAllowMovement", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.allow-movement", true))));
         final Boolean fakePlayersAllowBreaking = parseBoolean(body.getOrDefault("fakePlayersAllowBreaking", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.allow-breaking", true))));
+        final Boolean fakePlayersAllowPlacing = parseBoolean(body.getOrDefault("fakePlayersAllowPlacing", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.allow-placing", true))));
         final Boolean fakePlayersAllowInteraction = parseBoolean(body.getOrDefault("fakePlayersAllowInteraction", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.allow-interaction", true))));
         final Boolean fakePlayersChatControlEnabled = parseBoolean(body.getOrDefault("fakePlayersChatControlEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true))));
         final Boolean fakePlayersChatControlRequirePermission = parseBoolean(body.getOrDefault("fakePlayersChatControlRequirePermission", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false))));
@@ -1471,6 +1663,7 @@ final class HunterWebPanelManager {
         final Integer fakePlayersMaxMoveTicks = parseInteger(body.getOrDefault("fakePlayersMaxMoveTicks", String.valueOf(this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 40))), 1, 200);
         final Integer fakePlayersMaxActionTicks = parseInteger(body.getOrDefault("fakePlayersMaxActionTicks", String.valueOf(this.preferences.intValue("modules.ai.fake-players.max-action-ticks", 80))), 1, 400);
         final Integer fakePlayersNearbyRadius = parseInteger(body.getOrDefault("fakePlayersNearbyRadiusBlocks", String.valueOf(this.preferences.intValue("modules.ai.fake-players.nearby-radius-blocks", 6))), 2, 12);
+        final Integer fakePlayersMaxPlaceDistance = parseInteger(body.getOrDefault("fakePlayersMaxPlaceDistanceBlocks", String.valueOf(this.preferences.intValue("modules.ai.fake-players.max-place-distance-blocks", 6))), 1, 16);
         final Integer fakePlayersChatControlCooldown = parseInteger(body.getOrDefault("fakePlayersChatControlCooldownSeconds", String.valueOf(this.preferences.intValue("modules.ai.fake-players.chat-control.cooldown-seconds", 3))), 0, 3600);
         final List<String> whitelist = parseCommandList(body.getOrDefault("npcCommandWhitelist", String.join(",", this.preferences.stringList(
             "modules.ai.npc.command-whitelist",
@@ -1478,11 +1671,11 @@ final class HunterWebPanelManager {
         ))));
 
         if (enabled == null || chatEnabled == null || chatBroadcast == null || npcEnabled == null || npcAllowActions == null
-            || fakePlayersEnabled == null || fakePlayersAllowMovement == null || fakePlayersAllowBreaking == null || fakePlayersAllowInteraction == null
+            || fakePlayersEnabled == null || fakePlayersAllowMovement == null || fakePlayersAllowBreaking == null || fakePlayersAllowPlacing == null || fakePlayersAllowInteraction == null
             || fakePlayersChatControlEnabled == null || fakePlayersChatControlRequirePermission == null
             || clearApiKey == null || temperature == null || maxTokens == null || timeoutSeconds == null || chatCooldown == null
             || npcCooldown == null || npcRadius == null || fakePlayersInterval == null || fakePlayersMaxActions == null
-            || fakePlayersMaxMoveTicks == null || fakePlayersMaxActionTicks == null || fakePlayersNearbyRadius == null
+            || fakePlayersMaxMoveTicks == null || fakePlayersMaxActionTicks == null || fakePlayersNearbyRadius == null || fakePlayersMaxPlaceDistance == null
             || fakePlayersChatControlCooldown == null || whitelist == null || provider.isBlank() || provider.length() > 64
             || !validHttpUrl(baseUrl) || model.isBlank() || model.length() > 128 || apiKey.length() > 512
             || apiKeyEnv.length() > 128 || chatPrefix.isBlank() || chatPrefix.length() > 32
@@ -1525,7 +1718,9 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.ai.fake-players.nearby-radius-blocks", fakePlayersNearbyRadius);
         this.preferences.setValue("modules.ai.fake-players.allow-movement", fakePlayersAllowMovement);
         this.preferences.setValue("modules.ai.fake-players.allow-breaking", fakePlayersAllowBreaking);
+        this.preferences.setValue("modules.ai.fake-players.allow-placing", fakePlayersAllowPlacing);
         this.preferences.setValue("modules.ai.fake-players.allow-interaction", fakePlayersAllowInteraction);
+        this.preferences.setValue("modules.ai.fake-players.max-place-distance-blocks", fakePlayersMaxPlaceDistance);
         this.preferences.setValue("modules.ai.fake-players.chat-control.enabled", fakePlayersChatControlEnabled);
         this.preferences.setValue("modules.ai.fake-players.chat-control.trigger-prefix", fakePlayersChatControlPrefix);
         this.preferences.setValue("modules.ai.fake-players.chat-control.cooldown-seconds", fakePlayersChatControlCooldown);
@@ -1983,7 +2178,7 @@ final class HunterWebPanelManager {
     }
 
     private WebSession adminOperator(final HttpExchange exchange) {
-        return this.adminOperator(exchange, "hunteradmin");
+        return this.adminOperator(exchange, "hc");
     }
 
     private WebSession adminOperator(final HttpExchange exchange, final String requiredCommand) {
@@ -2009,9 +2204,9 @@ final class HunterWebPanelManager {
 
     private static String actorCommandLabel(final String module) {
         return switch (module) {
-            case "fake-players" -> "fakeplayer";
+            case "fake-players" -> "hc fakeplayer";
             case "real-fake-players" -> "hplayer";
-            case "npcs" -> "npc";
+            case "npcs" -> "hnpc";
             default -> null;
         };
     }
@@ -2124,6 +2319,9 @@ final class HunterWebPanelManager {
     }
 
     private boolean csrfAllowed(final HttpExchange exchange, final WebSession session) {
+        if (session.authSource().equals("api-key")) {
+            return true;
+        }
         if (!this.preferences.booleanValue("modules.web-panel.require-csrf", true)) {
             return true;
         }
@@ -2135,7 +2333,14 @@ final class HunterWebPanelManager {
     }
 
     private WebSession session(final HttpExchange exchange) {
-        final String token = cookie(exchange, SESSION_COOKIE);
+        final WebSession apiKeySession = this.apiKeySession(exchange);
+        if (apiKeySession != null) {
+            return apiKeySession;
+        }
+        String token = exchange.getRequestHeaders().getFirst(SESSION_HEADER);
+        if (token == null || token.isBlank()) {
+            token = cookie(exchange, SESSION_COOKIE);
+        }
         if (token == null || token.isBlank()) {
             return null;
         }
@@ -2148,6 +2353,41 @@ final class HunterWebPanelManager {
             return null;
         }
         return session;
+    }
+
+    private WebSession apiKeySession(final HttpExchange exchange) {
+        if (!this.preferences.booleanValue("modules.web-panel.api-key-enabled", false)) {
+            return null;
+        }
+        final String configured = this.preferences.stringValue("modules.web-panel.api-key", "");
+        if (configured.isBlank()) {
+            return null;
+        }
+        String provided = exchange.getRequestHeaders().getFirst(API_KEY_HEADER);
+        if (provided == null || provided.isBlank()) {
+            final String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+            if (authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+                provided = authorization.substring(7).trim();
+            }
+        }
+        if (provided == null || provided.isBlank() || !MessageDigest.isEqual(
+            configured.getBytes(StandardCharsets.UTF_8),
+            provided.getBytes(StandardCharsets.UTF_8)
+        )) {
+            return null;
+        }
+        return new WebSession(
+            "api-key",
+            "",
+            "api-key",
+            "API Key",
+            "admin",
+            "api-key",
+            true,
+            false,
+            List.of(),
+            Instant.now().plusSeconds(60L).toEpochMilli()
+        );
     }
 
     private void requireMethod(final HttpExchange exchange, final String method) {
@@ -2168,6 +2408,7 @@ final class HunterWebPanelManager {
         try {
             final byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             final Headers headers = exchange.getResponseHeaders();
+            this.applyCorsHeaders(exchange);
             headers.set("Content-Type", type);
             headers.set("Cache-Control", "no-store");
             headers.set("X-Content-Type-Options", "nosniff");
@@ -2179,9 +2420,18 @@ final class HunterWebPanelManager {
         }
     }
 
+    private void sendNoContent(final HttpExchange exchange, final int status) {
+        try {
+            this.applyCorsHeaders(exchange);
+            exchange.sendResponseHeaders(status, -1);
+        } catch (final IOException ignored) {
+        }
+    }
+
     private void sendBytes(final HttpExchange exchange, final int status, final String type, final byte[] bytes) {
         try {
             final Headers headers = exchange.getResponseHeaders();
+            this.applyCorsHeaders(exchange);
             headers.set("Content-Type", type);
             headers.set("Cache-Control", "no-store");
             headers.set("X-Content-Type-Options", "nosniff");
@@ -2191,6 +2441,41 @@ final class HunterWebPanelManager {
             }
         } catch (final IOException ignored) {
         }
+    }
+
+    private void applyCorsHeaders(final HttpExchange exchange) {
+        if (!this.preferences.booleanValue("modules.web-panel.cors-enabled", true)) {
+            return;
+        }
+        final String allowOrigin = this.corsAllowOrigin(exchange);
+        if (allowOrigin.isBlank()) {
+            return;
+        }
+        final Headers headers = exchange.getResponseHeaders();
+        headers.set("Access-Control-Allow-Origin", allowOrigin);
+        headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        headers.set("Access-Control-Allow-Headers", "Content-Type, " + CSRF_HEADER + ", " + SESSION_HEADER + ", " + API_KEY_HEADER);
+        headers.set("Access-Control-Max-Age", "86400");
+        if (!allowOrigin.equals("*")) {
+            headers.set("Access-Control-Allow-Credentials", "true");
+            headers.add("Vary", "Origin");
+        }
+    }
+
+    private String corsAllowOrigin(final HttpExchange exchange) {
+        final String configured = this.preferences.stringValue("modules.web-panel.cors-allow-origin", "*").trim();
+        if (configured.equals("*")) {
+            return "*";
+        }
+        final String origin = exchange.getRequestHeaders().getFirst("Origin");
+        if (origin != null && !origin.isBlank()) {
+            for (final String allowed : configured.split(",")) {
+                if (origin.equals(allowed.trim())) {
+                    return origin;
+                }
+            }
+        }
+        return configured.split(",", 2)[0].trim();
     }
 
     private void sendServerIcon(final HttpExchange exchange) {
@@ -2220,6 +2505,31 @@ final class HunterWebPanelManager {
         } catch (final Exception ex) {
             throw new IllegalStateException("PBKDF2 is unavailable", ex);
         }
+    }
+
+    private static String hunterAuthHash(final String password, final byte[] salt) {
+        return Base64.getEncoder().encodeToString(pbkdf2(password.toCharArray(), salt, HASH_ITERATIONS, HASH_BITS));
+    }
+
+    private static UUID offlineUuid(final String username) {
+        return UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static boolean validMinecraftUsername(final String username) {
+        return username != null && username.matches("[A-Za-z0-9_]{3,16}");
+    }
+
+    private static boolean hunterAuthNameExists(final YamlConfiguration users, final String username) {
+        final ConfigurationSection section = users.getConfigurationSection("users");
+        if (section == null) {
+            return false;
+        }
+        for (final String id : section.getKeys(false)) {
+            if (users.getString("users." + id + ".name", "").equalsIgnoreCase(username)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Map<String, String> parseJsonObject(final String json) {
@@ -2312,6 +2622,7 @@ final class HunterWebPanelManager {
             + "\",\"role\":\"" + escapeJson(session.role())
             + "\",\"admin\":" + session.admin()
             + ",\"authSource\":\"" + escapeJson(session.authSource()) + '"'
+            + ",\"token\":\"" + escapeJson(session.token()) + '"'
             + ",\"csrf\":\"" + escapeJson(session.csrfToken()) + '"'
             + ",\"commandExecution\":" + session.commandExecution()
             + ",\"allowedCommandsConfigured\":" + session.allowedCommandsConfigured()
@@ -2376,6 +2687,14 @@ final class HunterWebPanelManager {
         } catch (final IllegalArgumentException ex) {
             return false;
         }
+    }
+
+    private static boolean invalidOptionalUrl(final String value) {
+        return value != null && !value.isBlank() && !validHttpUrl(value);
+    }
+
+    private static boolean containsHeaderBreak(final String value) {
+        return value != null && (value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0);
     }
 
     private static List<String> parseCommandList(final String rawCommands) {
