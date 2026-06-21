@@ -249,13 +249,16 @@ tasks.register("packageHunterCoreRelease") {
     group = "huntercore"
     description = "Builds the paperclip jar, trims bundled native libraries to common server platforms, and copies it to the HunterCore release naming scheme."
     dependsOn(":divinemc-server:createPaperclipJar")
-    val sourceJar = layout.projectDirectory.file("divinemc-server/build/libs/divinemc-paperclip-${huntercoreMcVersion}.local-SNAPSHOT.jar")
+    val serverLibs = layout.projectDirectory.dir("divinemc-server/build/libs")
     val releaseJar = layout.projectDirectory.file("divinemc-server/build/libs/$huntercoreReleaseJarName")
-    inputs.file(sourceJar)
     outputs.file(releaseJar)
     outputs.upToDateWhen { false }
 
     doLast {
+        val sourceJar = serverLibs.asFile
+            .listFiles { file -> file.isFile && file.name.startsWith("divinemc-paperclip-") && file.name.endsWith(".jar") }
+            ?.maxByOrNull { it.lastModified() }
+            ?: error("Could not locate divinemc-paperclip jar in ${serverLibs.asFile}")
         val commonNativePrefixes = listOf(
             "linux/amd64/",
             "linux/aarch64/",
@@ -296,7 +299,7 @@ tasks.register("packageHunterCoreRelease") {
         )
         val output = releaseJar.asFile
         val temporaryOutput = output.resolveSibling("${output.name}.tmp")
-        writeCommonNativePaperclip(sourceJar.asFile, temporaryOutput, trims)
+        writeCommonNativePaperclip(sourceJar, temporaryOutput, trims)
         Files.move(temporaryOutput.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
         val size = output.length()
         check(size < 100_000_000L) {
