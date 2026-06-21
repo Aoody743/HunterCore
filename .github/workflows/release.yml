@@ -48,8 +48,8 @@ jobs:
       - name: Apply patches
         run: ./gradlew applyAllPatches --stacktrace --no-daemon
 
-      - name: Build paperclip
-        run: ./gradlew createPaperclipJar --stacktrace --no-daemon
+      - name: Build HunterCore release jar
+        run: ./gradlew packageHunterCoreRelease --stacktrace --no-daemon --no-configuration-cache
 
       - name: Prepare release assets
         id: assets
@@ -64,14 +64,41 @@ jobs:
             v*) ;;
             *) tag="v${tag}" ;;
           esac
-          version="${tag#v}"
+          tag_version="${tag#v}"
+          huntercore_version="$(grep '^huntercoreVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          mc_version="$(grep '^mcVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          release_channel="$(grep '^releaseChannel=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           out="build/huntercore-release"
+          web_root="build/huntercore-web-panel"
           mkdir -p "$out"
-          cp divinemc-server/build/libs/divinemc-paperclip-*.jar "$out/HunterCore-${version}-paperclip.jar"
+          jar_name="HunterCore-${huntercore_version}-MinecraftServer-${mc_version}-${release_channel}.jar"
+          web_name="HunterCore-${huntercore_version}-WebPanel-${mc_version}-${release_channel}.zip"
+          cp "divinemc-server/build/libs/${jar_name}" "$out/${jar_name}"
+          rm -rf "$web_root"
+          mkdir -p "$web_root/assets"
+          cp huntercore-plugins/hunter-tools/src/main/resources/web-panel/index.html "$web_root/index.html"
+          cp huntercore-plugins/hunter-tools/src/main/resources/web-panel/app.css "$web_root/assets/app.css"
+          cp huntercore-plugins/hunter-tools/src/main/resources/web-panel/app.js "$web_root/assets/app.js"
+          cp huntercore-plugins/hunter-tools/src/main/resources/web-panel/panel-bg.jpg "$web_root/assets/panel-bg.jpg"
+          cat > "$web_root/README.txt" <<'TXT'
+          HunterCore Web Panel
+
+          Deploy these files to any static web host. Open the panel, fill the backend URL (for example http://server.example.com:8088) and optional API key in the Web console connection form.
+          TXT
+          python3 - <<PY
+          from pathlib import Path
+          import zipfile
+          root = Path("${web_root}")
+          out = Path("${out}") / "${web_name}"
+          with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path in sorted(root.rglob("*")):
+                  if path.is_file():
+                      archive.write(path, path.relative_to(root).as_posix())
+          PY
           (cd "$out" && sha256sum * > SHA256SUMS.txt)
           {
             echo "tag=$tag"
-            echo "version=$version"
+            echo "version=$tag_version"
             echo "out=$out"
           } >> "$GITHUB_OUTPUT"
           cat > "$out/RELEASE_NOTES.md" <<EOF
@@ -79,42 +106,18 @@ jobs:
 
           Built from commit ${GITHUB_SHA}.
 
-          Bundled plugins:
-          - ViaVersion 5.9.1
-          - ViaBackwards 5.9.1
-          - ViaRewind 4.1.1
-          - BlueMap 5.20
-          - Chunky 1.5.3
-          - PlaceholderAPI 2.12.2
-          - Vault 1.7.3
-          - ProtocolLib 5.4.0
-          - WorldEdit 7.4.3
-          - WorldGuard 7.0.17
-          - Multiverse-Core 5.7.0
-          - LuckPerms 5.5.55
-          - CoreProtect 23.2
-          - HunterTPA builtin
-          - HunterAuth builtin
-          - HunterTools builtin
-
           Highlights:
-          - Central preferences file at plugins/HunterCore/preferences.yml
-          - HunterTools TPS/actionbar/sidebar/management and essentials-style commands
-          - HunterTools fake players and NPCs with persistent preferences.yml definitions
-          - Built-in HunterCore web panel with guest map/status, player users, and admin command execution
-          - Web panel CSRF protection plus per-user command execution and allowed-command overrides
-          - Web panel command output capture with configurable line and character limits
-          - Web panel health alerts for TPS, MSPT, memory, world load, and disabled plugin checks
-          - Web panel admin Actors controls for spawning and removing HunterTools fake players and NPCs
-          - Web panel admin Operations controls for HunterTools module and command toggles
-          - Web panel admin Web Users controls for player/admin accounts, command execution, and allowed-command lists
-          - BlueMap web map bundle; first use requires accepting BlueMap's resource download in plugins/BlueMap/core.conf
-          - Common server foundation plugins: PlaceholderAPI, Vault, ProtocolLib, WorldEdit, and WorldGuard
-          - Web panel optimization summary for CPU, worker, Netty, ForkJoin, and HunterTools web worker settings
-          - Cached guest status responses for lower public web panel main-thread pressure
-          - Configurable module and command toggles
-          - Parallel bundled plugin install plus async HunterTools rendering/saving/actor loading/web serving
-          - CPU-aware Paper/DivineMC worker, Netty IO, and ForkJoin defaults
+          - Optimized web panel layout with Settings / Access / AI / Admin pages and in-page category navigation.
+          - Unified command system around /hc, /hplayer, and /hnpc with Chinese/English help and language switching.
+          - HunterAuth web registration/login, TPA/Home commands, and clickable teleport accept/deny chat UI.
+          - Web-editable MOTD, F3 server name, sidebar, TPS actionbar/subtitle text, and AI settings.
+          - Common-native slim release jar under 100MB while keeping Linux/macOS/Windows x86_64/aarch64 native libraries.
+          - Standalone WebPanel zip for separated frontend deployments with backend URL and optional API key connection.
+
+          Assets:
+          - ${jar_name}
+          - ${web_name}
+          - SHA256SUMS.txt
           EOF
 
       - name: Create or update GitHub release
@@ -122,7 +125,7 @@ jobs:
           set -euo pipefail
           tag="${{ steps.assets.outputs.tag }}"
           out="${{ steps.assets.outputs.out }}"
-          assets=("$out"/*.jar "$out"/SHA256SUMS.txt)
+          assets=("$out"/*.jar "$out"/*.zip "$out"/SHA256SUMS.txt)
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release edit "$tag" --notes-file "$out/RELEASE_NOTES.md"
             gh release upload "$tag" "${assets[@]}" --clobber
