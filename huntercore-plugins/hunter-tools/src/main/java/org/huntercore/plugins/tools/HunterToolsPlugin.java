@@ -263,6 +263,15 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     @SuppressWarnings("deprecation")
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPlayerChat(final AsyncPlayerChatEvent event) {
+        if (this.aiManager != null) {
+            this.aiManager.observeChat(event.getPlayer(), event.getMessage());
+        }
+        if (this.realFakePlayerManager != null) {
+            this.realFakePlayerManager.observeChat(event.getPlayer(), event.getMessage());
+        }
+        if (this.webPanelManager != null) {
+            this.webPanelManager.observeChat(event.getPlayer(), event.getMessage());
+        }
         if (this.realFakePlayerManager != null && this.realFakePlayerManager.handleChatControl(event.getPlayer(), event.getMessage())) {
             event.setCancelled(true);
             return;
@@ -543,7 +552,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             final String brand = this.preferences == null
                 ? "\"HunterCraft\" Server"
                 : this.preferences.stringValue("modules.management.f3-server-name", "\"HunterCraft\" Server");
-            f3Name.set(null, brand == null || brand.isBlank() ? "\"HunterCraft\" Server" : brand);
+            f3Name.set(null, color(brand == null || brand.isBlank() ? "\"HunterCraft\" Server" : brand));
         } catch (final ReflectiveOperationException ex) {
             this.getLogger().fine("Unable to set runtime F3 server brand: " + ex.getMessage());
         }
@@ -648,7 +657,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         board.objective.setDisplayName(color(renderDisplayLine(title, this.snapshot, playerView(player), this.preferences.stringValue("modules.web-panel.server-name", "HunterCore"))));
         final List<String> encoded = new ArrayList<>(lines.size());
         for (int i = 0; i < lines.size() && i < SIDEBAR_KEYS.length; i++) {
-            encoded.add(SIDEBAR_KEYS[i] + lines.get(i));
+            encoded.add(SIDEBAR_KEYS[i] + color(lines.get(i)));
         }
         if (dirtyOnly && encoded.equals(board.entries)) {
             if (player.getScoreboard() != board.scoreboard) {
@@ -897,7 +906,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         sender.sendMessage(ChatColor.GRAY + "Mode: " + ChatColor.WHITE + this.preferences.stringValue("optimizations.cpu.mode", "single-thread"));
         sender.sendMessage(ChatColor.GRAY + "CPU threads: " + ChatColor.WHITE + Runtime.getRuntime().availableProcessors());
         sender.sendMessage(ChatColor.GRAY + "Paper workers: " + ChatColor.WHITE + System.getProperty("Paper.WorkerThreadCount", "auto"));
-        sender.sendMessage(ChatColor.GRAY + "DivineMC workers: " + ChatColor.WHITE + System.getProperty("DivineMC.WorkerThreadCount", "auto"));
+        sender.sendMessage(ChatColor.GRAY + "Core workers: " + ChatColor.WHITE + System.getProperty("DivineMC.WorkerThreadCount", "auto"));
         sender.sendMessage(ChatColor.GRAY + "Netty IO threads: " + ChatColor.WHITE + System.getProperty("io.netty.eventLoopThreads", "auto"));
         sender.sendMessage(ChatColor.GRAY + "ForkJoin common parallelism: " + ChatColor.WHITE + System.getProperty("java.util.concurrent.ForkJoinPool.common.parallelism", "auto"));
         sender.sendMessage(ChatColor.GRAY + "HunterTools workers: " + ChatColor.WHITE + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4));

@@ -37,13 +37,9 @@ import java.util.Random;
 @SuppressWarnings({"SameParameterValue", "DataFlowIssue"})
 public class DivineConfig {
     private static final String HEADER = """
-        This is the main configuration file for DivineMC.
-        If you need help with the configuration or have any questions related to DivineMC,
-        join us in our Discord server.
-        
-        Discord: https://discord.gg/qNyybSSPm5
-        Docs: https://bxteam.org/docs/divinemc
-        Downloads: https://bxteam.org/downloads/divinemc""";
+        This is the main low-level performance configuration file for HunterCore.
+        Most server operators should use plugins/HunterCore/preferences.yml or the HunterCore web panel first.
+        Advanced settings here are kept for compatibility with the upstream performance layer.""";
 
     public static final Logger LOGGER = LogManager.getLogger(DivineConfig.class.getSimpleName());
     public static final int CONFIG_VERSION = 8;

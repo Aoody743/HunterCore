@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: HunterCore releases
-    url: https://github.com/AndyXeCM/HunterCore/releases
+    url: https://github.com/Aoody743/HunterCore/releases
     about: Download release jars here.
-  - name: DivineMC upstream
-    url: https://github.com/BX-Team/DivineMC
-    about: Check upstream DivineMC issues when a problem is not HunterCore-specific.

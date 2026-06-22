@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -98,6 +99,102 @@ final class HunterToolsPreferences {
     List<String> stringList(final String path, final List<String> fallback) {
         synchronized (this.lock) {
             return this.config.contains(path) ? this.config.getStringList(path) : fallback;
+        }
+    }
+
+    List<AiChatProfile> aiChatProfiles() {
+        synchronized (this.lock) {
+            final List<AiChatProfile> profiles = new ArrayList<>();
+            final ConfigurationSection section = this.config.getConfigurationSection("modules.ai.chat.profiles");
+            if (section != null) {
+                for (final String rawId : new TreeSet<>(section.getKeys(false))) {
+                    final String id = normalize(rawId);
+                    final String path = "modules.ai.chat.profiles." + id;
+                    final String displayName = this.config.getString(path + ".display-name", id);
+                    if (displayName == null || displayName.isBlank()) {
+                        continue;
+                    }
+                    profiles.add(new AiChatProfile(
+                        id,
+                        displayName,
+                        this.config.getStringList(path + ".aliases"),
+                        this.config.getString(path + ".system-prompt", this.stringValue("modules.ai.chat.system-prompt", "")),
+                        this.config.getString(path + ".response-format", this.stringValue("modules.ai.chat.response-format", "&bAI &8> &f%response%")),
+                        this.config.getBoolean(path + ".enabled", true)
+                    ));
+                }
+            }
+            if (profiles.isEmpty()) {
+                profiles.add(new AiChatProfile(
+                    "ai",
+                    "AI",
+                    List.of("AI", "ai"),
+                    this.stringValue("modules.ai.chat.system-prompt", ""),
+                    this.stringValue("modules.ai.chat.response-format", "&bAI &8> &f%response%"),
+                    true
+                ));
+            }
+            return profiles;
+        }
+    }
+
+    void setAiChatProfiles(final List<AiChatProfile> profiles) {
+        synchronized (this.lock) {
+            this.config.set("modules.ai.chat.profiles", null);
+            int index = 1;
+            for (final AiChatProfile profile : profiles) {
+                final String seed = profile.id() == null || profile.id().isBlank() ? profile.displayName() : profile.id();
+                final String normalized = normalize(seed).replaceAll("[^a-z0-9-]", "");
+                final String id = normalized.isBlank() ? "ai-" + index : normalized;
+                final String path = "modules.ai.chat.profiles." + id;
+                this.config.set(path + ".enabled", profile.enabled());
+                this.config.set(path + ".display-name", profile.displayName());
+                this.config.set(path + ".aliases", profile.aliases());
+                this.config.set(path + ".system-prompt", profile.systemPrompt());
+                this.config.set(path + ".response-format", profile.responseFormat());
+                index++;
+            }
+        }
+    }
+
+    List<FakeBotAlias> fakeBotAliases() {
+        synchronized (this.lock) {
+            final List<FakeBotAlias> aliases = new ArrayList<>();
+            final ConfigurationSection section = this.config.getConfigurationSection("modules.ai.fake-players.chat-control.bots");
+            if (section != null) {
+                for (final String rawId : new TreeSet<>(section.getKeys(false))) {
+                    final String id = normalize(rawId);
+                    final String path = "modules.ai.fake-players.chat-control.bots." + id;
+                    final String target = this.config.getString(path + ".target", id);
+                    if (target == null || target.isBlank()) {
+                        continue;
+                    }
+                    aliases.add(new FakeBotAlias(
+                        id,
+                        target,
+                        this.config.getStringList(path + ".aliases"),
+                        this.config.getBoolean(path + ".enabled", true)
+                    ));
+                }
+            }
+            return aliases;
+        }
+    }
+
+    void setFakeBotAliases(final List<FakeBotAlias> aliases) {
+        synchronized (this.lock) {
+            this.config.set("modules.ai.fake-players.chat-control.bots", null);
+            int index = 1;
+            for (final FakeBotAlias alias : aliases) {
+                final String seed = alias.id() == null || alias.id().isBlank() ? alias.target() : alias.id();
+                final String normalized = normalize(seed).replaceAll("[^a-z0-9-]", "");
+                final String id = normalized.isBlank() ? "bot-" + index : normalized;
+                final String path = "modules.ai.fake-players.chat-control.bots." + id;
+                this.config.set(path + ".enabled", alias.enabled());
+                this.config.set(path + ".target", alias.target());
+                this.config.set(path + ".aliases", alias.aliases());
+                index++;
+            }
         }
     }
 
@@ -206,7 +303,8 @@ final class HunterToolsPreferences {
                 normalize(this.config.getString(path + ".pose", "standing")),
                 this.config.getString(path + ".click-command", ""),
                 this.config.contains(path + ".ai-enabled") ? this.config.getBoolean(path + ".ai-enabled") : module.equals("npcs"),
-                this.config.getString(path + ".ai-persona", "")
+                this.config.getString(path + ".ai-persona", ""),
+                this.config.getString(path + ".skin-source", "")
             );
         }
     }
@@ -229,6 +327,8 @@ final class HunterToolsPreferences {
             this.config.set(path + ".ai-enabled", actor.aiEnabled());
             final String aiPersona = actor.aiPersona() == null ? "" : actor.aiPersona().trim();
             this.config.set(path + ".ai-persona", aiPersona.isBlank() ? null : aiPersona);
+            final String skinSource = actor.skinSource() == null ? "" : actor.skinSource().trim();
+            this.config.set(path + ".skin-source", skinSource.isBlank() ? null : skinSource);
         }
     }
 
@@ -388,6 +488,12 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.chat.broadcast", true);
         changed |= this.setDefault("modules.ai.chat.response-format", "&bAI &8> &f%response%");
         changed |= this.setDefault("modules.ai.chat.system-prompt", "You are the native AI assistant for a Minecraft server running HunterCore. Answer in the same language as the player when possible. Keep responses useful, friendly, and concise.");
+        changed |= this.setDefault("modules.ai.chat.context-lines", 12);
+        changed |= this.setDefault("modules.ai.chat.profiles.ai.enabled", true);
+        changed |= this.setDefault("modules.ai.chat.profiles.ai.display-name", "AI");
+        changed |= this.setDefault("modules.ai.chat.profiles.ai.aliases", List.of("AI", "ai"));
+        changed |= this.setDefault("modules.ai.chat.profiles.ai.response-format", "&b%name% &8> &f%response%");
+        changed |= this.setDefault("modules.ai.chat.profiles.ai.system-prompt", "You are the native AI assistant for a Minecraft server running HunterCore. Answer in the same language as the player when possible. Keep responses useful, friendly, and concise.");
         changed |= this.setDefault("modules.ai.npc.enabled", true);
         changed |= this.setDefault("modules.ai.npc.cooldown-seconds", 5);
         changed |= this.setDefault("modules.ai.npc.response-radius-blocks", 16);
@@ -418,11 +524,11 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.adaptive-throttling.warning-mspt", 40.0D);
         changed |= this.setDefault("modules.ai.adaptive-throttling.critical-mspt", 55.0D);
         changed |= this.setDefault("modules.ai.adaptive-throttling.severe-mspt", 75.0D);
-        changed |= this.setDefault("modules.auth.enabled", true);
+        changed |= this.setDefault("modules.auth.enabled", false);
         changed |= this.setDefault("modules.auth.registration-required", true);
         changed |= this.setDefault("modules.auth.web-registration-required", false);
         changed |= this.setDefault("modules.auth.web-registration-enabled", false);
-        changed |= this.setDefault("modules.auth.web-login-enabled", false);
+        changed |= this.setDefault("modules.auth.web-login-enabled", true);
         changed |= this.setDefault("modules.auth.gui-enabled", true);
         changed |= this.setDefault("modules.auth.open-gui-on-join", true);
         changed |= this.setDefault("modules.auth.minimum-password-length", 4);
@@ -476,7 +582,7 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("optimizations.cpu.prefer-existing-jvm-flags", true);
         changed |= this.setDefault("optimizations.cpu.allow-experimental-region-ticking", false);
         changed |= this.setDefault("optimizations.cpu.paper-worker-threads", "auto");
-        changed |= this.setDefault("optimizations.cpu.divine-worker-threads", "auto");
+        changed |= this.setDefault("optimizations.cpu.core-worker-threads", "auto");
         changed |= this.setDefault("optimizations.cpu.netty-io-threads", "auto");
         changed |= this.setDefault("optimizations.cpu.common-pool-parallelism", "auto");
         changed |= this.setDefault("optimizations.enabled", true);
@@ -529,7 +635,7 @@ final class HunterToolsPreferences {
     }
 
     static List<String> actorCommands() {
-        return List.of("spawn", "remove", "list", "tp", "tphere", "look", "pose", "click", "info", "clear");
+        return List.of("spawn", "remove", "list", "tp", "tphere", "look", "pose", "skin", "click", "info", "clear");
     }
 
     static List<String> realFakePlayerCommands() {
@@ -607,7 +713,8 @@ final class HunterToolsPreferences {
         String pose,
         String clickCommand,
         boolean aiEnabled,
-        String aiPersona
+        String aiPersona,
+        String skinSource
     ) {
         static ActorDefinition of(final String module, final String name, final String kind, final Location location) {
             return of(module, name, kind, location, "standing", "");
@@ -638,6 +745,20 @@ final class HunterToolsPreferences {
             final boolean aiEnabled,
             final String aiPersona
         ) {
+            return of(module, name, kind, location, pose, clickCommand, aiEnabled, aiPersona, "");
+        }
+
+        static ActorDefinition of(
+            final String module,
+            final String name,
+            final String kind,
+            final Location location,
+            final String pose,
+            final String clickCommand,
+            final boolean aiEnabled,
+            final String aiPersona,
+            final String skinSource
+        ) {
             final String id = actorId(name);
             return new ActorDefinition(
                 id,
@@ -653,7 +774,8 @@ final class HunterToolsPreferences {
                 normalize(pose),
                 clickCommand == null ? "" : clickCommand.trim(),
                 aiEnabled,
-                aiPersona == null ? "" : aiPersona.trim()
+                aiPersona == null ? "" : aiPersona.trim(),
+                skinSource == null ? "" : skinSource.trim()
             );
         }
 
@@ -675,6 +797,24 @@ final class HunterToolsPreferences {
         boolean passwordConfigured() {
             return this.passwordHash != null && !this.passwordHash.isBlank();
         }
+    }
+
+    record AiChatProfile(
+        String id,
+        String displayName,
+        List<String> aliases,
+        String systemPrompt,
+        String responseFormat,
+        boolean enabled
+    ) {
+    }
+
+    record FakeBotAlias(
+        String id,
+        String target,
+        List<String> aliases,
+        boolean enabled
+    ) {
     }
 
     private static UUID actorUuid(final String module, final String id, final String configured) {

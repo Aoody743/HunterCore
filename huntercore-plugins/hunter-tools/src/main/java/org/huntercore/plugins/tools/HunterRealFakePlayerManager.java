@@ -1,6 +1,8 @@
 package org.huntercore.plugins.tools;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -53,6 +55,7 @@ final class HunterRealFakePlayerManager {
     private final Map<String, PendingRiskApproval> pendingRiskApprovals = new HashMap<>();
     private final Map<String, Long> chatControlCooldowns = new HashMap<>();
     private final List<String> aiBusy = new ArrayList<>();
+    private final Deque<ObservedChat> recentChat = new ArrayDeque<>();
     private HunterAiManager aiManager;
 
     HunterRealFakePlayerManager(final HunterToolsPlugin plugin, final HunterToolsPreferences preferences, final HunterAiManager aiManager) {
@@ -615,18 +618,43 @@ final class HunterRealFakePlayerManager {
         return true;
     }
 
+    void observeChat(final Player player, final String rawMessage) {
+        final String message = rawMessage == null ? "" : rawMessage.trim();
+        if (message.isBlank()) {
+            return;
+        }
+        synchronized (this.recentChat) {
+            this.recentChat.addLast(new ObservedChat(
+                player.getName(),
+                Bukkit.isPrimaryThread() ? player.getWorld().getName() : "unknown",
+                truncatePlain(message, 240)
+            ));
+            while (this.recentChat.size() > 48) {
+                this.recentChat.removeFirst();
+            }
+        }
+    }
+
     boolean handleChatControl(final Player player, final String rawMessage) {
         final String message = rawMessage == null ? "" : rawMessage.trim();
         final String prefix = this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot").trim();
-        if (prefix.isBlank()
-            || !this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true)
-            || !message.startsWith(prefix)) {
+        if (!this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true)) {
             return false;
         }
-        final String body = message.substring(prefix.length()).trim();
+        if (!prefix.isBlank() && message.startsWith(prefix)) {
+            final String body = message.substring(prefix.length()).trim();
+            final UUID playerId = player.getUniqueId();
+            this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleChatControlMain(playerId, prefix, body));
+            return true;
+        }
+        final MentionedFakePlayer mentioned = this.mentionedFakePlayer(message);
+        if (mentioned == null) {
+            return false;
+        }
+        final String body = mentioned.snapshot().name() + " " + mentioned.task();
         final UUID playerId = player.getUniqueId();
-        this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleChatControlMain(playerId, prefix, body));
-        return true;
+        this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleChatControlMain(playerId, mentioned.snapshot().name(), body));
+        return false;
     }
 
     boolean handleInteract(final Player player, final Entity clicked) {
@@ -652,6 +680,37 @@ final class HunterRealFakePlayerManager {
             return true;
         }
         return false;
+    }
+
+    private @Nullable MentionedFakePlayer mentionedFakePlayer(final String message) {
+        if (message.isBlank()) {
+            return null;
+        }
+        for (final FakePlayerSnapshot snapshot : this.service().list()) {
+            final List<String> names = new ArrayList<>();
+            names.add(snapshot.name());
+            names.addAll(this.fakeBotAliases(snapshot.name()));
+            for (final String name : names) {
+                if (!containsName(message, name)) {
+                    continue;
+                }
+                final String task = removeFirstName(message, name).trim();
+                return new MentionedFakePlayer(snapshot, task);
+            }
+        }
+        return null;
+    }
+
+    private List<String> fakeBotAliases(final String targetName) {
+        final String targetId = HunterToolsPreferences.normalize(targetName);
+        final List<String> aliases = new ArrayList<>();
+        for (final HunterToolsPreferences.FakeBotAlias alias : this.preferences.fakeBotAliases()) {
+            if (!alias.enabled() || !HunterToolsPreferences.normalize(alias.target()).equals(targetId)) {
+                continue;
+            }
+            aliases.addAll(alias.aliases());
+        }
+        return aliases;
     }
 
     private void handleChatControlMain(final UUID playerId, final String prefix, final String body) {
@@ -723,7 +782,6 @@ final class HunterRealFakePlayerManager {
             return;
         }
         this.assignChatTask(player, targetTask.snapshot(), targetTask.task());
-        player.sendMessage(ChatColor.GREEN + targetTask.snapshot().name() + " received task: " + targetTask.task());
     }
 
     private void handleChatStop(final Player player, final String target) {
@@ -788,6 +846,7 @@ final class HunterRealFakePlayerManager {
             + " z=" + format(location.getZ())
             + " yaw=" + format(location.getYaw())
             + " pitch=" + format(location.getPitch()) + "\n"
+            + "Recent chat:\n" + this.recentChatContext() + "\n"
             + "Behave like a cooperative Minecraft helper. For follow/come tasks use [follow:player=" + player.getName() + "]. "
             + "For travel tasks use [goto:x y z]. For mining or tool work, look at the target and use [mine:ticks=40] or [use]. "
             + "For building tasks, infer a compact style and build it in small steps with [slot:n] and [place:x y z,face=auto] or [place:dx=0,dy=0,dz=1,face=auto]. "
@@ -806,6 +865,25 @@ final class HunterRealFakePlayerManager {
             ));
         }
         this.aiLastActions.put(fake.id(), "assigned by " + player.getName() + ": " + truncatePlain(task, 80));
+        this.aiSay(fake.name(), "好的。");
+    }
+
+    private String recentChatContext() {
+        final int limit = Math.max(0, Math.min(24, this.preferences.intValue("modules.ai.chat.context-lines", 12)));
+        if (limit <= 0) {
+            return "none";
+        }
+        final List<ObservedChat> copy;
+        synchronized (this.recentChat) {
+            copy = new ArrayList<>(this.recentChat);
+        }
+        final int start = Math.max(0, copy.size() - limit);
+        final List<String> lines = new ArrayList<>();
+        for (int i = start; i < copy.size(); i++) {
+            final ObservedChat chat = copy.get(i);
+            lines.add(chat.player() + "@" + chat.world() + ": " + chat.message());
+        }
+        return lines.isEmpty() ? "none" : String.join("\n", lines);
     }
 
     private void startAiLoop(final String id) {
@@ -1005,15 +1083,10 @@ final class HunterRealFakePlayerManager {
         final int budget = Math.max(1, Math.min(12, this.preferences.intValue("modules.ai.fake-players.max-actions", 5)));
         final List<String> results = new ArrayList<>();
         int applied = 0;
-        for (final String rawLine : response.replace("\r\n", "\n").replace('\r', '\n').split("\n")) {
+        for (final String body : extractAiActionBodies(response)) {
             if (applied >= budget) {
                 break;
             }
-            final String line = rawLine.trim();
-            if (!line.startsWith("[") || !line.endsWith("]")) {
-                continue;
-            }
-            final String body = line.substring(1, line.length() - 1).trim();
             if (body.isBlank()) {
                 continue;
             }
@@ -1033,7 +1106,82 @@ final class HunterRealFakePlayerManager {
                 applied++;
             }
         }
-        this.aiLastActions.put(playerId(name), results.isEmpty() ? "no valid action" : String.join("; ", results));
+        if (results.isEmpty()) {
+            final String fallback = this.applyNaturalAiFallback(name, response);
+            if (!fallback.isBlank()) {
+                results.add(fallback);
+            }
+        }
+        this.aiLastActions.put(playerId(name), results.isEmpty() ? "no valid action: " + truncatePlain(response, 80) : String.join("; ", results));
+    }
+
+    private String applyNaturalAiFallback(final String name, final String response) {
+        final String text = stripCodeFences(response).replace('\r', ' ').replace('\n', ' ').trim();
+        if (text.isBlank()) {
+            return "";
+        }
+        final String lower = text.toLowerCase(Locale.ROOT);
+        if (lower.contains("stop") || text.contains("停止") || text.contains("停下")) {
+            this.stopLoops(name);
+            return resultLine(this.service().stopActions(name));
+        }
+        if (lower.contains("jump") || text.contains("跳")) {
+            final int times = lower.contains("twice") || text.contains("两") || text.contains("二") ? 2 : 1;
+            String result = "";
+            for (int i = 0; i < times; i++) {
+                result = resultLine(this.service().jump(name));
+            }
+            return result.isBlank() ? "jump" : result;
+        }
+        if (lower.contains("attack") || lower.contains("mine") || text.contains("攻击") || text.contains("挖") || text.contains("打")) {
+            this.startTimedActionLoop(name, "attack", Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-action-ticks", 80)));
+            return "attack";
+        }
+        if (lower.contains("use") || lower.contains("right click") || text.contains("右键") || text.contains("使用")) {
+            this.startTimedActionLoop(name, "use", Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-action-ticks", 80)));
+            return "use";
+        }
+        final String say = this.aiSay(name, text);
+        return say.isBlank() ? "" : "say";
+    }
+
+    private static List<String> extractAiActionBodies(final String response) {
+        final List<String> actions = new ArrayList<>();
+        final String text = stripCodeFences(response);
+        boolean escaped = false;
+        int start = -1;
+        for (int i = 0; i < text.length(); i++) {
+            final char c = text.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == '[') {
+                start = i + 1;
+            } else if (c == ']' && start >= 0) {
+                final String body = text.substring(start, i).trim();
+                if (!body.isBlank() && body.length() <= 320) {
+                    actions.add(body);
+                }
+                start = -1;
+            }
+        }
+        return actions;
+    }
+
+    private static String stripCodeFences(final String response) {
+        if (response == null) {
+            return "";
+        }
+        return response
+            .replace("```json", "")
+            .replace("```text", "")
+            .replace("```", "")
+            .trim();
     }
 
     private String applyAiAction(final String name, final String action, final String args) {
@@ -1907,6 +2055,25 @@ final class HunterRealFakePlayerManager {
         return trimmed.length() > maxLength ? trimmed.substring(0, maxLength).trim() + "..." : trimmed;
     }
 
+    private static boolean containsName(final String message, final String name) {
+        if (message == null || name == null || name.isBlank()) {
+            return false;
+        }
+        return message.toLowerCase(Locale.ROOT).contains(name.trim().toLowerCase(Locale.ROOT));
+    }
+
+    private static String removeFirstName(final String message, final String name) {
+        final String lower = message.toLowerCase(Locale.ROOT);
+        final String needle = name.trim().toLowerCase(Locale.ROOT);
+        final int index = lower.indexOf(needle);
+        if (index < 0) {
+            return message;
+        }
+        return (message.substring(0, index) + " " + message.substring(index + name.trim().length()))
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
     private static float[] rotationTo(final Location from, final double x, final double y, final double z) {
         final Location eye = from.clone().add(0.0D, 1.62D, 0.0D);
         final double dx = x - eye.getX();
@@ -2041,6 +2208,12 @@ final class HunterRealFakePlayerManager {
     }
 
     private record TargetTask(FakePlayerSnapshot snapshot, String task) {
+    }
+
+    private record MentionedFakePlayer(FakePlayerSnapshot snapshot, String task) {
+    }
+
+    private record ObservedChat(String player, String world, String message) {
     }
 
     private record PendingRiskApproval(

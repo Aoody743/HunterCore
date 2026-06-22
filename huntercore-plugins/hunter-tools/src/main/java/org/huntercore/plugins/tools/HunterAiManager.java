@@ -1,5 +1,10 @@
 package org.huntercore.plugins.tools;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -7,8 +12,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -39,6 +46,7 @@ final class HunterAiManager {
         .build();
     private final java.util.Map<String, Long> chatCooldowns = new ConcurrentHashMap<>();
     private final java.util.Map<String, Long> npcCooldowns = new ConcurrentHashMap<>();
+    private final Deque<ObservedChat> recentChat = new ArrayDeque<>();
     private Executor executor;
 
     HunterAiManager(final HunterToolsPlugin plugin, final HunterToolsPreferences preferences, final Executor executor) {
@@ -51,41 +59,100 @@ final class HunterAiManager {
         this.executor = executor;
     }
 
+    void observeChat(final Player player, final String rawMessage) {
+        final String message = rawMessage == null ? "" : rawMessage.trim();
+        if (message.isBlank()) {
+            return;
+        }
+        synchronized (this.recentChat) {
+            this.recentChat.addLast(new ObservedChat(
+                player.getName(),
+                Bukkit.isPrimaryThread() ? player.getWorld().getName() : "unknown",
+                truncate(message, 240)
+            ));
+            while (this.recentChat.size() > 48) {
+                this.recentChat.removeFirst();
+            }
+        }
+    }
+
     boolean handleChat(final Player player, final String rawMessage) {
         if (!this.preferences.moduleEnabled(AI) || !this.preferences.booleanValue("modules.ai.chat.enabled", true)) {
             return false;
         }
-        final String prefix = this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai").trim();
         final String message = rawMessage == null ? "" : rawMessage.trim();
-        if (prefix.isBlank() || !message.startsWith(prefix)) {
+        final ChatInvocation invocation = this.chatInvocation(message);
+        if (invocation == null) {
             return false;
         }
 
-        final String prompt = message.substring(prefix.length()).trim();
+        final String prompt = invocation.prompt();
         if (prompt.isBlank()) {
-            this.send(player, "&cUsage: " + prefix + " <message>");
-            return true;
+            return invocation.cancelChat();
         }
-        final long waitMillis = this.cooldownRemaining(this.chatCooldowns, player.getUniqueId().toString(), "modules.ai.chat.cooldown-seconds", 5);
+        final long waitMillis = this.cooldownRemaining(this.chatCooldowns, player.getUniqueId() + ":" + invocation.profile().id(), "modules.ai.chat.cooldown-seconds", 5);
         if (waitMillis > 0L) {
             this.send(player, "&eAI cooldown: " + Math.max(1L, (waitMillis + 999L) / 1000L) + "s.");
-            return true;
+            return invocation.cancelChat();
         }
 
         final String playerName = player.getName();
         final String worldName = Bukkit.isPrimaryThread() ? player.getWorld().getName() : "unknown";
-        final String system = this.preferences.stringValue("modules.ai.chat.system-prompt", defaultChatPrompt())
-            + "\n\nContext: player=" + playerName + ", world=" + worldName + ".";
-        this.send(player, "&7AI is thinking...");
+        final HunterToolsPreferences.AiChatProfile profile = invocation.profile();
+        final String system = (profile.systemPrompt().isBlank() ? defaultChatPrompt() : profile.systemPrompt())
+            + "\n\nYou are chat AI name=" + profile.displayName() + ", aliases=" + String.join(", ", profile.aliases()) + "."
+            + "\nCurrent player=" + playerName + ", world=" + worldName + "."
+            + "\nRecent chat:\n" + this.recentChatContext();
         this.complete(system, prompt).whenComplete((response, error) -> {
             if (error != null) {
                 this.plugin.getLogger().warning("HunterCore AI chat failed: " + error.getMessage());
                 this.send(player, "&cAI request failed: " + cleanError(error));
                 return;
             }
-            this.deliverChatResponse(player.getUniqueId(), playerName, response);
+            this.deliverChatResponse(player.getUniqueId(), playerName, profile, response);
         });
-        return true;
+        return invocation.cancelChat();
+    }
+
+    private ChatInvocation chatInvocation(final String message) {
+        final String prefix = this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai").trim();
+        final List<HunterToolsPreferences.AiChatProfile> profiles = this.preferences.aiChatProfiles();
+        final HunterToolsPreferences.AiChatProfile fallbackProfile = profiles.getFirst();
+        if (!prefix.isBlank() && message.startsWith(prefix)) {
+            return new ChatInvocation(fallbackProfile, message.substring(prefix.length()).trim(), true);
+        }
+        for (final HunterToolsPreferences.AiChatProfile profile : profiles) {
+            if (!profile.enabled()) {
+                continue;
+            }
+            final List<String> names = new ArrayList<>();
+            names.add(profile.displayName());
+            names.addAll(profile.aliases());
+            for (final String name : names) {
+                if (containsName(message, name)) {
+                    return new ChatInvocation(profile, message, false);
+                }
+            }
+        }
+        return null;
+    }
+
+    private String recentChatContext() {
+        final int limit = Math.max(0, Math.min(24, this.preferences.intValue("modules.ai.chat.context-lines", 12)));
+        if (limit <= 0) {
+            return "none";
+        }
+        final List<ObservedChat> copy;
+        synchronized (this.recentChat) {
+            copy = new ArrayList<>(this.recentChat);
+        }
+        final int start = Math.max(0, copy.size() - limit);
+        final List<String> lines = new ArrayList<>();
+        for (int i = start; i < copy.size(); i++) {
+            final ObservedChat chat = copy.get(i);
+            lines.add(chat.player() + "@" + chat.world() + ": " + chat.message());
+        }
+        return lines.isEmpty() ? "none" : String.join("\n", lines);
     }
 
     boolean handleActorInteract(final Player player, final HunterActorManager.ActorInteraction actor) {
@@ -190,7 +257,7 @@ final class HunterAiManager {
         }
         final String content = extractContent(response.body());
         if (content.isBlank()) {
-            throw new IOException("AI response did not contain message content.");
+            throw new IOException("AI response did not contain message content: " + truncate(response.body(), 240));
         }
         return content.trim();
     }
@@ -223,15 +290,23 @@ final class HunterAiManager {
         return 0L;
     }
 
-    private void deliverChatResponse(final UUID playerId, final String playerName, final String response) {
+    private void deliverChatResponse(
+        final UUID playerId,
+        final String playerName,
+        final HunterToolsPreferences.AiChatProfile profile,
+        final String response
+    ) {
         Bukkit.getScheduler().runTask(this.plugin, () -> {
             final Player player = Bukkit.getPlayer(playerId);
             if (player == null && !this.preferences.booleanValue("modules.ai.chat.broadcast", true)) {
                 return;
             }
-            final String format = this.preferences.stringValue("modules.ai.chat.response-format", "&bAI &8> &f%response%");
+            final String format = profile.responseFormat().isBlank()
+                ? this.preferences.stringValue("modules.ai.chat.response-format", "&bAI &8> &f%response%")
+                : profile.responseFormat();
             final String rendered = color(format
                 .replace("%player%", playerName)
+                .replace("%name%", profile.displayName())
                 .replace("%response%", response.trim()));
             if (this.preferences.booleanValue("modules.ai.chat.broadcast", true)) {
                 for (final Player online : Bukkit.getOnlinePlayers()) {
@@ -404,13 +479,156 @@ final class HunterAiManager {
     }
 
     private static String extractContent(final String json) throws IOException {
+        try {
+            final JsonElement root = JsonParser.parseString(json);
+            final String structured = extractStructuredContent(root).trim();
+            if (!structured.isBlank()) {
+                return structured;
+            }
+        } catch (final JsonSyntaxException ignored) {
+            // Fall through to the tolerant string scanner below. Some gateways return JSON fragments in error bodies.
+        }
+        for (final String field : List.of("content", "reasoning_content", "text", "output_text")) {
+            final String value = extractFirstStringField(json, field).trim();
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private static String extractStructuredContent(final JsonElement root) {
+        if (root == null || root.isJsonNull()) {
+            return "";
+        }
+        if (root.isJsonPrimitive() && root.getAsJsonPrimitive().isString()) {
+            return root.getAsString();
+        }
+        if (root.isJsonArray()) {
+            return joinContent(root.getAsJsonArray());
+        }
+        if (!root.isJsonObject()) {
+            return "";
+        }
+
+        final JsonObject object = root.getAsJsonObject();
+        final JsonElement choices = object.get("choices");
+        if (choices != null && choices.isJsonArray()) {
+            for (final JsonElement choiceElement : choices.getAsJsonArray()) {
+                if (!choiceElement.isJsonObject()) {
+                    continue;
+                }
+                final JsonObject choice = choiceElement.getAsJsonObject();
+                final String message = firstNonBlank(
+                    contentFromObject(objectField(choice, "message")),
+                    contentFromObject(objectField(choice, "delta")),
+                    stringField(choice, "text")
+                );
+                if (!message.isBlank()) {
+                    return message;
+                }
+            }
+        }
+
+        final String direct = firstNonBlank(
+            contentFromObject(objectField(object, "message")),
+            contentFromElement(object.get("content")),
+            stringField(object, "output_text"),
+            stringField(object, "text"),
+            stringField(object, "reasoning_content")
+        );
+        if (!direct.isBlank()) {
+            return direct;
+        }
+
+        final JsonElement output = object.get("output");
+        if (output != null && output.isJsonArray()) {
+            final String value = joinContent(output.getAsJsonArray());
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private static JsonObject objectField(final JsonObject object, final String field) {
+        if (object == null) {
+            return null;
+        }
+        final JsonElement value = object.get(field);
+        return value != null && value.isJsonObject() ? value.getAsJsonObject() : null;
+    }
+
+    private static String contentFromObject(final JsonObject object) {
+        if (object == null) {
+            return "";
+        }
+        return firstNonBlank(
+            contentFromElement(object.get("content")),
+            stringField(object, "reasoning_content"),
+            stringField(object, "text"),
+            stringField(object, "output_text")
+        );
+    }
+
+    private static String contentFromElement(final JsonElement element) {
+        if (element == null || element.isJsonNull()) {
+            return "";
+        }
+        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+            return element.getAsString();
+        }
+        if (element.isJsonArray()) {
+            return joinContent(element.getAsJsonArray());
+        }
+        if (element.isJsonObject()) {
+            final JsonObject object = element.getAsJsonObject();
+            return firstNonBlank(
+                stringField(object, "text"),
+                stringField(object, "content"),
+                stringField(object, "output_text")
+            );
+        }
+        return "";
+    }
+
+    private static String joinContent(final JsonArray array) {
+        final List<String> parts = new ArrayList<>();
+        for (final JsonElement element : array) {
+            final String value = contentFromElement(element).trim();
+            if (!value.isBlank()) {
+                parts.add(value);
+            }
+        }
+        return String.join("\n", parts);
+    }
+
+    private static String stringField(final JsonObject object, final String field) {
+        if (object == null) {
+            return "";
+        }
+        final JsonElement value = object.get(field);
+        return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString() ? value.getAsString() : "";
+    }
+
+    private static String firstNonBlank(final String... values) {
+        for (final String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private static String extractFirstStringField(final String json, final String field) throws IOException {
         int index = 0;
+        final String needle = "\"" + field + "\"";
         while (index < json.length()) {
-            final int key = json.indexOf("\"content\"", index);
+            final int key = json.indexOf(needle, index);
             if (key < 0) {
                 break;
             }
-            final int colon = json.indexOf(':', key + 9);
+            final int colon = json.indexOf(':', key + needle.length());
             if (colon < 0) {
                 break;
             }
@@ -426,7 +644,11 @@ final class HunterAiManager {
             if (valueEnd < 0) {
                 throw new IOException("Malformed AI JSON response.");
             }
-            return unescapeJson(json.substring(valueStart + 1, valueEnd));
+            final String value = unescapeJson(json.substring(valueStart + 1, valueEnd));
+            if (!value.isBlank()) {
+                return value;
+            }
+            index = valueEnd + 1;
         }
         return "";
     }
@@ -525,6 +747,13 @@ final class HunterAiManager {
         return value.length() <= max ? value : value.substring(0, max) + "...";
     }
 
+    private static boolean containsName(final String message, final String name) {
+        if (message == null || name == null || name.isBlank()) {
+            return false;
+        }
+        return message.toLowerCase(Locale.ROOT).contains(name.trim().toLowerCase(Locale.ROOT));
+    }
+
     private static String color(final String text) {
         return ChatColor.translateAlternateColorCodes('&', text);
     }
@@ -545,5 +774,11 @@ final class HunterAiManager {
     }
 
     private record ParsedNpcResponse(String text, boolean lookAtPlayer, String pose, List<String> commands) {
+    }
+
+    private record ObservedChat(String player, String world, String message) {
+    }
+
+    private record ChatInvocation(HunterToolsPreferences.AiChatProfile profile, String prompt, boolean cancelChat) {
     }
 }

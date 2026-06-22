@@ -191,7 +191,7 @@ public final class HunterCoreOptimizer {
             workerThreads(mode)
         ), preferExisting, applied);
         setProperty("DivineMC.WorkerThreadCount", resolveThreadSetting(
-            preferences == null ? "auto" : preferences.getString("optimizations.cpu.divine-worker-threads", "auto"),
+            preferences == null ? "auto" : coreWorkerThreads(preferences),
             workerThreads(mode)
         ), preferExisting, applied);
         setProperty("io.netty.eventLoopThreads", resolveThreadSetting(
@@ -213,7 +213,7 @@ public final class HunterCoreOptimizer {
         final Map<String, String> applied
     ) {
         setProperty("Paper.WorkerThreadCount", resolveThreadSetting(preferences.stringValue("optimizations.cpu.paper-worker-threads", "auto"), workerThreads(mode)), preferExisting, applied);
-        setProperty("DivineMC.WorkerThreadCount", resolveThreadSetting(preferences.stringValue("optimizations.cpu.divine-worker-threads", "auto"), workerThreads(mode)), preferExisting, applied);
+        setProperty("DivineMC.WorkerThreadCount", resolveThreadSetting(coreWorkerThreads(preferences), workerThreads(mode)), preferExisting, applied);
         setProperty("io.netty.eventLoopThreads", resolveThreadSetting(preferences.stringValue("optimizations.cpu.netty-io-threads", "auto"), nettyThreads(mode)), preferExisting, applied);
         setProperty("io.netty.allocator.numDirectArenas", Integer.toString(nettyArenaCount(mode)), preferExisting, applied);
         setProperty("io.netty.allocator.numHeapArenas", Integer.toString(nettyArenaCount(mode)), preferExisting, applied);
@@ -228,6 +228,20 @@ public final class HunterCoreOptimizer {
         setInternalProperty(PROP_TRACKER_THREADS, Integer.toString(trackerThreads(mode)), applied);
         setInternalProperty(PROP_CHUNK_SEND_THREADS, Integer.toString(chunkSendThreads(mode)), applied);
         setInternalProperty(PROP_REGION_TICK_THREADS, Integer.toString(regionTickThreads(mode)), applied);
+    }
+
+    private static String coreWorkerThreads(final YamlConfiguration preferences) {
+        if (preferences.contains("optimizations.cpu.core-worker-threads")) {
+            return preferences.getString("optimizations.cpu.core-worker-threads", "auto");
+        }
+        return preferences.getString("optimizations.cpu.divine-worker-threads", "auto");
+    }
+
+    private static String coreWorkerThreads(final HunterPreferences preferences) {
+        final String value = preferences.stringValue("optimizations.cpu.core-worker-threads", "");
+        return value == null || value.isBlank()
+            ? preferences.stringValue("optimizations.cpu.divine-worker-threads", "auto")
+            : value;
     }
 
     private static void setInternalProperty(final String key, final String value, final Map<String, String> applied) {

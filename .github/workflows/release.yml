@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release tag, for example v26.1.2-huntercore.1
+        description: Release tag, for example v1.0.1-build.42
         required: true
         type: string
 
@@ -48,8 +48,8 @@ jobs:
       - name: Apply patches
         run: ./gradlew applyAllPatches --stacktrace --no-daemon
 
-      - name: Build HunterCore release jar
-        run: ./gradlew packageHunterCoreRelease --stacktrace --no-daemon --no-configuration-cache
+      - name: Build HunterCore release assets
+        run: ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel --stacktrace --no-daemon --no-configuration-cache
 
       - name: Prepare release assets
         id: assets
@@ -66,35 +66,16 @@ jobs:
           esac
           tag_version="${tag#v}"
           huntercore_version="$(grep '^huntercoreVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          huntercore_build="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER}}"
+          huntercore_version_label="${huntercore_version}-build.${huntercore_build}"
           mc_version="$(grep '^mcVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           release_channel="$(grep '^releaseChannel=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           out="build/huntercore-release"
-          web_root="build/huntercore-web-panel"
           mkdir -p "$out"
-          jar_name="HunterCore-${huntercore_version}-MinecraftServer-${mc_version}-${release_channel}.jar"
-          web_name="HunterCore-${huntercore_version}-WebPanel-${mc_version}-${release_channel}.zip"
+          jar_name="HunterCore-${huntercore_version_label}-MinecraftServer-${mc_version}-${release_channel}.jar"
+          web_name="HunterCore-${huntercore_version_label}-WebPanel-${mc_version}-${release_channel}.zip"
           cp "divinemc-server/build/libs/${jar_name}" "$out/${jar_name}"
-          rm -rf "$web_root"
-          mkdir -p "$web_root/assets"
-          cp huntercore-plugins/hunter-tools/src/main/resources/web-panel/index.html "$web_root/index.html"
-          cp huntercore-plugins/hunter-tools/src/main/resources/web-panel/app.css "$web_root/assets/app.css"
-          cp huntercore-plugins/hunter-tools/src/main/resources/web-panel/app.js "$web_root/assets/app.js"
-          cp huntercore-plugins/hunter-tools/src/main/resources/web-panel/panel-bg.jpg "$web_root/assets/panel-bg.jpg"
-          cat > "$web_root/README.txt" <<'TXT'
-          HunterCore Web Panel
-
-          Deploy these files to any static web host. Open the panel, fill the backend URL (for example http://server.example.com:8088) and optional API key in the Web console connection form.
-          TXT
-          python3 - <<PY
-          from pathlib import Path
-          import zipfile
-          root = Path("${web_root}")
-          out = Path("${out}") / "${web_name}"
-          with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-              for path in sorted(root.rglob("*")):
-                  if path.is_file():
-                      archive.write(path, path.relative_to(root).as_posix())
-          PY
+          test -f "$out/${web_name}"
           (cd "$out" && sha256sum * > SHA256SUMS.txt)
           {
             echo "tag=$tag"
@@ -102,9 +83,9 @@ jobs:
             echo "out=$out"
           } >> "$GITHUB_OUTPUT"
           cat > "$out/RELEASE_NOTES.md" <<EOF
-          HunterCore ${tag}
+          HunterCore ${tag} (${huntercore_version_label})
 
-          Built from commit ${GITHUB_SHA}.
+          Built from commit ${GITHUB_SHA}, build ${huntercore_build}.
 
           Highlights:
           - Optimized web panel layout with Settings / Access / AI / Admin pages and in-page category navigation.

@@ -1,10 +1,10 @@
 # HunterCore Notes
 
-HunterCore is an independent DivineMC-based server core with a bundled plugin layer, a preferences file, HunterTools runtime modules, and a small extension API.
+HunterCore is an independent Minecraft server core with a bundled plugin layer, a preferences file, HunterTools runtime modules, and a small extension API.
 
 ## Build
 
-Use the same Paperweight flow as DivineMC:
+Use the Paperweight patch/build flow:
 
 ```bash
 GIT_CONFIG_COUNT=1 \
@@ -136,7 +136,7 @@ To add another external bundled plugin, extend that script with a download/build
 
 `/about` is HunterCore-specific. `/hc system` prints JVM, OS, CPU, memory, uptime, player count, and plugin directory information.
 
-HunterTools provides TPS actionbar/sidebar display, a built-in MOTD module, and essentials-style commands such as `/heal`, `/feed`, `/fly`, `/gm`, `/day`, `/night`, `/sun`, `/rain`, `/thunder`, `/broadcast`, `/clearchat`, `/speed`, `/spawn`, `/setspawn`, `/back`, `/hat`, `/craft`, `/enderchest`, and `/trash`. The client F3 server brand is forced to `"HunterCraft" Server`.
+HunterTools provides TPS actionbar/sidebar display, a built-in MOTD module, and essentials-style commands such as `/heal`, `/feed`, `/fly`, `/gm`, `/day`, `/night`, `/sun`, `/rain`, `/thunder`, `/broadcast`, `/clearchat`, `/speed`, `/spawn`, `/setspawn`, `/back`, `/hat`, `/craft`, `/enderchest`, and `/trash`. The client F3 server brand defaults to `"HunterCore" Server` and can be changed from the web panel.
 
 `/hc fakeplayer` creates lightweight Mannequin-based fake players with placement commands for teleporting, moving to the sender, rotating, fixed poses, click-command actions, and info output. `/hnpc` creates managed Villager or Mannequin NPCs and shares the same placement/info/click-command commands where the entity type supports them. Both are persisted in `plugins/HunterCore/preferences.yml` and rebuilt on startup/reload.
 
@@ -159,7 +159,7 @@ Create web users from console or an op account:
 /hc admin web execution player on
 ```
 
-BlueMap is bundled for the web map, and Chunky is bundled for chunk pre-generation/performance prep. BlueMap still requires the server owner to read and set `accept-download` in `plugins/BlueMap/core.conf` on first use because it downloads Mojang client resources for rendering.
+BlueMap is bundled for the web map, and Chunky is bundled for chunk pre-generation/performance prep. HunterCore prepares `plugins/BlueMap/core.conf` with `accept-download: true` on first startup so BlueMap can download Mojang client resources and start rendering without a manual config edit.
 
 PlaceholderAPI, Vault, ProtocolLib, WorldEdit, and WorldGuard are bundled as a common server foundation for placeholders, economy/permission bridging, packet/protocol extensions, map editing, and region protection. HunterTools provides lightweight built-in MOTD and utility commands without bundling EssentialsX or MiniMOTD. Each bundled plugin can still be disabled under `bundled-plugins.plugins.<plugin-id>`.
 
@@ -186,7 +186,7 @@ optimizations.cpu.common-pool-parallelism
 
 Bundled plugin install work is parallelized across different jar files. HunterTools renders sidebar text, loads fake player/NPC definitions, serves the web panel, saves preferences, and requests GC off the main thread, then returns to the Bukkit main thread for player/server mutations. Public guest status responses are cached for 1 second by default with `modules.web-panel.status-cache-millis`. Web panel health alerts expose configurable thresholds for low TPS, high MSPT, heap pressure, per-world chunk/entity load, and disabled plugins.
 
-HunterCore also applies CPU-aware startup defaults for Paper/DivineMC worker threads, Netty IO threads, and ForkJoin common pool parallelism. Existing JVM flags are preserved by default. The web panel exposes the same CPU, worker, Netty, ForkJoin, and HunterTools web worker settings for remote status checks.
+HunterCore also applies CPU-aware startup defaults for Paper/core worker threads, Netty IO threads, and ForkJoin common pool parallelism. Existing JVM flags are preserved by default. The web panel exposes the same CPU, worker, Netty, ForkJoin, and HunterTools web worker settings for remote status checks.
 
 ## API
 

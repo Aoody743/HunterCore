@@ -17,6 +17,7 @@ import java.util.UUID;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -30,8 +31,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -48,7 +49,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private static final int SALT_BYTES = 16;
     private static final int ITERATIONS = 120_000;
     private static final int KEY_BITS = 256;
-    private static final String GUI_TITLE = ChatColor.DARK_AQUA + "HunterAuth";
+    private static final String GUI_TITLE = "HunterAuth";
     private static final Set<String> ALLOWED_COMMANDS = Set.of("/login", "/l", "/register", "/reg");
 
     private final SecureRandom random = new SecureRandom();
@@ -63,7 +64,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     @Override
     public void onEnable() {
-        this.getConfig().addDefault("enabled", true);
+        this.getConfig().addDefault("enabled", false);
         this.getConfig().addDefault("online-mode-bypass", true);
         this.getConfig().addDefault("registration-required", true);
         this.getConfig().addDefault("web-registration-required", false);
@@ -106,7 +107,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             case "logout" -> this.logout(player);
             case "changepassword" -> this.changePassword(player, args);
             default -> false;
-    };
+        };
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -198,7 +199,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     @EventHandler(ignoreCancelled = true)
     public void onInventoryClick(final InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof final Player player) || !event.getView().title().equals(ComponentTitle.HUNTER_AUTH)) {
+        if (!(event.getWhoClicked() instanceof final Player player) || !this.isAuthGui(event.getView().title())) {
             return;
         }
         event.setCancelled(true);
@@ -223,7 +224,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         if (this.pendingInputs.containsKey(player.getUniqueId())) {
             return;
         }
-        if (!event.getView().title().equals(ComponentTitle.HUNTER_AUTH)) {
+        if (!this.isAuthGui(event.getView().title())) {
             return;
         }
         this.openAuthGuiSoon(player);
@@ -231,7 +232,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private boolean register(final Player player, final String[] args) {
         if (this.shouldBypass()) {
-            player.sendMessage(this.text("服务器正版模式下 HunterAuth 已绕过。", "HunterAuth is bypassed while the server is in online mode."));
+            player.sendMessage(this.text("HunterAuth 当前未启用或已被正版模式绕过。", "HunterAuth is disabled or bypassed while the server is in online mode."));
             return true;
         }
         if (!this.registrationRequired()) {
@@ -258,13 +259,13 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.setPassword(player, args[0]);
         this.authenticated.add(player.getUniqueId());
         player.closeInventory();
-        player.sendMessage(this.text("注册成功并已登录。", "Registered and logged in."));
+        player.sendMessage(this.text("注册成功，并已登录。", "Registered and logged in."));
         return true;
     }
 
     private boolean login(final Player player, final String[] args) {
         if (this.shouldBypass()) {
-            player.sendMessage(this.text("服务器正版模式下 HunterAuth 已绕过。", "HunterAuth is bypassed while the server is in online mode."));
+            player.sendMessage(this.text("HunterAuth 当前未启用或已被正版模式绕过。", "HunterAuth is disabled or bypassed while the server is in online mode."));
             return true;
         }
         if (!this.isRegistered(player)) {
@@ -293,7 +294,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private boolean logout(final Player player) {
         if (this.shouldBypass()) {
-            player.sendMessage(this.text("服务器正版模式下 HunterAuth 已绕过。", "HunterAuth is bypassed while the server is in online mode."));
+            player.sendMessage(this.text("HunterAuth 当前未启用或已被正版模式绕过。", "HunterAuth is disabled or bypassed while the server is in online mode."));
             return true;
         }
         this.authenticated.remove(player.getUniqueId());
@@ -304,7 +305,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private boolean changePassword(final Player player, final String[] args) {
         if (this.shouldBypass()) {
-            player.sendMessage(this.text("服务器正版模式下 HunterAuth 已绕过。", "HunterAuth is bypassed while the server is in online mode."));
+            player.sendMessage(this.text("HunterAuth 当前未启用或已被正版模式绕过。", "HunterAuth is disabled or bypassed while the server is in online mode."));
             return true;
         }
         if (!this.isRegistered(player)) {
@@ -430,6 +431,10 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         }
         player.sendMessage(this.text("密码太短。", "Password is too short."));
         return false;
+    }
+
+    private boolean isAuthGui(final Component title) {
+        return GUI_TITLE.equals(PlainTextComponentSerializer.plainText().serialize(title));
     }
 
     private synchronized void setPassword(final Player player, final String password) {
@@ -563,7 +568,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private static final class ComponentTitle {
-        private static final Component HUNTER_AUTH = Component.text(ChatColor.stripColor(GUI_TITLE));
+        private static final Component HUNTER_AUTH = Component.text(GUI_TITLE);
 
         private ComponentTitle() {
         }

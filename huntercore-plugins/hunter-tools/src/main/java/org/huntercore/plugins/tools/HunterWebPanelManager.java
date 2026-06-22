@@ -1,5 +1,9 @@
 package org.huntercore.plugins.tools;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -21,8 +25,10 @@ import java.security.SecureRandom;
 import java.security.spec.KeySpec;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -39,6 +45,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import java.util.jar.JarFile;
@@ -72,6 +80,7 @@ final class HunterWebPanelManager {
         .build();
     private static final int HASH_ITERATIONS = 120_000;
     private static final int HASH_BITS = 256;
+    private static final Pattern LUCKPERMS_EDITOR_URL = Pattern.compile("https://luckperms\\.net/editor/[^\\s<>\\]\")]+", Pattern.CASE_INSENSITIVE);
     private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "auth", "web-panel");
     private static final Map<String, List<String>> MODULE_COMMANDS = Map.of(
         "essentials", HunterToolsPreferences.essentialsCommands(),
@@ -87,6 +96,7 @@ final class HunterWebPanelManager {
     private final Map<String, CachedResponse> statusCaches = new ConcurrentHashMap<>();
     private final AtomicLong nextPluginOperationAt = new AtomicLong();
     private final Object hunterAuthUsersLock = new Object();
+    private final Deque<WebChatLine> chatLines = new ArrayDeque<>();
     private HttpServer server;
     private ExecutorService executor;
 
@@ -135,6 +145,14 @@ final class HunterWebPanelManager {
 
     boolean running() {
         return this.server != null;
+    }
+
+    void observeChat(final Player player, final String rawMessage) {
+        final String message = rawMessage == null ? "" : rawMessage.trim();
+        if (message.isBlank()) {
+            return;
+        }
+        this.addChatLine(player.getName(), "game", message);
     }
 
     String addressLine() {
@@ -260,11 +278,11 @@ final class HunterWebPanelManager {
                 return;
             }
             if (path.equals("/")) {
-                this.send(exchange, 200, "text/html; charset=utf-8", webAsset("index.html", INDEX_HTML));
+                this.send(exchange, 200, "text/html; charset=utf-8", webPanelHtml("backend"));
                 return;
             }
-            if (path.equals("/remote.html")) {
-                this.send(exchange, 200, "text/html; charset=utf-8", webAsset("index.html", INDEX_HTML));
+            if (path.equals("/frontend.html") || path.equals("/remote.html")) {
+                this.send(exchange, 200, "text/html; charset=utf-8", webPanelHtml("frontend"));
                 return;
             }
             if (path.equals("/assets/app.css")) {
@@ -300,6 +318,16 @@ final class HunterWebPanelManager {
             if (path.equals("/api/session")) {
                 this.requireMethod(exchange, "GET");
                 this.send(exchange, 200, "application/json; charset=utf-8", this.sessionJson(exchange));
+                return;
+            }
+            if (path.equals("/api/chat")) {
+                this.requireMethod(exchange, "GET");
+                this.send(exchange, 200, "application/json; charset=utf-8", this.chatJson());
+                return;
+            }
+            if (path.equals("/api/chat/send")) {
+                this.requireMethod(exchange, "POST");
+                this.chatSend(exchange);
                 return;
             }
             if (path.equals("/api/login")) {
@@ -449,7 +477,7 @@ final class HunterWebPanelManager {
         json.append(",\"session\":").append(session == null ? "null" : sessionJson(session));
         json.append(",\"server\":{");
         field(json, "name", this.webServerName()).append(',');
-        field(json, "software", Bukkit.getName()).append(',');
+        field(json, "software", "HunterCore").append(',');
         field(json, "iconUrl", "/assets/server-icon.png").append(',');
         field(json, "version", Bukkit.getVersion()).append(',');
         numberField(json, "online", snapshot.onlinePlayers()).append(',');
@@ -471,7 +499,7 @@ final class HunterWebPanelManager {
         field(json, "mode", this.preferences.stringValue("optimizations.cpu.mode", "single-thread")).append(',');
         numberField(json, "cpuThreads", Runtime.getRuntime().availableProcessors()).append(',');
         field(json, "paperWorkers", System.getProperty("Paper.WorkerThreadCount", "auto")).append(',');
-        field(json, "divineWorkers", System.getProperty("DivineMC.WorkerThreadCount", "auto")).append(',');
+        field(json, "coreWorkers", System.getProperty("DivineMC.WorkerThreadCount", "auto")).append(',');
         field(json, "nettyIoThreads", System.getProperty("io.netty.eventLoopThreads", "auto")).append(',');
         field(json, "forkJoinParallelism", System.getProperty("java.util.concurrent.ForkJoinPool.common.parallelism", "auto")).append(',');
         numberField(json, "hunterToolsWorkers", this.preferences.intValue("optimizations.hunter-tools.render-workers", 4)).append(',');
@@ -964,6 +992,7 @@ final class HunterWebPanelManager {
         numberField(json, "chatCooldownSeconds", this.preferences.intValue("modules.ai.chat.cooldown-seconds", 5)).append(',');
         booleanField(json, "chatBroadcast", this.preferences.booleanValue("modules.ai.chat.broadcast", true)).append(',');
         field(json, "chatSystemPrompt", this.preferences.stringValue("modules.ai.chat.system-prompt", "")).append(',');
+        json.append("\"chatProfiles\":").append(aiChatProfilesJson()).append(',');
         booleanField(json, "npcEnabled", this.preferences.booleanValue("modules.ai.npc.enabled", true)).append(',');
         numberField(json, "npcCooldownSeconds", this.preferences.intValue("modules.ai.npc.cooldown-seconds", 5)).append(',');
         numberField(json, "npcResponseRadiusBlocks", this.preferences.intValue("modules.ai.npc.response-radius-blocks", 16)).append(',');
@@ -989,8 +1018,51 @@ final class HunterWebPanelManager {
         numberField(json, "fakePlayersChatControlCooldownSeconds", this.preferences.intValue("modules.ai.fake-players.chat-control.cooldown-seconds", 3)).append(',');
         booleanField(json, "fakePlayersChatControlRequirePermission", this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false)).append(',');
         field(json, "fakePlayersChatControlPermission", this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer")).append(',');
-        field(json, "fakePlayersSystemPrompt", this.preferences.stringValue("modules.ai.fake-players.system-prompt", ""));
+        field(json, "fakePlayersSystemPrompt", this.preferences.stringValue("modules.ai.fake-players.system-prompt", "")).append(',');
+        json.append("\"fakeBotAliases\":").append(fakeBotAliasesJson());
         json.append('}');
+        return json.toString();
+    }
+
+    private String aiChatProfilesJson() {
+        final StringBuilder json = new StringBuilder(512);
+        json.append('[');
+        boolean first = true;
+        for (final HunterToolsPreferences.AiChatProfile profile : this.preferences.aiChatProfiles()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('{');
+            field(json, "id", profile.id()).append(',');
+            booleanField(json, "enabled", profile.enabled()).append(',');
+            field(json, "displayName", profile.displayName()).append(',');
+            json.append("\"aliases\":").append(stringArrayJson(profile.aliases())).append(',');
+            field(json, "systemPrompt", profile.systemPrompt()).append(',');
+            field(json, "responseFormat", profile.responseFormat());
+            json.append('}');
+        }
+        json.append(']');
+        return json.toString();
+    }
+
+    private String fakeBotAliasesJson() {
+        final StringBuilder json = new StringBuilder(512);
+        json.append('[');
+        boolean first = true;
+        for (final HunterToolsPreferences.FakeBotAlias alias : this.preferences.fakeBotAliases()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('{');
+            field(json, "id", alias.id()).append(',');
+            booleanField(json, "enabled", alias.enabled()).append(',');
+            field(json, "target", alias.target()).append(',');
+            json.append("\"aliases\":").append(stringArrayJson(alias.aliases()));
+            json.append('}');
+        }
+        json.append(']');
         return json.toString();
     }
 
@@ -1023,6 +1095,30 @@ final class HunterWebPanelManager {
     private String sessionJson(final HttpExchange exchange) {
         final WebSession session = this.session(exchange);
         return "{\"ok\":true,\"session\":" + (session == null ? "null" : sessionJson(session)) + "}";
+    }
+
+    private String chatJson() {
+        final List<WebChatLine> copy;
+        synchronized (this.chatLines) {
+            copy = new ArrayList<>(this.chatLines);
+        }
+        final StringBuilder json = new StringBuilder(2048);
+        json.append("{\"ok\":true,\"lines\":[");
+        boolean first = true;
+        for (final WebChatLine line : copy) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('{');
+            numberField(json, "time", line.time()).append(',');
+            field(json, "sender", line.sender()).append(',');
+            field(json, "source", line.source()).append(',');
+            field(json, "message", line.message());
+            json.append('}');
+        }
+        json.append("]}");
+        return json.toString();
     }
 
     private void login(final HttpExchange exchange) throws IOException {
@@ -1118,6 +1214,31 @@ final class HunterWebPanelManager {
         }
         exchange.getResponseHeaders().add("Set-Cookie", SESSION_COOKIE + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true}");
+    }
+
+    private void chatSend(final HttpExchange exchange) throws IOException {
+        final WebSession session = this.session(exchange);
+        if (session == null) {
+            this.send(exchange, 401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"login_required\"}");
+            return;
+        }
+        if (!this.csrfAllowed(exchange, session)) {
+            this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"csrf_required\"}");
+            return;
+        }
+        if (!session.commandExecution()) {
+            this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"chat_denied\"}");
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 8 * 1024));
+        final String message = plainChatMessage(body.getOrDefault("message", ""));
+        if (message.isBlank()) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"empty_message\"}");
+            return;
+        }
+        Bukkit.getScheduler().runTask(this.plugin, () -> Bukkit.broadcastMessage(ChatColor.AQUA + "[Web] " + ChatColor.WHITE + session.displayName() + ChatColor.GRAY + ": " + ChatColor.WHITE + message));
+        this.addChatLine(session.displayName(), "web", message);
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"chat\":" + this.chatJson() + "}");
     }
 
     private void command(final HttpExchange exchange) throws IOException, InterruptedException, ExecutionException, TimeoutException {
@@ -1669,6 +1790,13 @@ final class HunterWebPanelManager {
             "modules.ai.npc.command-whitelist",
             List.of("say", "tell", "msg", "title", "effect", "playsound")
         ))));
+        final List<HunterToolsPreferences.AiChatProfile> chatProfiles = parseAiChatProfiles(
+            body.getOrDefault("chatProfiles", "[]"),
+            this.preferences.aiChatProfiles()
+        );
+        final List<HunterToolsPreferences.FakeBotAlias> fakeBotAliases = parseFakeBotAliases(
+            body.getOrDefault("fakeBotAliases", "[]")
+        );
 
         if (enabled == null || chatEnabled == null || chatBroadcast == null || npcEnabled == null || npcAllowActions == null
             || fakePlayersEnabled == null || fakePlayersAllowMovement == null || fakePlayersAllowBreaking == null || fakePlayersAllowPlacing == null || fakePlayersAllowInteraction == null
@@ -1677,6 +1805,7 @@ final class HunterWebPanelManager {
             || npcCooldown == null || npcRadius == null || fakePlayersInterval == null || fakePlayersMaxActions == null
             || fakePlayersMaxMoveTicks == null || fakePlayersMaxActionTicks == null || fakePlayersNearbyRadius == null || fakePlayersMaxPlaceDistance == null
             || fakePlayersChatControlCooldown == null || whitelist == null || provider.isBlank() || provider.length() > 64
+            || chatProfiles == null || fakeBotAliases == null
             || !validHttpUrl(baseUrl) || model.isBlank() || model.length() > 128 || apiKey.length() > 512
             || apiKeyEnv.length() > 128 || chatPrefix.isBlank() || chatPrefix.length() > 32
             || fakePlayersChatControlPrefix.isBlank() || fakePlayersChatControlPrefix.length() > 32
@@ -1704,6 +1833,7 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.ai.chat.cooldown-seconds", chatCooldown);
         this.preferences.setValue("modules.ai.chat.broadcast", chatBroadcast);
         this.preferences.setValue("modules.ai.chat.system-prompt", chatPrompt);
+        this.preferences.setAiChatProfiles(chatProfiles);
         this.preferences.setValue("modules.ai.npc.enabled", npcEnabled);
         this.preferences.setValue("modules.ai.npc.cooldown-seconds", npcCooldown);
         this.preferences.setValue("modules.ai.npc.response-radius-blocks", npcRadius);
@@ -1726,6 +1856,7 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.ai.fake-players.chat-control.cooldown-seconds", fakePlayersChatControlCooldown);
         this.preferences.setValue("modules.ai.fake-players.chat-control.require-permission", fakePlayersChatControlRequirePermission);
         this.preferences.setValue("modules.ai.fake-players.chat-control.permission", fakePlayersChatControlPermission);
+        this.preferences.setFakeBotAliases(fakeBotAliases);
         this.preferences.setValue("modules.ai.fake-players.system-prompt", fakePlayersPrompt);
         this.savePreferences();
         this.invalidateStatusCaches();
@@ -2171,10 +2302,13 @@ final class HunterWebPanelManager {
     }
 
     private void sendCommandResult(final HttpExchange exchange, final int status, final CommandResult result) {
+        final Matcher editor = LUCKPERMS_EDITOR_URL.matcher(result.output());
         this.send(exchange, status, "application/json; charset=utf-8",
             "{\"ok\":true,\"dispatched\":" + result.dispatched()
                 + ",\"message\":\"" + escapeJson(result.message()) + '"'
-                + ",\"output\":\"" + escapeJson(result.output()) + "\"}");
+                + ",\"output\":\"" + escapeJson(result.output()) + '"'
+                + (editor.find() ? ",\"editorUrl\":\"" + escapeJson(editor.group()) + '"' : "")
+                + "}");
     }
 
     private WebSession adminOperator(final HttpExchange exchange) {
@@ -2693,6 +2827,35 @@ final class HunterWebPanelManager {
         return value != null && !value.isBlank() && !validHttpUrl(value);
     }
 
+    private static String plainChatMessage(final String value) {
+        if (value == null) {
+            return "";
+        }
+        final String text = ChatColor.stripColor(value.replace('\n', ' ').replace('\r', ' ').trim());
+        if (text == null) {
+            return "";
+        }
+        return text.length() > 240 ? text.substring(0, 240).trim() : text;
+    }
+
+    private void addChatLine(final String sender, final String source, final String message) {
+        final String cleanMessage = plainChatMessage(message);
+        if (cleanMessage.isBlank()) {
+            return;
+        }
+        synchronized (this.chatLines) {
+            this.chatLines.addLast(new WebChatLine(
+                System.currentTimeMillis(),
+                plainChatMessage(sender).isBlank() ? "unknown" : plainChatMessage(sender),
+                source == null || source.isBlank() ? "game" : source,
+                cleanMessage
+            ));
+            while (this.chatLines.size() > 120) {
+                this.chatLines.removeFirst();
+            }
+        }
+    }
+
     private static boolean containsHeaderBreak(final String value) {
         return value != null && (value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0);
     }
@@ -2715,6 +2878,124 @@ final class HunterWebPanelManager {
             }
         }
         return commands;
+    }
+
+    private static List<HunterToolsPreferences.AiChatProfile> parseAiChatProfiles(
+        final String raw,
+        final List<HunterToolsPreferences.AiChatProfile> fallback
+    ) {
+        try {
+            final JsonElement root = JsonParser.parseString(raw == null || raw.isBlank() ? "[]" : raw);
+            if (!root.isJsonArray()) {
+                return null;
+            }
+            final List<HunterToolsPreferences.AiChatProfile> profiles = new ArrayList<>();
+            int index = 1;
+            for (final JsonElement element : root.getAsJsonArray()) {
+                if (!element.isJsonObject()) {
+                    return null;
+                }
+                final JsonObject object = element.getAsJsonObject();
+                final String displayName = jsonString(object, "displayName").trim();
+                final String id = jsonString(object, "id").trim();
+                final String prompt = jsonString(object, "systemPrompt").trim();
+                final String format = jsonString(object, "responseFormat").trim();
+                final List<String> aliases = jsonStringList(object.get("aliases"), 12, 48);
+                if (aliases == null || displayName.isBlank() || displayName.length() > 48 || prompt.length() > 4096 || format.length() > 256) {
+                    return null;
+                }
+                profiles.add(new HunterToolsPreferences.AiChatProfile(
+                    id.isBlank() ? "ai-" + index : id,
+                    displayName,
+                    aliases,
+                    prompt,
+                    format.isBlank() ? "&b%name% &8> &f%response%" : format,
+                    jsonBoolean(object, "enabled", true)
+                ));
+                index++;
+                if (profiles.size() > 16) {
+                    return null;
+                }
+            }
+            return profiles.isEmpty() ? fallback : profiles;
+        } catch (final JsonSyntaxException | IllegalStateException ex) {
+            return null;
+        }
+    }
+
+    private static List<HunterToolsPreferences.FakeBotAlias> parseFakeBotAliases(final String raw) {
+        try {
+            final JsonElement root = JsonParser.parseString(raw == null || raw.isBlank() ? "[]" : raw);
+            if (!root.isJsonArray()) {
+                return null;
+            }
+            final List<HunterToolsPreferences.FakeBotAlias> aliases = new ArrayList<>();
+            int index = 1;
+            for (final JsonElement element : root.getAsJsonArray()) {
+                if (!element.isJsonObject()) {
+                    return null;
+                }
+                final JsonObject object = element.getAsJsonObject();
+                final String target = jsonString(object, "target").trim();
+                final String id = jsonString(object, "id").trim();
+                final List<String> names = jsonStringList(object.get("aliases"), 12, 48);
+                if (names == null || target.isBlank() || target.length() > 48) {
+                    return null;
+                }
+                aliases.add(new HunterToolsPreferences.FakeBotAlias(
+                    id.isBlank() ? "bot-" + index : id,
+                    target,
+                    names,
+                    jsonBoolean(object, "enabled", true)
+                ));
+                index++;
+                if (aliases.size() > 64) {
+                    return null;
+                }
+            }
+            return aliases;
+        } catch (final JsonSyntaxException | IllegalStateException ex) {
+            return null;
+        }
+    }
+
+    private static List<String> jsonStringList(final JsonElement element, final int maxItems, final int maxLength) {
+        final List<String> values = new ArrayList<>();
+        if (element == null || element.isJsonNull()) {
+            return values;
+        }
+        if (!element.isJsonArray()) {
+            return null;
+        }
+        for (final JsonElement item : element.getAsJsonArray()) {
+            if (!item.isJsonPrimitive() || !item.getAsJsonPrimitive().isString()) {
+                return null;
+            }
+            final String value = item.getAsString().trim();
+            if (value.isBlank()) {
+                continue;
+            }
+            if (value.length() > maxLength) {
+                return null;
+            }
+            if (!values.contains(value)) {
+                values.add(value);
+            }
+            if (values.size() > maxItems) {
+                return null;
+            }
+        }
+        return values;
+    }
+
+    private static String jsonString(final JsonObject object, final String field) {
+        final JsonElement value = object.get(field);
+        return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString() ? value.getAsString() : "";
+    }
+
+    private static boolean jsonBoolean(final JsonObject object, final String field, final boolean fallback) {
+        final JsonElement value = object.get(field);
+        return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean() ? value.getAsBoolean() : fallback;
     }
 
     private static ParsedAllowedCommands parseAllowedCommands(final String mode, final String rawCommands) {
@@ -2833,6 +3114,12 @@ final class HunterWebPanelManager {
         }
     }
 
+    private static String webPanelHtml(final String mode) {
+        final String html = webAsset("index.html", INDEX_HTML);
+        final String safeMode = mode.equals("frontend") ? "frontend" : "backend";
+        return html.replaceFirst("<body([^>]*)data-panel-mode=\"[^\"]*\"([^>]*)>", "<body$1data-panel-mode=\"" + safeMode + "\"$2>");
+    }
+
     private static byte[] webAssetBytes(final String name) {
         try (InputStream input = HunterWebPanelManager.class.getResourceAsStream("/web-panel/" + name)) {
             if (input == null) {
@@ -2865,6 +3152,9 @@ final class HunterWebPanelManager {
     }
 
     private record CommandResult(boolean dispatched, String message, String output) {
+    }
+
+    private record WebChatLine(long time, String sender, String source, String message) {
     }
 
     private record PluginOperationResult(boolean ok, String status, String message, String output) {
@@ -3348,7 +3638,7 @@ final class HunterWebPanelManager {
           $('optimizationList').innerHTML = [
             item('CPU threads', data.optimization.cpuThreads),
             item('Paper workers', data.optimization.paperWorkers),
-            item('DivineMC workers', data.optimization.divineWorkers),
+            item('Core workers', data.optimization.coreWorkers),
             item('Netty IO', data.optimization.nettyIoThreads),
             item('ForkJoin', data.optimization.forkJoinParallelism),
             item('HunterTools workers', data.optimization.hunterToolsWorkers),

@@ -35,6 +35,17 @@ function normalizeBackendUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
 
+function panelMode() {
+  const mode = document.body?.dataset?.panelMode || '';
+  if (mode === 'frontend' || mode === 'backend') return mode;
+  const page = window.location.pathname.split('/').pop().toLowerCase();
+  return page === 'frontend.html' || window.location.protocol === 'file:' ? 'frontend' : 'backend';
+}
+
+function standaloneFrontend() {
+  return panelMode() === 'frontend';
+}
+
 const state = {
   session: null,
   csrf: '',
@@ -47,7 +58,11 @@ const state = {
   refreshTimer: null,
   lang: detectLanguage(),
   lastData: null,
-  page: 'map'
+  page: 'map',
+  mode: panelMode(),
+  aiChatProfiles: [],
+  aiBotAliases: [],
+  chatLines: []
 };
 
 const $ = (id) => document.getElementById(id);
@@ -82,6 +97,7 @@ const translations = {
     'register.done': '注册成功，现在可以用同一密码进服 /login。',
     'logout.action': '退出登录',
     'remote.description': '前后端分离模式：填写后端 URL，可选 API key。',
+    'remote.required': '纯前端版本需要先填写后端 URL。',
     'remote.backendUrl': '后端 URL，例如 http://127.0.0.1:8088',
     'remote.apiKey': '可选 API key',
     'remote.connect': '连接后端',
@@ -226,7 +242,7 @@ const translations = {
     'commandMessages.about': '/about',
     'commandMessages.plugins': '/plugins',
     'commandMessages.opDenied': '/op 无权限',
-    'commandMessages.aboutPlaceholder': '&b"HunterCraft" Server &8| &fPowered by &6HunterCore',
+    'commandMessages.aboutPlaceholder': '&b"HunterCore" Server &8| &fPowered by &6HunterCore',
     'commandMessages.pluginsPlaceholder': '&6插件列表 &8| &f由管理员维护',
     'commandMessages.opDeniedPlaceholder': '&c你没有权限使用 /op。',
     'commandMessages.save': '保存命令文案',
@@ -344,7 +360,7 @@ const translations = {
     'world.meta': '{chunks} 区块 · {entities} 实体 · 时间 {time}',
     'optimization.cpuThreads': 'CPU 线程',
     'optimization.paperWorkers': 'Paper 工作线程',
-    'optimization.divineWorkers': 'DivineMC 工作线程',
+    'optimization.coreWorkers': '核心后台线程',
     'optimization.nettyIoThreads': 'Netty IO',
     'optimization.forkJoinParallelism': 'ForkJoin',
     'optimization.hunterToolsWorkers': 'HunterTools 工作线程',
@@ -391,6 +407,7 @@ const translations = {
     'register.done': 'Registered. You can now join and use the same password with /login.',
     'logout.action': 'Logout',
     'remote.description': 'Detached frontend mode: fill backend URL and optional API key.',
+    'remote.required': 'The standalone frontend needs a backend URL first.',
     'remote.backendUrl': 'Backend URL, e.g. http://127.0.0.1:8088',
     'remote.apiKey': 'Optional API key',
     'remote.connect': 'Connect backend',
@@ -406,6 +423,12 @@ const translations = {
     'metric.online': 'Online',
     'metric.memory': 'Memory',
     'map.open': 'Open map in new tab',
+    'chat.eyebrow': 'Live chat',
+    'chat.title': 'Server chat',
+    'chat.placeholder': 'Message players...',
+    'chat.send': 'Send',
+    'chat.login': 'Login to send',
+    'chat.empty': 'No chat yet.',
     'overview.eyebrow': 'Live server',
     'overview.title': 'Overview',
     'worlds.title': 'Worlds',
@@ -535,7 +558,7 @@ const translations = {
     'commandMessages.about': '/about',
     'commandMessages.plugins': '/plugins',
     'commandMessages.opDenied': '/op denied',
-    'commandMessages.aboutPlaceholder': '&b"HunterCraft" Server &8| &fPowered by &6HunterCore',
+    'commandMessages.aboutPlaceholder': '&b"HunterCore" Server &8| &fPowered by &6HunterCore',
     'commandMessages.pluginsPlaceholder': '&6Plugin list &8| &fManaged by staff',
     'commandMessages.opDeniedPlaceholder': '&cYou do not have permission to use /op.',
     'commandMessages.save': 'Save command text',
@@ -588,6 +611,17 @@ const translations = {
     'ai.fakePlayersChatCooldown': 'Chat control cooldown seconds',
     'ai.fakePlayersChatPermissionRequired': 'require permission',
     'ai.fakePlayersChatPermission': 'Chat control permission node',
+    'ai.chatProfiles': 'AI Chat profiles',
+    'ai.addProfile': 'Add profile',
+    'ai.botAliases': 'AI Bot aliases',
+    'ai.addBotAlias': 'Add bot',
+    'ai.profileName': 'Profile name',
+    'ai.profileAliases': 'Trigger names / aliases, comma separated',
+    'ai.profileFormat': 'Response format, e.g. &b%name% &8> &f%response%',
+    'ai.profilePrompt': 'Profile prompt',
+    'ai.botTarget': 'Fake player name',
+    'ai.botAliasNames': 'Trigger names / aliases, comma separated',
+    'ai.remove': 'Remove',
     'ai.chatPrompt': 'Chat system prompt',
     'ai.npcPrompt': 'NPC system prompt',
     'ai.fakePlayersPrompt': 'Real fake player system prompt',
@@ -653,7 +687,7 @@ const translations = {
     'world.meta': '{chunks} chunks · {entities} entities · time {time}',
     'optimization.cpuThreads': 'CPU threads',
     'optimization.paperWorkers': 'Paper workers',
-    'optimization.divineWorkers': 'DivineMC workers',
+    'optimization.coreWorkers': 'Core workers',
     'optimization.nettyIoThreads': 'Netty IO',
     'optimization.forkJoinParallelism': 'ForkJoin',
     'optimization.hunterToolsWorkers': 'HunterTools workers',
@@ -717,19 +751,26 @@ function assetUrl(path) {
 function renderBackendConnection() {
   const line = $('backendLine');
   if (!line) return;
-  line.textContent = state.backendUrl
-    ? t('remote.connected', { url: state.backendUrl })
-    : t('remote.local');
+  const form = $('connectionForm');
+  const clearButton = $('clearConnectionButton');
+  if (standaloneFrontend()) {
+    if (form) form.hidden = false;
+    if (clearButton) clearButton.hidden = true;
+    line.textContent = state.backendUrl
+      ? t('remote.connected', { url: state.backendUrl })
+      : t('remote.required');
+  } else {
+    if (form) form.hidden = true;
+    line.textContent = state.backendUrl
+      ? t('remote.connected', { url: state.backendUrl })
+      : t('remote.local');
+  }
   if ($('backendUrl')) $('backendUrl').value = state.backendUrl;
   if ($('backendApiKey')) $('backendApiKey').value = state.apiKey;
 }
 
 const severityClass = (value) => ['ok', 'warning', 'critical', 'disabled'].includes(value) ? value : 'ok';
 const liquidGlassSelector = [
-  '.topNav',
-  '.sessionDock',
-  '.panel',
-  '.actionToast',
   '.pluginItem',
   '.toggleItem',
   '.primaryButton',
@@ -760,9 +801,12 @@ function showToast(message) {
   }, 4200);
 }
 
-function setOutput(message, output = '') {
+function setOutput(message, output = '', editorUrl = '') {
   $('commandResult').dataset.placeholder = 'false';
-  $('commandResult').textContent = output ? `${message}\n\n${output}` : message;
+  const text = output ? `${message}\n\n${output}` : message;
+  $('commandResult').innerHTML = esc(text) + (editorUrl
+    ? `\n\n<a class="editorLink" href="${esc(editorUrl)}" target="_blank" rel="noreferrer">Open LuckPerms WebEditor</a>`
+    : '');
   showToast(message);
 }
 
@@ -1014,6 +1058,7 @@ function updateSessionChrome() {
   const admin = Boolean(session?.admin);
   setAdminVisibility(admin);
   if (!admin && ADMIN_PAGES.includes(state.page)) showPage('overview');
+  $('sessionToggle').textContent = session ? session.username : t('login.action');
   $('logoutButton').hidden = !session;
   $('loginForm').hidden = Boolean(session);
   $('sessionTitle').textContent = session
@@ -1032,6 +1077,30 @@ function renderHealth(health) {
     : dataItem(t('health.label'), t('health.heap', { value: Number(safe.memoryUsagePercent || 0).toFixed(1) }), t('health.noAlerts'));
 }
 
+function renderHomeChat(lines = state.chatLines) {
+  state.chatLines = Array.isArray(lines) ? lines : [];
+  $('chatStatus').textContent = String(state.chatLines.length);
+  $('homeChatForm').hidden = !state.session;
+  $('homeChatInput').disabled = !state.session;
+  $('homeChatInput').placeholder = state.session ? t('chat.placeholder') : t('chat.login');
+  $('homeChatList').innerHTML = state.chatLines.length
+    ? state.chatLines.slice(-80).map((line) => `
+      <div class="chatLine" data-source="${esc(line.source || 'game')}">
+        <strong>${esc(line.sender || 'server')}</strong>
+        <span>${esc(line.message || '')}</span>
+      </div>
+    `).join('')
+    : `<p class="mutedState">${esc(t('chat.empty'))}</p>`;
+  const list = $('homeChatList');
+  list.scrollTop = list.scrollHeight;
+}
+
+async function refreshChat() {
+  if (standaloneFrontend() && !state.backendUrl) return;
+  const data = await json('/api/chat');
+  if (data.ok) renderHomeChat(data.lines || []);
+}
+
 function renderOverview(data) {
   $('worlds').innerHTML = (data.worlds || [])
     .map((world) => dataItem(
@@ -1045,7 +1114,7 @@ function renderOverview(data) {
     dataItem(t('optimization.mode'), data.optimization.mode),
     dataItem(t('optimization.cpuThreads'), data.optimization.cpuThreads),
     dataItem(t('optimization.paperWorkers'), data.optimization.paperWorkers),
-    dataItem(t('optimization.divineWorkers'), data.optimization.divineWorkers),
+    dataItem(t('optimization.coreWorkers'), data.optimization.coreWorkers),
     dataItem(t('optimization.nettyIoThreads'), data.optimization.nettyIoThreads),
     dataItem(t('optimization.forkJoinParallelism'), data.optimization.forkJoinParallelism),
     dataItem(t('optimization.hunterToolsWorkers'), data.optimization.hunterToolsWorkers),
@@ -1171,6 +1240,60 @@ function renderAiApprovals(approvals) {
     : `<p class="mutedState">${esc(t('ai.approvalsNone'))}</p>`;
 }
 
+function splitAliases(value) {
+  return String(value || '')
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function renderAiProfileList() {
+  const profiles = state.aiChatProfiles || [];
+  $('aiChatProfileList').innerHTML = profiles.length ? profiles.map((profile, index) => `
+    <div class="aiConfigItem" data-ai-profile-index="${index}">
+      <label class="checkLine"><input type="checkbox" data-ai-profile-field="enabled" ${profile.enabled === false ? '' : 'checked'}> <span>${esc(profile.displayName || t('ai.profileName'))}</span></label>
+      <div class="formGrid">
+        <input data-ai-profile-field="displayName" value="${esc(profile.displayName || '')}" placeholder="${esc(t('ai.profileName'))}">
+        <input data-ai-profile-field="aliases" value="${esc((profile.aliases || []).join(', '))}" placeholder="${esc(t('ai.profileAliases'))}">
+        <input data-ai-profile-field="responseFormat" value="${esc(profile.responseFormat || '&b%name% &8> &f%response%')}" placeholder="${esc(t('ai.profileFormat'))}">
+        <button type="button" class="secondaryButton" data-ai-profile-remove="${index}">${esc(t('ai.remove'))}</button>
+      </div>
+      <textarea data-ai-profile-field="systemPrompt" rows="3" spellcheck="false" placeholder="${esc(t('ai.profilePrompt'))}">${esc(profile.systemPrompt || '')}</textarea>
+    </div>
+  `).join('') : `<p class="mutedState">${esc(t('actors.none'))}</p>`;
+}
+
+function renderAiBotAliasList() {
+  const aliases = state.aiBotAliases || [];
+  $('aiBotAliasList').innerHTML = aliases.length ? aliases.map((alias, index) => `
+    <div class="aiConfigItem" data-ai-bot-index="${index}">
+      <label class="checkLine"><input type="checkbox" data-ai-bot-field="enabled" ${alias.enabled === false ? '' : 'checked'}> <span>${esc(alias.target || t('ai.botTarget'))}</span></label>
+      <div class="formGrid">
+        <input data-ai-bot-field="target" value="${esc(alias.target || '')}" placeholder="${esc(t('ai.botTarget'))}">
+        <input data-ai-bot-field="aliases" value="${esc((alias.aliases || []).join(', '))}" placeholder="${esc(t('ai.botAliasNames'))}">
+        <button type="button" class="secondaryButton" data-ai-bot-remove="${index}">${esc(t('ai.remove'))}</button>
+      </div>
+    </div>
+  `).join('') : `<p class="mutedState">${esc(t('actors.none'))}</p>`;
+}
+
+function syncAiConfigListsFromDom() {
+  state.aiChatProfiles = Array.from(document.querySelectorAll('[data-ai-profile-index]')).map((row, index) => ({
+    id: state.aiChatProfiles[index]?.id || '',
+    enabled: row.querySelector('[data-ai-profile-field="enabled"]')?.checked ?? true,
+    displayName: row.querySelector('[data-ai-profile-field="displayName"]')?.value.trim() || '',
+    aliases: splitAliases(row.querySelector('[data-ai-profile-field="aliases"]')?.value),
+    responseFormat: row.querySelector('[data-ai-profile-field="responseFormat"]')?.value.trim() || '&b%name% &8> &f%response%',
+    systemPrompt: row.querySelector('[data-ai-profile-field="systemPrompt"]')?.value.trim() || ''
+  })).filter((profile) => profile.displayName);
+  state.aiBotAliases = Array.from(document.querySelectorAll('[data-ai-bot-index]')).map((row, index) => ({
+    id: state.aiBotAliases[index]?.id || '',
+    enabled: row.querySelector('[data-ai-bot-field="enabled"]')?.checked ?? true,
+    target: row.querySelector('[data-ai-bot-field="target"]')?.value.trim() || '',
+    aliases: splitAliases(row.querySelector('[data-ai-bot-field="aliases"]')?.value)
+  })).filter((alias) => alias.target);
+}
+
 function renderCommandMessages(messages) {
   if (!state.session?.admin || !messages) return;
   if (document.activeElement && $('commandMessagesForm').contains(document.activeElement)) return;
@@ -1219,10 +1342,19 @@ function renderAiSettings(settings) {
   $('aiChatSystemPrompt').value = settings.chatSystemPrompt || '';
   $('aiNpcSystemPrompt').value = settings.npcSystemPrompt || '';
   $('aiFakePlayersSystemPrompt').value = settings.fakePlayersSystemPrompt || '';
+  state.aiChatProfiles = Array.isArray(settings.chatProfiles) ? settings.chatProfiles : [];
+  state.aiBotAliases = Array.isArray(settings.fakeBotAliases) ? settings.fakeBotAliases : [];
+  renderAiProfileList();
+  renderAiBotAliasList();
   $('aiKeyStatus').textContent = settings.apiKeyConfigured ? t('ai.keyConfigured') : t('ai.keyMissing');
 }
 
 async function refresh() {
+  if (standaloneFrontend() && !state.backendUrl) {
+    renderBackendConnection();
+    $('serverLine').textContent = t('remote.required');
+    return;
+  }
   const data = await json('/api/status');
   state.lastData = data;
   state.session = data.session;
@@ -1248,6 +1380,7 @@ async function refresh() {
   renderCommandMessages(data.commandMessages);
   renderAiApprovals(data.aiApprovals);
   renderAiSettings(data.aiSettings);
+  refreshChat().catch(() => {});
   const targetInterval = Math.max(1500, Math.min(15000, Number(data.optimization?.guestStatusCacheMillis || 5000) * 2));
   if (state.refreshTimer && state.pollMillis !== targetInterval) {
     clearInterval(state.refreshTimer);
@@ -1259,6 +1392,7 @@ async function refresh() {
 }
 
 async function refreshMap() {
+  if (standaloneFrontend() && !state.backendUrl) return;
   const map = await json('/api/map');
   if (!map.ok || !map.url || map.url === state.mapUrl) return;
   state.mapUrl = map.url;
@@ -1346,11 +1480,20 @@ function relaxLiquidGlass(element) {
 
 function bindLiquidGlass() {
   let pressed = null;
+  let pending = null;
+  let frame = 0;
 
   document.addEventListener('pointermove', (event) => {
     const element = liquidGlassElement(event.target);
     if (!element) return;
-    updateLiquidGlassPointer(element, event);
+    pending = { element, event };
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!pending) return;
+      updateLiquidGlassPointer(pending.element, pending.event);
+      pending = null;
+    });
   }, { passive: true });
 
   document.addEventListener('pointerdown', (event) => {
@@ -1409,6 +1552,10 @@ function bindEvents() {
     setLanguage(state.lang === 'zh' ? 'en' : 'zh');
   });
 
+  $('sessionToggle').addEventListener('click', () => {
+    $('sessionDock').classList.toggle('isOpen');
+  });
+
   $('loginForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
@@ -1420,6 +1567,7 @@ function bindEvents() {
       state.sessionToken = result.session?.token || '';
       storeValue(SESSION_TOKEN_KEY, state.backendUrl ? state.sessionToken : '');
       setOutput(t('command.loggedIn', { username: result.session.username, role: roleLabel(result.session.role) }));
+      $('sessionDock').classList.remove('isOpen');
       await refresh();
     } catch {
       $('password').value = '';
@@ -1434,6 +1582,7 @@ function bindEvents() {
     state.sessionToken = '';
     storeValue(SESSION_TOKEN_KEY, '');
     setOutput(t('command.loggedOut'));
+    $('sessionDock').classList.remove('isOpen');
     await refresh();
   });
 
@@ -1451,6 +1600,20 @@ function bindEvents() {
       $('registerPassword').value = '';
       $('registerConfirmPassword').value = '';
       setOutput(t('register.done'));
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('homeChatForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const message = $('homeChatInput').value.trim();
+    if (!message) return;
+    try {
+      const result = await json('/api/chat/send', { method: 'POST', body: JSON.stringify({ message }) });
+      $('homeChatInput').value = '';
+      if (result.chat?.lines) renderHomeChat(result.chat.lines);
+      else await refreshChat();
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));
     }
@@ -1592,7 +1755,7 @@ function bindEvents() {
     };
     try {
       const result = await json('/api/admin/luckperms', { method: 'POST', body: JSON.stringify(payload) });
-      setOutput(result.message || t('luck.dispatched'), result.output || '');
+      setOutput(result.message || t('luck.dispatched'), result.output || '', result.editorUrl || '');
       await refresh();
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));
@@ -1667,8 +1830,44 @@ function bindEvents() {
     }
   });
 
+  $('aiAddChatProfile').addEventListener('click', () => {
+    syncAiConfigListsFromDom();
+    state.aiChatProfiles.push({
+      id: '',
+      enabled: true,
+      displayName: 'AI',
+      aliases: ['AI'],
+      responseFormat: '&b%name% &8> &f%response%',
+      systemPrompt: $('aiChatSystemPrompt').value || ''
+    });
+    renderAiProfileList();
+  });
+
+  $('aiAddBotAlias').addEventListener('click', () => {
+    syncAiConfigListsFromDom();
+    state.aiBotAliases.push({ id: '', enabled: true, target: '', aliases: [] });
+    renderAiBotAliasList();
+  });
+
+  $('aiChatProfileList').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-ai-profile-remove]');
+    if (!button) return;
+    syncAiConfigListsFromDom();
+    state.aiChatProfiles.splice(Number(button.dataset.aiProfileRemove), 1);
+    renderAiProfileList();
+  });
+
+  $('aiBotAliasList').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-ai-bot-remove]');
+    if (!button) return;
+    syncAiConfigListsFromDom();
+    state.aiBotAliases.splice(Number(button.dataset.aiBotRemove), 1);
+    renderAiBotAliasList();
+  });
+
   $('aiSettingsForm').addEventListener('submit', async (event) => {
     event.preventDefault();
+    syncAiConfigListsFromDom();
     const payload = {
       enabled: String($('aiEnabled').checked),
       provider: 'openai-compatible',
@@ -1685,6 +1884,7 @@ function bindEvents() {
       chatCooldownSeconds: $('aiChatCooldownSeconds').value,
       chatBroadcast: String($('aiChatBroadcast').checked),
       chatSystemPrompt: $('aiChatSystemPrompt').value,
+      chatProfiles: JSON.stringify(state.aiChatProfiles),
       npcEnabled: String($('aiNpcEnabled').checked),
       npcCooldownSeconds: $('aiNpcCooldownSeconds').value,
       npcResponseRadiusBlocks: $('aiNpcResponseRadiusBlocks').value,
@@ -1707,6 +1907,7 @@ function bindEvents() {
       fakePlayersChatControlCooldownSeconds: $('aiFakePlayersChatControlCooldownSeconds').value,
       fakePlayersChatControlRequirePermission: String($('aiFakePlayersChatControlRequirePermission').checked),
       fakePlayersChatControlPermission: $('aiFakePlayersChatControlPermission').value,
+      fakeBotAliases: JSON.stringify(state.aiBotAliases),
       fakePlayersSystemPrompt: $('aiFakePlayersSystemPrompt').value
     };
     try {
@@ -1837,11 +2038,12 @@ bindServerIcon();
 bindEvents();
 showPage(pageFromLocation(), false);
 updateActorKind();
+renderBackendConnection();
 refresh().catch((error) => {
   $('serverLine').textContent = error.message;
 });
 refreshMap().catch(() => {});
 state.refreshTimer = setInterval(() => {
   refresh().catch(() => {});
-}, 5000);
+}, standaloneFrontend() && !state.backendUrl ? 15000 : 5000);
 state.pollMillis = 5000;

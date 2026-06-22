@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HunterCore - Minecraft Server Core</title>
+    <meta
+      name="description"
+      content="HunterCore is a Minecraft server core with bundled operations tools, WebPanel, BlueMap, AI players, NPCs, and optimized release packaging."
+    />
+    <meta property="og:title" content="HunterCore" />
+    <meta property="og:description" content="A server core built for modern Minecraft owners." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="coreScene" aria-hidden="true"></canvas>
+
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="HunterCore home">
+        <span class="brand-mark">HC</span>
+        <span>HunterCore</span>
+      </a>
+      <nav class="nav">
+        <a href="#features">亮点</a>
+        <a href="#panel">面板</a>
+        <a href="#download">下载</a>
+        <a href="https://github.com/Aoody743/HunterCore" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Minecraft 26.1.2 Server Core</p>
+          <h1 id="hero-title">HunterCore</h1>
+          <p class="lead">
+            为服主准备的一体化服务器核心：高性能底座、内置网页面板、BlueMap、LuckPerms、AI 玩家、NPC、假人调试和常用运维工具。
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/Aoody743/HunterCore/releases/latest" target="_blank" rel="noreferrer">
+              下载最新版
+            </a>
+            <a class="button secondary" href="#quick-start">快速启动</a>
+          </div>
+        </div>
+        <div class="hero-stats" aria-label="HunterCore key numbers">
+          <div>
+            <strong>1 jar</strong>
+            <span>开箱即用核心</span>
+          </div>
+          <div>
+            <strong>WebPanel</strong>
+            <span>地图与管理入口</span>
+          </div>
+          <div>
+            <strong>AI Bot</strong>
+            <span>聊天与玩家控制</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Built for owners</p>
+          <h2>从启动到运营都少折腾一点</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-icon">01</span>
+            <h3>内置基础生态</h3>
+            <p>ViaVersion、BlueMap、LuckPerms、CoreProtect、WorldEdit、WorldGuard、Vault、ProtocolLib 等常用能力随核心一起准备。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon">02</span>
+            <h3>网页面板优先</h3>
+            <p>首页同时看地图、聊天、玩家状态和健康告警；后台管理插件、命令、权限、AI、假人和 NPC。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon">03</span>
+            <h3>AI 与 Bot 管理</h3>
+            <p>支持多 AI Chat 和 AI Bot 配置，玩家在聊天栏提到机器人名字即可触发回复或执行允许的动作。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon">04</span>
+            <h3>真实假人与 NPC</h3>
+            <p>用于红石、农场、交互与压力测试；NPC 支持点击命令、姿态管理，并可按游戏 ID 加载皮肤。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon">05</span>
+            <h3>统一 HunterCore 品牌</h3>
+            <p>启动日志、命令输出、网页副标题、manifest 和版本号均面向 HunterCore，发行包带 build 编号。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon">06</span>
+            <h3>更轻的发行包</h3>
+            <p>Paperclip 发行包保留常见 Linux、Windows、macOS 原生库，控制体积，同时兼顾实际部署环境。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="panel" class="section split-section">
+        <div>
+          <p class="eyebrow">WebPanel</p>
+          <h2>管理入口放在浏览器里</h2>
+          <p>
+            HunterCore WebPanel 面向服主日常操作：地图、聊天、玩家、插件、命令、LuckPerms WebEditor、AI 配置、NPC 与真实假人都在同一套界面里。
+          </p>
+        </div>
+        <div class="panel-list" aria-label="WebPanel features">
+          <div><strong>地图 + 聊天</strong><span>主页看 BlueMap 的同时跟进玩家聊天。</span></div>
+          <div><strong>权限更顺手</strong><span>后台可打开 LuckPerms WebEditor 链接。</span></div>
+          <div><strong>前后端分离</strong><span>独立 WebPanel 包首次打开时配置后端地址。</span></div>
+          <div><strong>登录不挡地图</strong><span>登录入口收进右上角，访客视图更干净。</span></div>
+        </div>
+      </section>
+
+      <section id="download" class="download-band">
+        <div>
+          <p class="eyebrow">Release</p>
+          <h2>下载服务器核心和独立 WebPanel</h2>
+          <p>正式发行资产会包含 MinecraftServer jar、WebPanel zip 和 SHA256 校验文件。</p>
+        </div>
+        <a class="button primary" href="https://github.com/Aoody743/HunterCore/releases/latest" target="_blank" rel="noreferrer">
+          打开 GitHub Releases
+        </a>
+      </section>
+
+      <section id="quick-start" class="section code-section">
+        <div class="section-heading">
+          <p class="eyebrow">Quick start</p>
+          <h2>三步启动</h2>
+        </div>
+        <div class="steps">
+          <article>
+            <span>1</span>
+            <h3>下载核心</h3>
+            <code>HunterCore-&lt;version&gt;-MinecraftServer-26.1.2-release.jar</code>
+          </article>
+          <article>
+            <span>2</span>
+            <h3>启动服务器</h3>
+            <code>java -Xms2G -Xmx4G -jar HunterCore.jar nogui</code>
+          </article>
+          <article>
+            <span>3</span>
+            <h3>打开面板</h3>
+            <code>http://127.0.0.1:8088/</code>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Powered by HunterCore, have fun~</span>
+      <a href="https://github.com/Aoody743/HunterCore" target="_blank" rel="noreferrer">Source on GitHub</a>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

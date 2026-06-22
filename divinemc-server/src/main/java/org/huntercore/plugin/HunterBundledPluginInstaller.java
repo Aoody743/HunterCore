@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.huntercore.bootstrap.HunterCoreBootstrap;
 import org.huntercore.bootstrap.HunterCoreRuntime;
@@ -31,6 +32,7 @@ import org.slf4j.Logger;
 
 public final class HunterBundledPluginInstaller {
     private static final Logger LOGGER = LogUtils.getClassLogger();
+    private static final AtomicBoolean STARTUP_BANNER_PRINTED = new AtomicBoolean();
     private static final List<String> MANIFEST_RESOURCES = List.of(
         "META-INF/huntercore/bundled-plugins.yml",
         "META-INF/huntercore/bundled-plugins.external.yml"
@@ -41,6 +43,9 @@ public final class HunterBundledPluginInstaller {
 
     public static InstallReport install(final Path pluginDirectory) {
         HunterCoreBootstrap.init();
+        if (STARTUP_BANNER_PRINTED.compareAndSet(false, true)) {
+            LOGGER.info("This Minecraft Server is Powered by HunterCore, have fun~");
+        }
 
         if (Boolean.getBoolean("huntercore.bundledPlugins.disabled")) {
             LOGGER.info("HunterCore bundled plugin installer disabled by system property.");
@@ -64,6 +69,7 @@ public final class HunterBundledPluginInstaller {
             }
 
             final List<InstallResult> results = installPlugins(pluginDirectory, plugins, preferences);
+            prepareBlueMapDefaults(pluginDirectory, plugins, preferences);
 
             final InstallReport report = new InstallReport(plugins, results);
             HunterCoreRuntime.get().setLastInstallReport(report);
@@ -74,6 +80,41 @@ public final class HunterBundledPluginInstaller {
             final InstallReport report = InstallReport.empty();
             HunterCoreRuntime.get().setLastInstallReport(report);
             return report;
+        }
+    }
+
+    private static void prepareBlueMapDefaults(
+        final Path pluginDirectory,
+        final List<HunterBundledPluginRecord> plugins,
+        final HunterPreferences preferences
+    ) {
+        final boolean blueMapBundled = plugins.stream().anyMatch(plugin -> plugin.id().equals("bluemap"));
+        if (!blueMapBundled || !preferences.bundledPluginEnabled("bluemap")) {
+            return;
+        }
+        final Path config = pluginDirectory.resolve("BlueMap").resolve("core.conf");
+        try {
+            Files.createDirectories(config.getParent());
+            if (!Files.exists(config)) {
+                Files.writeString(config, """
+                    ##         BlueMap          ##
+                    ## Auto-prepared by HunterCore.
+
+                    accept-download: true
+                    """.stripIndent(), StandardCharsets.UTF_8);
+                LOGGER.info("HunterCore prepared BlueMap core.conf with accept-download enabled.");
+                return;
+            }
+            final String text = Files.readString(config, StandardCharsets.UTF_8);
+            final String updated = text.matches("(?sm).*^\\s*accept-download\\s*:.*")
+                ? text.replaceFirst("(?m)^\\s*accept-download\\s*:.*$", "accept-download: true")
+                : text + (text.endsWith("\n") ? "" : "\n") + "accept-download: true\n";
+            if (!updated.equals(text)) {
+                Files.writeString(config, updated, StandardCharsets.UTF_8);
+                LOGGER.info("HunterCore enabled BlueMap accept-download in core.conf.");
+            }
+        } catch (final IOException ex) {
+            LOGGER.warn("HunterCore could not prepare BlueMap core.conf", ex);
         }
     }
 

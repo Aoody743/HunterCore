@@ -6,7 +6,7 @@
   <title>HunterCore Panel</title>
   <link rel="stylesheet" href="assets/app.css">
 </head>
-<body>
+<body data-panel-mode="backend">
   <svg class="liquidGlassDefs" width="0" height="0" aria-hidden="true" focusable="false">
     <filter id="liquid-glass-refraction" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
       <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018" numOctaves="2" seed="21" result="noise"></feTurbulence>
@@ -48,6 +48,7 @@
         <button type="button" class="navButton adminOnly" data-page-target="access" data-i18n="nav.access" hidden>Access</button>
         <button type="button" class="navButton adminOnly" data-page-target="ai" data-i18n="nav.ai" hidden>AI</button>
         <button type="button" class="navButton adminOnly" data-page-target="admin" data-i18n="nav.admin" hidden>Admin</button>
+        <button id="sessionToggle" type="button" class="navButton" data-i18n="login.action">Login</button>
         <button id="languageToggle" type="button" class="navButton langButton" data-i18n-title="language.switch">EN</button>
       </nav>
     </header>
@@ -57,7 +58,7 @@
       <iframe id="mapFrame" title="BlueMap"></iframe>
       <div class="mapShade"></div>
 
-      <aside class="sessionDock" aria-label="Session">
+      <aside id="sessionDock" class="sessionDock" aria-label="Session">
         <div class="dockHeader">
           <div>
             <span class="eyebrow" data-i18n="session.eyebrow">Web console</span>
@@ -94,6 +95,21 @@
         </div>
         <div id="healthList" class="compactList"></div>
         <a id="mapLink" class="mapLink" href="#" target="_blank" rel="noreferrer" data-i18n="map.open">Open map in new tab</a>
+      </aside>
+
+      <aside class="chatDock" aria-label="Server chat">
+        <div class="dockHeader">
+          <div>
+            <span class="eyebrow" data-i18n="chat.eyebrow">Live chat</span>
+            <strong data-i18n="chat.title">Server chat</strong>
+          </div>
+          <span id="chatStatus" class="statusPill">--</span>
+        </div>
+        <div id="homeChatList" class="chatList"></div>
+        <form id="homeChatForm" class="chatForm">
+          <input id="homeChatInput" maxlength="240" placeholder="Message players..." data-i18n-placeholder="chat.placeholder">
+          <button type="submit" class="primaryButton" data-i18n="chat.send">Send</button>
+        </form>
       </aside>
     </section>
 
@@ -242,7 +258,7 @@
           <h3 data-i18n="webSettings.title">Web panel</h3>
           <div class="formGrid">
             <input id="webServerName" form="webSettingsForm" placeholder="HunterCore" data-i18n-placeholder="webSettings.serverName">
-            <input id="webF3ServerName" form="webSettingsForm" placeholder="&quot;HunterCraft&quot; Server" data-i18n-placeholder="webSettings.f3ServerName">
+            <input id="webF3ServerName" form="webSettingsForm" placeholder="&quot;HunterCore&quot; Server" data-i18n-placeholder="webSettings.f3ServerName">
             <select id="webCpuMode" form="webSettingsForm">
               <option value="single-thread">single-thread</option>
               <option value="high-clock">high-clock</option>
@@ -439,7 +455,7 @@
           <h3 data-i18n="ai.chatNpcTitle">Chat and NPC</h3>
           <div class="formGrid">
             <label class="checkLine"><input id="aiChatEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.chatEnabled">chat</span></label>
-            <input id="aiChatTriggerPrefix" form="aiSettingsForm" placeholder="@ai" data-i18n-placeholder="ai.chatPrefix">
+            <input id="aiChatTriggerPrefix" form="aiSettingsForm" placeholder="Deepseek, HelperBot" data-i18n-placeholder="ai.chatPrefix">
             <input id="aiChatCooldownSeconds" form="aiSettingsForm" inputmode="numeric" placeholder="5" data-i18n-placeholder="ai.chatCooldown">
             <label class="checkLine"><input id="aiChatBroadcast" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.chatBroadcast">broadcast</span></label>
             <label class="checkLine"><input id="aiNpcEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.npcEnabled">NPC</span></label>
@@ -452,6 +468,11 @@
             <span data-i18n="ai.chatPrompt">Chat system prompt</span>
             <textarea id="aiChatSystemPrompt" form="aiSettingsForm" rows="4" spellcheck="false"></textarea>
           </label>
+          <div class="listHeader">
+            <h4 data-i18n="ai.chatProfiles">AI Chat profiles</h4>
+            <button id="aiAddChatProfile" type="button" class="secondaryButton" data-i18n="ai.addProfile">Add profile</button>
+          </div>
+          <div id="aiChatProfileList" class="dataList aiConfigList"></div>
           <label class="textEditorLabel">
             <span data-i18n="ai.npcPrompt">NPC system prompt</span>
             <textarea id="aiNpcSystemPrompt" form="aiSettingsForm" rows="4" spellcheck="false"></textarea>
@@ -480,6 +501,11 @@
             <label class="checkLine"><input id="aiFakePlayersChatControlRequirePermission" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersChatPermissionRequired">require permission</span></label>
             <input id="aiFakePlayersChatControlPermission" form="aiSettingsForm" placeholder="huntertools.ai.fakeplayer" data-i18n-placeholder="ai.fakePlayersChatPermission">
           </div>
+          <div class="listHeader">
+            <h4 data-i18n="ai.botAliases">AI Bot aliases</h4>
+            <button id="aiAddBotAlias" type="button" class="secondaryButton" data-i18n="ai.addBotAlias">Add bot</button>
+          </div>
+          <div id="aiBotAliasList" class="dataList aiConfigList"></div>
           <label class="textEditorLabel">
             <span data-i18n="ai.fakePlayersPrompt">Real fake player system prompt</span>
             <textarea id="aiFakePlayersSystemPrompt" form="aiSettingsForm" rows="5" spellcheck="false"></textarea>

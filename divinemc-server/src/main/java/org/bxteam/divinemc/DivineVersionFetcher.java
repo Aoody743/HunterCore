@@ -25,7 +25,6 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
-import java.util.OptionalInt;
 
 import static io.papermc.paper.ServerBuildInfo.StringRepresentation.VERSION_SIMPLE;
 import static net.kyori.adventure.text.Component.text;
@@ -37,10 +36,10 @@ public class DivineVersionFetcher implements VersionFetcher {
     private static final ComponentLogger COMPONENT_LOGGER = ComponentLogger.logger(LogManager.getRootLogger().getName());
     private static final int DISTANCE_ERROR = -1;
     private static final int DISTANCE_UNKNOWN = -2;
-    private static final String DOWNLOAD_PAGE = "https://bxteam.org/downloads/divinemc";
-    private static final String REPOSITORY = "BX-Team/DivineMC";
+    private static final String DOWNLOAD_PAGE = "https://github.com/Aoody743/HunterCore/releases";
+    private static final String REPOSITORY = "Aoody743/HunterCore";
     private static final ServerBuildInfo BUILD_INFO = ServerBuildInfo.buildInfo();
-    private static final String USER_AGENT = BUILD_INFO.brandName() + "/" + BUILD_INFO.asString(VERSION_SIMPLE) + " (https://bxteam.org)";
+    private static final String USER_AGENT = BUILD_INFO.brandName() + "/" + BUILD_INFO.asString(VERSION_SIMPLE) + " (https://github.com/Aoody743/HunterCore)";
     private static final Gson GSON = new Gson();
     private static int distance = DISTANCE_UNKNOWN;
 
@@ -70,15 +69,10 @@ public class DivineVersionFetcher implements VersionFetcher {
     private static Component getUpdateStatusMessage() {
         int dist = DISTANCE_ERROR;
 
-        final OptionalInt buildNumber = BUILD_INFO.buildNumber();
-        if (buildNumber.isPresent()) {
-            dist = fetchDistanceFromSiteApi(buildNumber.getAsInt());
-        } else {
-            final Optional<String> gitBranch = BUILD_INFO.gitBranch();
-            final Optional<String> gitCommit = BUILD_INFO.gitCommit();
-            if (gitBranch.isPresent() && gitCommit.isPresent()) {
-                dist = fetchDistanceFromGitHub(gitBranch.get(), gitCommit.get());
-            }
+        final Optional<String> gitBranch = BUILD_INFO.gitBranch();
+        final Optional<String> gitCommit = BUILD_INFO.gitCommit();
+        if (gitBranch.isPresent() && gitCommit.isPresent()) {
+            dist = fetchDistanceFromGitHub(gitBranch.get(), gitCommit.get());
         }
 
         distance = dist;
@@ -94,30 +88,6 @@ public class DivineVersionFetcher implements VersionFetcher {
                         .hoverEvent(text("Click to open", NamedTextColor.WHITE))
                         .clickEvent(ClickEvent.openUrl(DOWNLOAD_PAGE))));
         };
-    }
-
-    private static int fetchDistanceFromSiteApi(final int localBuildNumber) {
-        try {
-            final HttpURLConnection connection = (HttpURLConnection) URI.create(
-                "https://api.bxteam.org/v2/projects/divinemc/versions/" + BUILD_INFO.minecraftVersionId() + "/builds/latest"
-            ).toURL().openConnection();
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
-            connection.setRequestProperty("User-Agent", USER_AGENT);
-            connection.setRequestProperty("Accept", "application/json");
-
-            try (final BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
-                final JsonObject json = GSON.fromJson(reader, JsonObject.class);
-                final int latest = json.getAsJsonPrimitive("id").getAsInt();
-                return latest - localBuildNumber;
-            } catch (final JsonSyntaxException ex) {
-                LOGGER.error("Error parsing json from BX Team downloads API", ex);
-                return DISTANCE_ERROR;
-            }
-        } catch (final IOException e) {
-            LOGGER.error("Error while parsing version", e);
-            return DISTANCE_ERROR;
-        }
     }
 
     // Contributed by Techcable <Techcable@outlook.com> in GH-65

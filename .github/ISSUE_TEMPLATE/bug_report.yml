@@ -17,7 +17,7 @@ body:
           required: true
         - label: I am using the latest HunterCore release or latest GitHub Actions build.
           required: true
-        - label: I tested whether the issue also happens on upstream DivineMC or Purpur when that comparison is practical.
+        - label: I tested whether the issue also happens on a clean HunterCore server when that comparison is practical.
           required: false
 
   - type: textarea

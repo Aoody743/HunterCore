@@ -102,9 +102,11 @@ final class HunterActorManager {
 
     List<String> completions(final String module, final String[] args) {
         if (args.length == 1) {
-            return matching(args[0], HunterToolsPreferences.actorCommands());
+            final List<String> commands = new ArrayList<>(HunterToolsPreferences.actorCommands());
+            commands.addAll(List.of("rm", "del", "here", "face", "setskin"));
+            return matching(args[0], commands);
         }
-        if (args.length == 2 && List.of("remove", "tp", "tphere", "look", "pose", "click", "info").contains(HunterToolsPreferences.normalize(args[0]))) {
+        if (args.length == 2 && List.of("remove", "tp", "tphere", "look", "pose", "skin", "click", "info").contains(HunterToolsPreferences.normalize(args[0]))) {
             return matching(args[1], this.knownActorIds(module));
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("look")) {
@@ -162,15 +164,22 @@ final class HunterActorManager {
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage("Usage: /" + label + " <spawn|remove|list|tp|tphere|look|pose|click|info|clear>");
+            sender.sendMessage("Usage: /" + label + " <spawn|remove|list|tp|tphere|look|pose|skin|click|info|clear>");
             return true;
         }
         final String sub = HunterToolsPreferences.normalize(args[0]);
-        if (!this.preferences.commandEnabled(module, sub)) {
-            sender.sendMessage("HunterCore " + module + " command " + sub + " is disabled in preferences.yml.");
+        final String command = switch (sub) {
+            case "rm", "delete", "del", "kill" -> "remove";
+            case "here" -> "tphere";
+            case "face", "rotate" -> "look";
+            case "setskin" -> "skin";
+            default -> sub;
+        };
+        if (!this.preferences.commandEnabled(module, command)) {
+            sender.sendMessage("HunterCore " + module + " command " + command + " is disabled in preferences.yml.");
             return true;
         }
-        return switch (sub) {
+        return switch (command) {
             case "spawn" -> this.spawn(sender, module, label, args);
             case "remove" -> this.remove(sender, module, label, args);
             case "list" -> this.list(sender, module);
@@ -178,11 +187,12 @@ final class HunterActorManager {
             case "tphere" -> this.teleportHere(sender, module, label, args);
             case "look" -> this.look(sender, module, label, args);
             case "pose" -> this.pose(sender, module, label, args);
+            case "skin" -> this.skin(sender, module, label, args);
             case "click" -> this.clickCommand(sender, module, label, args);
             case "info" -> this.info(sender, module, label, args);
             case "clear" -> this.clear(sender, module);
             default -> {
-                sender.sendMessage("Usage: /" + label + " <spawn|remove|list|tp|tphere|look|pose|click|info|clear>");
+                sender.sendMessage("Usage: /" + label + " <spawn|remove|list|tp|tphere|look|pose|skin|click|info|clear>");
                 yield true;
             }
         };
@@ -283,7 +293,8 @@ final class HunterActorManager {
             pose,
             clickCommand,
             actorAiEnabled(module, current),
-            actorAiPersona(current)
+            actorAiPersona(current),
+            actorSkin(current)
         ));
         this.save();
         sender.sendMessage("Teleported HunterCore " + module + " actor " + id + " to " + locationLine(location) + ".");
@@ -322,7 +333,8 @@ final class HunterActorManager {
             pose,
             clickCommand,
             actorAiEnabled(module, current),
-            actorAiPersona(current)
+            actorAiPersona(current),
+            actorSkin(current)
         ));
         this.save();
         sender.sendMessage("Moved HunterCore " + module + " actor " + id + " to you.");
@@ -367,7 +379,8 @@ final class HunterActorManager {
             pose,
             clickCommand,
             actorAiEnabled(module, current),
-            actorAiPersona(current)
+            actorAiPersona(current),
+            actorSkin(current)
         ));
         this.save();
         sender.sendMessage("Rotated HunterCore " + module + " actor " + id + " to yaw " + format(rotation[0]) + ", pitch " + format(clampPitch(rotation[1])) + ".");
@@ -415,10 +428,72 @@ final class HunterActorManager {
             poseName(pose),
             clickCommand,
             actorAiEnabled(module, current),
-            actorAiPersona(current)
+            actorAiPersona(current),
+            actorSkin(current)
         ));
         this.save();
         sender.sendMessage("Set HunterCore " + module + " actor " + id + " pose to " + poseName(pose) + ".");
+        return true;
+    }
+
+    private boolean skin(final CommandSender sender, final String module, final String label, final String[] args) {
+        if (args.length != 3) {
+            sender.sendMessage("Usage: /" + label + " skin <name> <minecraftName|clear>");
+            return true;
+        }
+        final String id = HunterToolsPreferences.actorId(args[1]);
+        final String source = args[2].trim();
+        final ManagedActor actor = this.liveActors.get(key(module, id));
+        final HunterToolsPreferences.ActorDefinition current = this.preferences.actorDefinition(module, id);
+        if (actor == null && current == null) {
+            sender.sendMessage("HunterCore actor not found: " + id);
+            return true;
+        }
+        if (!isMannequinActor(module, actor, current)) {
+            sender.sendMessage("Only mannequin actors support player skins. Spawn NPC as mannequin first: /" + label + " spawn <name> mannequin");
+            return true;
+        }
+        if (source.contains("/") || source.contains("\\") || source.toLowerCase(Locale.ROOT).endsWith(".png")) {
+            sender.sendMessage("Local skin image files are not directly supported yet. Use an official Minecraft player name, or clear.");
+            return true;
+        }
+        final Location location = actorLocation(actor, current);
+        if (location == null) {
+            sender.sendMessage("HunterCore actor " + id + " has no loaded location.");
+            return true;
+        }
+        final Entity entity = actor == null ? null : Bukkit.getEntity(actor.entityUuid());
+        final String skinSource = List.of("clear", "none", "off", "-").contains(HunterToolsPreferences.normalize(source)) ? "" : source;
+        if (entity instanceof final Mannequin mannequin) {
+            if (skinSource.isBlank()) {
+                mannequin.setProfile(ResolvableProfile.resolvableProfile()
+                    .name(current == null ? id : current.displayName())
+                    .uuid(current == null ? UUID.nameUUIDFromBytes(("huntercore:" + module + ":" + id).getBytes(java.nio.charset.StandardCharsets.UTF_8)) : current.uuid())
+                    .build());
+            } else {
+                this.resolveSkinProfile(skinSource).thenAccept(profile -> this.plugin.getServer().getScheduler().runTask(this.plugin, () -> {
+                    if (mannequin.isValid()) {
+                        mannequin.setProfile(profile);
+                    }
+                })).exceptionally(error -> {
+                    sender.sendMessage(ChatColor.RED + "Skin load failed: " + cleanError(error));
+                    return null;
+                });
+            }
+        }
+        this.preferences.setActorDefinition(module, HunterToolsPreferences.ActorDefinition.of(
+            module,
+            current == null ? id : current.displayName(),
+            current == null ? actor.kind() : current.kind(),
+            location,
+            current == null ? actorPose(actor) : current.pose(),
+            current == null ? "" : current.clickCommand(),
+            actorAiEnabled(module, current),
+            actorAiPersona(current),
+            skinSource
+        ));
+        this.save();
+        sender.sendMessage(skinSource.isBlank() ? "Cleared HunterCore actor skin for " + id + "." : "Loading HunterCore actor skin " + skinSource + " for " + id + ".");
         return true;
     }
 
@@ -479,6 +554,7 @@ final class HunterActorManager {
         sender.sendMessage("- kind: " + kind);
         sender.sendMessage("- state: " + (actor == null ? "configured" : "live"));
         sender.sendMessage("- pose: " + pose);
+        sender.sendMessage("- skin: " + (actorSkin(definition).isBlank() ? "default" : actorSkin(definition)));
         sender.sendMessage("- click command: " + (clickCommand == null || clickCommand.isBlank() ? "not configured" : clickCommand));
         if (module.equals(NPCS)) {
             sender.sendMessage("- AI: " + (actorAiEnabled(module, definition) ? "enabled" : "disabled")
@@ -511,7 +587,8 @@ final class HunterActorManager {
             pose,
             sanitizeCommand(command),
             actorAiEnabled(module, current),
-            actorAiPersona(current)
+            actorAiPersona(current),
+            actorSkin(current)
         ));
         this.save();
         return true;
@@ -540,7 +617,8 @@ final class HunterActorManager {
             pose,
             clickCommand,
             enabled,
-            sanitizePersona(persona)
+            sanitizePersona(persona),
+            actorSkin(current)
         ));
         this.save();
         return true;
@@ -616,6 +694,7 @@ final class HunterActorManager {
         }
         this.tag(entity, module, definition.id());
         this.applyStoredPose(entity, definition.pose());
+        this.applyStoredSkin(entity, definition.skinSource());
         this.liveActors.put(key(module, definition.id()), new ManagedActor(module, definition.id(), kind, entity.getUniqueId(), entity));
         return entity;
     }
@@ -795,6 +874,24 @@ final class HunterActorManager {
         }
     }
 
+    private void applyStoredSkin(final Entity entity, final String skinSource) {
+        if (!(entity instanceof final Mannequin mannequin) || skinSource == null || skinSource.isBlank()) {
+            return;
+        }
+        this.resolveSkinProfile(skinSource).thenAccept(profile -> this.plugin.getServer().getScheduler().runTask(this.plugin, () -> {
+            if (entity.isValid()) {
+                mannequin.setProfile(profile);
+            }
+        })).exceptionally(error -> {
+            this.plugin.getLogger().warning("HunterCore could not load NPC skin " + skinSource + ": " + cleanError(error));
+            return null;
+        });
+    }
+
+    private CompletableFuture<ResolvableProfile> resolveSkinProfile(final String playerName) {
+        return Bukkit.createProfile(playerName).update().thenApply(ResolvableProfile::resolvableProfile);
+    }
+
     private void save() {
         if (this.preferences.booleanValue("optimizations.hunter-tools.actor-batch-save", true)) {
             this.preferences.save(this.executor);
@@ -890,6 +987,10 @@ final class HunterActorManager {
         return definition == null ? "" : definition.aiPersona();
     }
 
+    private static String actorSkin(final @Nullable HunterToolsPreferences.ActorDefinition definition) {
+        return definition == null ? "" : definition.skinSource();
+    }
+
     private static String renderClickCommand(
         final String command,
         final Player player,
@@ -921,6 +1022,15 @@ final class HunterActorManager {
 
     private static String key(final String module, final String id) {
         return module + ":" + HunterToolsPreferences.actorId(id);
+    }
+
+    private static String cleanError(final Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        final String message = current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+        return message.length() > 160 ? message.substring(0, 160) + "..." : message;
     }
 
     private static String locationLine(final Location location) {

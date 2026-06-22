@@ -24,8 +24,8 @@ public final class HunterMessages {
             .append(Component.newline())
             .append(Component.text(HunterLanguage.choose(
                 language,
-                "基于 DivineMC/Purpur/Paper 的私有 Minecraft 服务器核心。",
-                "A private DivineMC/Purpur/Paper based Minecraft server core."
+                "一个由 HunterCore 驱动的 Minecraft 服务器核心。",
+                "A Minecraft server core powered by HunterCore."
             ), NamedTextColor.GRAY))
             .append(Component.newline())
             .append(Component.text("Minecraft: ", NamedTextColor.GRAY))
@@ -53,11 +53,19 @@ public final class HunterMessages {
         return Component.text()
             .append(Component.text("HunterCore System", NamedTextColor.GOLD))
             .append(Component.newline())
-            .append(line(HunterLanguage.choose(language, "服务端", "Server"), Bukkit.getName() + " " + Bukkit.getVersion()))
+            .append(line(HunterLanguage.choose(language, "服务端", "Server"), HunterCoreRuntime.BRAND_NAME + " " + Bukkit.getVersion()))
             .append(line("Java", System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")"))
             .append(line("OS", System.getProperty("os.name") + " " + System.getProperty("os.version") + " " + System.getProperty("os.arch")))
             .append(line("CPU", runtime.availableProcessors() + HunterLanguage.choose(language, " 线程", " threads")))
-            .append(line(HunterLanguage.choose(language, "内存", "Memory"), formatBytes(used) + HunterLanguage.choose(language, " 已用 / ", " used / ") + formatBytes(total) + HunterLanguage.choose(language, " 已分配 / ", " allocated / ") + formatBytes(max) + HunterLanguage.choose(language, " 最大", " max")))
+            .append(line(
+                HunterLanguage.choose(language, "内存", "Memory"),
+                formatBytes(used)
+                    + HunterLanguage.choose(language, " 已用 / ", " used / ")
+                    + formatBytes(total)
+                    + HunterLanguage.choose(language, " 已分配 / ", " allocated / ")
+                    + formatBytes(max)
+                    + HunterLanguage.choose(language, " 最大", " max")
+            ))
             .append(line(HunterLanguage.choose(language, "运行时间", "Uptime"), formatDuration(uptime)))
             .append(line(HunterLanguage.choose(language, "玩家", "Players"), Bukkit.getOnlinePlayers().size() + "/" + Bukkit.getMaxPlayers()))
             .append(line(HunterLanguage.choose(language, "插件目录", "Plugins folder"), Bukkit.getPluginsFolder().getPath()))
@@ -90,8 +98,11 @@ public final class HunterMessages {
             return days + "d " + hours + "h " + minutes + "m";
         }
         if (hours > 0) {
-            return hours + "h " + minutes + "m " + seconds + "s";
+            return hours + "h " + minutes + "m";
         }
-        return minutes + "m " + seconds + "s";
+        if (minutes > 0) {
+            return minutes + "m " + seconds + "s";
+        }
+        return seconds + "s";
     }
 }

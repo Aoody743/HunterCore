@@ -157,7 +157,7 @@ public final class HunterPreferences {
         changed |= this.setDefault("modules.sidebar.interval-ticks", 40);
         changed |= this.setDefault("modules.sidebar.dirty-updates-only", true);
         changed |= this.setDefault("modules.motd.enabled", true);
-        changed |= this.setDefault("modules.motd.line-1", "&b\"HunterCraft\" Server &8| &fHunterCore");
+        changed |= this.setDefault("modules.motd.line-1", "&b\"HunterCore\" Server &8| &fHunterCore");
         changed |= this.setDefault("modules.motd.line-2", "&7%online%/%max% players &8- &aTPS %tps% &8- &e%version%");
         changed |= this.setDefault("modules.motd.max-players", -1);
         changed |= this.setDefault("modules.essentials.enabled", true);
@@ -237,7 +237,7 @@ public final class HunterPreferences {
         changed |= this.setDefault("optimizations.cpu.prefer-existing-jvm-flags", true);
         changed |= this.setDefault("optimizations.cpu.allow-experimental-region-ticking", false);
         changed |= this.setDefault("optimizations.cpu.paper-worker-threads", "auto");
-        changed |= this.setDefault("optimizations.cpu.divine-worker-threads", "auto");
+        changed |= this.setDefault("optimizations.cpu.core-worker-threads", "auto");
         changed |= this.setDefault("optimizations.cpu.netty-io-threads", "auto");
         changed |= this.setDefault("optimizations.cpu.common-pool-parallelism", "auto");
         changed |= this.setDefault("optimizations.enabled", true);

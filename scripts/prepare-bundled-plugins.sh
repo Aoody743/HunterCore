@@ -12,17 +12,17 @@ mkdir -p "$PLUGINS_DIR" "$WORK_DIR"
 
 sha256_file() {
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
+    shasum -a 256 "$1" | awk '{print $1}' | tr -d '\\'
   else
-    sha256sum "$1" | awk '{print $1}'
+    sha256sum "$1" | awk '{print $1}' | tr -d '\\'
   fi
 }
 
 sha512_file() {
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 512 "$1" | awk '{print $1}'
+    shasum -a 512 "$1" | awk '{print $1}' | tr -d '\\'
   else
-    sha512sum "$1" | awk '{print $1}'
+    sha512sum "$1" | awk '{print $1}' | tr -d '\\'
   fi
 }
 
@@ -169,8 +169,25 @@ prepare_luckperms() {
 
   zip_file="$WORK_DIR/luckperms-jars-$artifact_id.zip"
   extracted="$WORK_DIR/luckperms-$artifact_id"
-  if [[ ! -f "$zip_file" ]]; then
-    gh api -H 'Accept: application/vnd.github+json' "/repos/LuckPerms/LuckPerms/actions/artifacts/$artifact_id/zip" > "$zip_file"
+  if [[ ! -s "$zip_file" ]] || ! unzip -tq "$zip_file" >/dev/null 2>&1; then
+    local tmp_zip token
+    tmp_zip="$zip_file.tmp"
+    rm -f "$zip_file" "$tmp_zip"
+    token="$(gh auth token 2>/dev/null || true)"
+    if [[ -n "$token" ]]; then
+      curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --speed-limit 1024 --speed-time 30 \
+        -H "Authorization: Bearer $token" \
+        -H 'Accept: application/vnd.github+json' \
+        -o "$tmp_zip" \
+        "https://api.github.com/repos/LuckPerms/LuckPerms/actions/artifacts/$artifact_id/zip"
+    else
+      MSYS_NO_PATHCONV=1 gh api -H 'Accept: application/vnd.github+json' "repos/LuckPerms/LuckPerms/actions/artifacts/$artifact_id/zip" > "$tmp_zip"
+    fi
+    mv "$tmp_zip" "$zip_file"
+  fi
+  if [[ ! -s "$zip_file" ]] || ! unzip -tq "$zip_file" >/dev/null 2>&1; then
+    echo "LuckPerms artifact $artifact_id was not downloaded as a valid zip file." >&2
+    exit 1
   fi
   rm -rf "$extracted"
   mkdir -p "$extracted"

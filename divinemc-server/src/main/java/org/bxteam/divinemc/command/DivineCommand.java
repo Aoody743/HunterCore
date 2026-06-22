@@ -57,7 +57,7 @@ public final class DivineCommand extends Command {
 
     public DivineCommand() {
         super(COMMAND_LABEL);
-        this.description = "DivineMC related commands";
+        this.description = "HunterCore related commands";
         this.usageMessage = this.createUsageMessage(SUBCOMMANDS.keySet());
         final List<Permission> permissions = SUBCOMMANDS.values().stream().map(DivineSubCommand::getPermission).filter(Objects::nonNull).toList();
         this.setPermission(BASE_PERM);

@@ -1,5 +1,7 @@
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
+import org.gradle.api.tasks.Copy
+import org.gradle.api.tasks.bundling.Zip
 import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.register
 import java.io.ByteArrayOutputStream
@@ -17,9 +19,16 @@ plugins {
 
 val paperMavenPublicUrl = "https://repo.papermc.io/repository/maven-public/"
 val huntercoreVersionName = providers.gradleProperty("huntercoreVersion").get().trim()
+val huntercoreBuildNumber = providers.environmentVariable("BUILD_NUMBER")
+    .orElse(providers.environmentVariable("GITHUB_RUN_NUMBER"))
+    .orElse(providers.gradleProperty("huntercoreBuildNumber"))
+    .get()
+    .trim()
+val huntercoreVersionLabel = if (huntercoreBuildNumber.isBlank()) huntercoreVersionName else "$huntercoreVersionName-build.$huntercoreBuildNumber"
 val huntercoreReleaseChannel = providers.gradleProperty("releaseChannel").get().trim()
 val huntercoreMcVersion = providers.gradleProperty("mcVersion").get().trim()
-val huntercoreReleaseJarName = "HunterCore-$huntercoreVersionName-MinecraftServer-$huntercoreMcVersion-$huntercoreReleaseChannel.jar"
+val huntercoreReleaseJarName = "HunterCore-$huntercoreVersionLabel-MinecraftServer-$huntercoreMcVersion-$huntercoreReleaseChannel.jar"
+val huntercoreWebPanelZipName = "HunterCore-$huntercoreVersionLabel-WebPanel-$huntercoreMcVersion-$huntercoreReleaseChannel.zip"
 
 data class EmbeddedLibraryTrim(
     val embeddedPath: String,
@@ -245,13 +254,47 @@ tasks.register("printMinecraftVersion") {
     }
 }
 
+val huntercoreWebPanelSource = layout.projectDirectory.dir("huntercore-plugins/hunter-tools/src/main/resources/web-panel")
+val preparedHunterCoreWebPanel = layout.buildDirectory.dir("huntercore-web-panel")
+val huntercoreWebPanelReadme = """
+    HunterCore Web Panel
+
+    Deploy these files to any static web host. Open index.html and fill the backend URL, for example http://server.example.com:8088.
+    The backend-embedded panel at the server root keeps using backend mode and does not show this connection setup.
+""".trimIndent() + "\n"
+val prepareHunterCoreWebPanel by tasks.registering(Copy::class) {
+    group = "huntercore"
+    description = "Prepares the standalone HunterCore web panel assets."
+    into(preparedHunterCoreWebPanel)
+    from(huntercoreWebPanelSource.file("index.html")) {
+        filter { line: String -> line.replace("data-panel-mode=\"backend\"", "data-panel-mode=\"frontend\"") }
+    }
+    from(huntercoreWebPanelSource) {
+        include("app.css", "app.js", "panel-bg.jpg")
+        into("assets")
+    }
+    from(resources.text.fromString(huntercoreWebPanelReadme)) {
+        rename { "README.txt" }
+    }
+}
+
+tasks.register<Zip>("packageHunterCoreWebPanel") {
+    group = "huntercore"
+    description = "Packages the standalone HunterCore web panel for separated frontend deployments."
+    dependsOn(prepareHunterCoreWebPanel)
+    archiveFileName.set(huntercoreWebPanelZipName)
+    destinationDirectory.set(layout.buildDirectory.dir("huntercore-release"))
+    from(preparedHunterCoreWebPanel)
+}
+
 tasks.register("packageHunterCoreRelease") {
     group = "huntercore"
     description = "Builds the paperclip jar, trims bundled native libraries to common server platforms, and copies it to the HunterCore release naming scheme."
     dependsOn(":divinemc-server:createPaperclipJar")
     val serverLibs = layout.projectDirectory.dir("divinemc-server/build/libs")
     val releaseJar = layout.projectDirectory.file("divinemc-server/build/libs/$huntercoreReleaseJarName")
-    outputs.file(releaseJar)
+    val releaseAssetJar = layout.buildDirectory.file("huntercore-release/$huntercoreReleaseJarName")
+    outputs.files(releaseJar, releaseAssetJar)
     outputs.upToDateWhen { false }
 
     doLast {
@@ -301,6 +344,9 @@ tasks.register("packageHunterCoreRelease") {
         val temporaryOutput = output.resolveSibling("${output.name}.tmp")
         writeCommonNativePaperclip(sourceJar, temporaryOutput, trims)
         Files.move(temporaryOutput.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        val releaseAsset = releaseAssetJar.get().asFile
+        releaseAsset.parentFile.mkdirs()
+        Files.copy(output.toPath(), releaseAsset.toPath(), StandardCopyOption.REPLACE_EXISTING)
         val size = output.length()
         check(size < 100_000_000L) {
             "HunterCore release jar is ${"%.2f".format(size / 1_000_000.0)} MB, expected less than 100 MB"
