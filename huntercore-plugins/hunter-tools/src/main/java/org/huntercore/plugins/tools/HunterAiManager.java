@@ -46,6 +46,7 @@ final class HunterAiManager {
         .build();
     private final java.util.Map<String, Long> chatCooldowns = new ConcurrentHashMap<>();
     private final java.util.Map<String, Long> npcCooldowns = new ConcurrentHashMap<>();
+    private final java.util.Map<String, RecentAiLine> recentAiLines = new ConcurrentHashMap<>();
     private final Deque<ObservedChat> recentChat = new ArrayDeque<>();
     private Executor executor;
 
@@ -308,6 +309,9 @@ final class HunterAiManager {
                 .replace("%player%", playerName)
                 .replace("%name%", profile.displayName())
                 .replace("%response%", response.trim()));
+            if (this.repeatedAiLine("chat:" + profile.id(), response, 45_000L)) {
+                return;
+            }
             if (this.preferences.booleanValue("modules.ai.chat.broadcast", true)) {
                 for (final Player online : Bukkit.getOnlinePlayers()) {
                     this.sendLines(online, rendered);
@@ -316,6 +320,17 @@ final class HunterAiManager {
                 this.sendLines(player, rendered);
             }
         });
+    }
+
+    private boolean repeatedAiLine(final String key, final String message, final long windowMillis) {
+        final long now = System.currentTimeMillis();
+        this.recentAiLines.entrySet().removeIf(entry -> now - entry.getValue().createdAtMillis() > Math.max(windowMillis, 60_000L));
+        final String fingerprint = messageFingerprint(message);
+        if (fingerprint.isBlank()) {
+            return false;
+        }
+        final RecentAiLine previous = this.recentAiLines.put(key, new RecentAiLine(fingerprint, now));
+        return previous != null && previous.fingerprint().equals(fingerprint) && now - previous.createdAtMillis() <= windowMillis;
     }
 
     private void applyNpcResponse(final UUID playerId, final HunterActorManager.ActorInteraction actor, final String response) {
@@ -754,6 +769,16 @@ final class HunterAiManager {
         return message.toLowerCase(Locale.ROOT).contains(name.trim().toLowerCase(Locale.ROOT));
     }
 
+    private static String messageFingerprint(final String message) {
+        if (message == null) {
+            return "";
+        }
+        return ChatColor.stripColor(color(message))
+            .toLowerCase(Locale.ROOT)
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
     private static String color(final String text) {
         return ChatColor.translateAlternateColorCodes('&', text);
     }
@@ -780,5 +805,8 @@ final class HunterAiManager {
     }
 
     private record ChatInvocation(HunterToolsPreferences.AiChatProfile profile, String prompt, boolean cancelChat) {
+    }
+
+    private record RecentAiLine(String fingerprint, long createdAtMillis) {
     }
 }

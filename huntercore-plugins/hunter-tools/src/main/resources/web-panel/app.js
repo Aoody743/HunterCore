@@ -100,8 +100,18 @@ const FIELD_HELP = {
   aiFakePlayersIntervalSeconds: 'Seconds between autonomous fake-player AI turns.',
   aiFakePlayersMaxActions: 'Maximum bracketed actions applied from one AI response.',
   aiFakePlayersMaxMoveTicks: 'Maximum movement duration. 200 ticks is about 10 seconds.',
+  aiFakePlayersMaxActionTicks: 'Maximum duration for mining, attacking, using, and other repeated actions.',
+  aiFakePlayersNearbyRadiusBlocks: 'How far the AI can observe nearby blocks, players, and entities.',
   aiFakePlayersMaxPlaceDistanceBlocks: 'How far a fake player may place blocks from itself.',
+  aiFakePlayersAllowMovement: 'Allow AI actions such as move, goto, follow, jump, sneak, and sprint.',
+  aiFakePlayersAllowBreaking: 'Allow AI mining and block breaking actions.',
+  aiFakePlayersAllowPlacing: 'Allow AI block placement, building presets, and WorldEdit fill/clear actions.',
+  aiFakePlayersAllowInteraction: 'Allow AI right-click/use interactions.',
+  aiFakePlayersChatControlEnabled: 'When enabled, player chat mentioning a bot name or alias can assign that bot a task.',
   aiFakePlayersChatControlPrefix: 'Optional command prefix. Bot names also trigger directly.',
+  aiFakePlayersChatControlCooldownSeconds: 'Minimum seconds before the same player can assign another chat task.',
+  aiFakePlayersChatControlRequirePermission: 'Require the configured permission before chat can control AI bots.',
+  aiFakePlayersChatControlPermission: 'Permission node checked when chat control permission is required.',
   aiFakePlayersSystemPrompt: 'Advanced instruction for real fake player AI. Use action syntax only.'
 };
 const PAGES = ['map', 'overview', 'runtime', 'plugins', 'tools', ...ADMIN_PAGES];

@@ -282,11 +282,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (this.webPanelManager != null) {
             this.webPanelManager.observeChat(event.getPlayer(), event.getMessage());
         }
-        if (this.realFakePlayerManager != null && this.realFakePlayerManager.handleChatControl(event.getPlayer(), event.getMessage())) {
-            event.setCancelled(true);
-            return;
-        }
-        if (this.aiManager != null && this.aiManager.handleChat(event.getPlayer(), event.getMessage())) {
+        final boolean fakePlayerAiHandled = this.realFakePlayerManager != null
+            && this.realFakePlayerManager.handleChatControl(event.getPlayer(), event.getMessage());
+        if (!fakePlayerAiHandled && this.aiManager != null && this.aiManager.handleChat(event.getPlayer(), event.getMessage())) {
             event.setCancelled(true);
         }
     }

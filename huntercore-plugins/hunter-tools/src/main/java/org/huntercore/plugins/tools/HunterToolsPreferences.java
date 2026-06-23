@@ -512,12 +512,13 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.allow-placing", true);
         changed |= this.setDefault("modules.ai.fake-players.allow-interaction", true);
         changed |= this.setDefault("modules.ai.fake-players.max-place-distance-blocks", 6);
+        changed |= this.setDefault("modules.ai.fake-players.worldedit.max-volume-blocks", 8192);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.enabled", true);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.trigger-prefix", "@bot");
         changed |= this.setDefault("modules.ai.fake-players.chat-control.cooldown-seconds", 3);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.require-permission", false);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer");
-        changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines, no prose. Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=20,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=200,sprint=true], [follow:player=name,ticks=200,distance=2.5], [mine:ticks=40], [use], [attack], [jump], [sneak:on], [sprint:off], [equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_chestplate], [build-house], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. Do not reveal chain-of-thought. For a house use [build-house] first.");
+        changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines. Never write prose, reasoning, translations, summaries, or chain-of-thought. Available actions: [respawn], [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], [follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], [equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], [build-house], [build-cabin], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-wall], [build-platform], [clear-build], [we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], [we-undo:steps=1], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. If dead, use [respawn] first. Use at most one short [say:...] after useful actions.");
         changed |= this.setDefault("modules.ai.fake-players.high-risk-protection", true);
         changed |= this.setDefault("modules.ai.fake-players.high-risk-approval-window-seconds", 120);
         changed |= this.setDefault("modules.ai.adaptive-throttling.enabled", true);
@@ -640,7 +641,7 @@ final class HunterToolsPreferences {
 
     static List<String> realFakePlayerCommands() {
         return List.of(
-            "spawn", "remove", "list", "inv", "skin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack",
+            "spawn", "respawn", "remove", "list", "inv", "skin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack",
             "stop", "click", "drop", "dropstack", "swap", "gm", "gamemode", "slot", "ai", "info", "clear"
         );
     }

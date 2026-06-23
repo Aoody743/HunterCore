@@ -32,9 +32,10 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
@@ -66,9 +67,14 @@ final class HunterRealFakePlayerManager {
     private final Map<String, FakeAiProfile> aiProfiles = new HashMap<>();
     private final Map<String, BukkitTask> aiTasks = new HashMap<>();
     private final Map<String, String> aiLastActions = new HashMap<>();
+    private final Map<String, String> aiLastResponseFingerprints = new HashMap<>();
+    private final Map<String, RecentFakeAiLine> recentFakeAiLines = new HashMap<>();
     private final Map<String, PendingRiskApproval> pendingRiskApprovals = new HashMap<>();
     private final Map<String, Long> chatControlCooldowns = new HashMap<>();
+    private final Map<String, Long> recentChatTaskFingerprints = new HashMap<>();
     private final Map<String, List<BuildStep>> buildPlans = new HashMap<>();
+    private final Map<String, List<BuildStep>> activeBuildPlacements = new HashMap<>();
+    private final Map<String, Deque<List<BuildStep>>> buildHistory = new HashMap<>();
     private final List<String> aiBusy = new ArrayList<>();
     private final Deque<ObservedChat> recentChat = new ArrayDeque<>();
     private HunterAiManager aiManager;
@@ -96,6 +102,11 @@ final class HunterRealFakePlayerManager {
             this.service().removeAll();
         }
         this.clickCommands.clear();
+        this.recentChatTaskFingerprints.clear();
+        this.recentFakeAiLines.clear();
+        this.buildPlans.clear();
+        this.activeBuildPlacements.clear();
+        this.buildHistory.clear();
     }
 
     int liveCount() {
@@ -121,6 +132,7 @@ final class HunterRealFakePlayerManager {
         }
         return switch (sub) {
             case "spawn" -> this.spawn(sender, label, args);
+            case "respawn" -> this.respawn(sender, label, args);
             case "remove" -> this.remove(sender, label, args);
             case "list" -> this.list(sender);
             case "inv", "inventory" -> this.inventory(sender, label, args);
@@ -162,7 +174,7 @@ final class HunterRealFakePlayerManager {
             return matching(args[1], HunterToolsPreferences.realFakePlayerCommands());
         }
         if (args.length == 2 && List.of(
-            "remove", "inv", "inventory", "skin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack", "stop",
+            "respawn", "remove", "inv", "inventory", "skin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack", "stop",
             "click", "drop", "dropstack", "swap", "gm", "gamemode", "slot", "ai", "info"
         ).contains(sub)) {
             return matching(args[1], this.names());
@@ -212,6 +224,15 @@ final class HunterRealFakePlayerManager {
             return true;
         }
         this.send(sender, this.service().spawn(args[1], location));
+        return true;
+    }
+
+    private boolean respawn(final CommandSender sender, final String label, final String[] args) {
+        if (args.length != 2) {
+            sender.sendMessage("Usage: /" + label + " respawn <name>");
+            return true;
+        }
+        this.send(sender, this.service().respawn(args[1]));
         return true;
     }
 
@@ -483,6 +504,7 @@ final class HunterRealFakePlayerManager {
             case "once" -> {
                 final String goal = profile == null || profile.goal().isBlank() ? defaultFakeAiGoal(fake.name()) : profile.goal();
                 final boolean shortcutApplied = this.applyQuickGoalTask(fake, goal);
+                this.aiLastResponseFingerprints.remove(fake.id());
                 this.aiProfiles.put(fake.id(), new FakeAiProfile(
                     fake.id(),
                     fake.name(),
@@ -689,6 +711,7 @@ final class HunterRealFakePlayerManager {
         }
         final FakePlayerSnapshot fake = snapshot.get();
         final String cleanGoal = sanitizeGoal(goal);
+        this.aiLastResponseFingerprints.remove(fake.id());
         if (!enabled) {
             this.stopAi(fake.id());
             if (!cleanGoal.isBlank()) {
@@ -744,7 +767,7 @@ final class HunterRealFakePlayerManager {
             final String body = message.substring(prefix.length()).trim();
             final UUID playerId = player.getUniqueId();
             this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleChatControlMain(playerId, prefix, body));
-            return false;
+            return true;
         }
         final MentionedFakePlayer mentioned = this.mentionedFakePlayer(message);
         if (mentioned == null) {
@@ -753,7 +776,7 @@ final class HunterRealFakePlayerManager {
         final String body = mentioned.snapshot().name() + " " + mentioned.task();
         final UUID playerId = player.getUniqueId();
         this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleChatControlMain(playerId, mentioned.snapshot().name(), body));
-        return false;
+        return true;
     }
 
     private boolean isRealFakePlayer(final Player player) {
@@ -946,7 +969,20 @@ final class HunterRealFakePlayerManager {
     }
 
     private void assignChatTask(final Player player, final FakePlayerSnapshot fake, final String task) {
+        if (this.chatTaskRecentlyHandled(player, fake, task)) {
+            this.aiLastActions.put(fake.id(), "ignored duplicate chat task: " + truncatePlain(task, 80));
+            return;
+        }
         final Location location = player.getLocation();
+        final List<String> quickActions = new ArrayList<>();
+        final boolean shortcutApplied = this.applyQuickChatTask(player, fake, task, quickActions);
+        if (shortcutApplied && quickActions.isEmpty()) {
+            quickActions.add("one or more matching local quick actions");
+        }
+        final String quickLine = quickActions.isEmpty()
+            ? "Local quick executor: no local action was applied before model planning.\n"
+            : "Local quick executor already applied: " + String.join("; ", quickActions)
+                + ". Do not repeat those exact actions; only add useful higher-level follow-up actions.\n";
         final String goal = "Player " + player.getName() + " assigned this real fake player a chat task: " + sanitizeGoal(task) + "\n"
             + "Controller location: world=" + player.getWorld().getName()
             + " x=" + format(location.getX())
@@ -954,43 +990,66 @@ final class HunterRealFakePlayerManager {
             + " z=" + format(location.getZ())
             + " yaw=" + format(location.getYaw())
             + " pitch=" + format(location.getPitch()) + "\n"
+            + quickLine
             + "Recent chat:\n" + this.recentChatContext() + "\n"
             + "Behave like a cooperative Minecraft helper. For follow/come tasks use [follow:player=" + player.getName() + ",ticks=200]. "
             + "For travel tasks use [goto:x y z,ticks=200]. For mining or tool work, look at the target and use [mine:ticks=40] or [use]. "
-            + "For building use one preset action: [build-house], [build-tower], [build-bridge], [build-wall], or [build-platform]. "
+            + "For building use one preset action: [build-house], [build-cabin], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-wall], or [build-platform]. Use [clear-build] to dismantle the latest build. "
             + "For armor use all needed wear actions: [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots]. "
-            + "For combat use [look-at-player:player=name] then [attack:ticks=60], or attack nearby hostile mobs when requested. "
+            + "For combat use [attack-player:player=name,ticks=120] or [attack-nearest:ticks=120]. "
             + "Reply only with one short [say:...] after useful actions. Never explain reasoning. Stop if the task says stop.";
-        final boolean shortcutApplied = this.applyQuickChatTask(player, fake, task);
-        final int turns = isBuildRequest(task) ? 8 : shortcutApplied ? 2 : 4;
+        final int turns = 1;
+        this.aiLastResponseFingerprints.remove(fake.id());
         this.aiProfiles.put(fake.id(), new FakeAiProfile(
             fake.id(),
             fake.name(),
-            !shortcutApplied,
+            true,
             goal,
             player.getUniqueId(),
             player.getName(),
             0L,
-            shortcutApplied ? 0 : turns
+            turns
         ));
-        if (!shortcutApplied) {
-            this.startAiLoop(fake.id());
-            this.requestAi(fake.id(), true);
-        }
+        this.startAiLoop(fake.id());
+        this.requestAi(fake.id(), true);
         this.aiLastActions.put(fake.id(), "assigned by " + player.getName() + ": " + truncatePlain(task, 80));
-        this.aiSay(fake.name(), "OK.");
+    }
+
+    private boolean chatTaskRecentlyHandled(final Player player, final FakePlayerSnapshot fake, final String task) {
+        final long now = System.currentTimeMillis();
+        this.recentChatTaskFingerprints.entrySet().removeIf(entry -> now - entry.getValue() > 30_000L);
+        final String fingerprint = player.getUniqueId()
+            + ":" + fake.id()
+            + ":" + HunterToolsPreferences.normalize(task == null ? "" : task).replaceAll("\\s+", " ").trim();
+        final Long previous = this.recentChatTaskFingerprints.put(fingerprint, now);
+        return previous != null && now - previous < 15_000L;
     }
 
     private boolean applyQuickGoalTask(final FakePlayerSnapshot fake, final String task) {
         final String lower = task == null ? "" : task.toLowerCase(Locale.ROOT);
         final String normalized = HunterToolsPreferences.normalize(task == null ? "" : task);
         boolean applied = false;
+        if (isObservationOnlyRequest(lower, normalized)) {
+            return false;
+        }
         if (hasAny(lower, normalized, "stop", "halt", "cancel", "停止", "停下", "别动", "不要动")) {
             this.stopLoops(fake.name());
             this.service().stopActions(fake.name());
             return true;
         }
+        if (isRespawnRequest(lower, normalized)) {
+            this.service().respawn(fake.name());
+            applied = true;
+        }
+        if (isBuildClearRequest(lower, normalized)) {
+            this.aiClearBuild(fake.name());
+            return true;
+        }
         final Player targetPlayer = this.quickTargetPlayer(task, null, fake.uuid());
+        if (targetPlayer != null && isComeRequest(lower, normalized)) {
+            this.startFollowLoop(fake.name(), targetPlayer.getUniqueId(), 260, 2.4D, true);
+            applied = true;
+        }
         if (targetPlayer != null && hasAny(lower, normalized, "come", "follow", "go to", "walk to", "move to", "approach", "find", "跟着", "跟随", "过来", "来我", "到我", "靠近", "走向", "走到", "去找", "过去", "接近")) {
             this.startFollowLoop(fake.name(), targetPlayer.getUniqueId(), 260, 2.4D, true);
             applied = true;
@@ -1006,7 +1065,7 @@ final class HunterRealFakePlayerManager {
             }
             applied = true;
         }
-        if (hasAny(lower, normalized, "armor", "armour", "wear", "穿甲", "穿戴", "护甲", "盔甲", "铠甲", "穿上")) {
+        if (hasAny(lower, normalized, "armor", "armour", "wear", "穿甲", "穿戴", "护甲", "盔甲", "铠甲", "穿上") || isArmorRequest(lower, normalized)) {
             final String tier = armorTier(lower, normalized);
             this.aiWear(fake.name(), "material=" + tier + "_helmet");
             this.aiWear(fake.name(), "material=" + tier + "_chestplate");
@@ -1020,22 +1079,47 @@ final class HunterRealFakePlayerManager {
             applied = true;
         }
         if (isBuildRequest(task)) {
-            this.startBuildPreset(fake.name(), fake.location(), buildKind(task));
+            this.startBuildPreset(fake.name(), fake.location(), buildKindClean(task));
+            applied = true;
+        }
+        if (isCombatRequest(lower, normalized)) {
+            final Entity target = nearestCombatTarget(fake, "target=hostile");
+            if (target != null) {
+                this.startCombatLoop(fake.name(), target.getUniqueId(), 180, true);
+            } else {
+                this.startTimedActionLoop(fake.name(), "attack", 60);
+            }
             applied = true;
         }
         return applied;
     }
 
-    private boolean applyQuickChatTask(final Player controller, final FakePlayerSnapshot fake, final String task) {
+    private boolean applyQuickChatTask(final Player controller, final FakePlayerSnapshot fake, final String task, final List<String> quickActions) {
         final String lower = task == null ? "" : task.toLowerCase(Locale.ROOT);
         final String normalized = HunterToolsPreferences.normalize(task == null ? "" : task);
         boolean applied = false;
+        if (isObservationOnlyRequest(lower, normalized)) {
+            return false;
+        }
         if (hasAny(lower, normalized, "stop", "halt", "cancel", "停止", "停下", "别动", "不要动")) {
             this.stopLoops(fake.name());
             this.service().stopActions(fake.name());
             return true;
         }
+        if (isRespawnRequest(lower, normalized)) {
+            this.service().respawn(fake.name());
+            applied = true;
+        }
+        if (isBuildClearRequest(lower, normalized)) {
+            this.aiClearBuild(fake.name());
+            quickActions.add("cleared latest recorded build");
+            return true;
+        }
         final Player targetPlayer = this.quickTargetPlayer(task, controller, fake.uuid());
+        if (targetPlayer != null && isComeRequest(lower, normalized)) {
+            this.startFollowLoop(fake.name(), targetPlayer.getUniqueId(), 260, 2.4D, true);
+            applied = true;
+        }
         if (targetPlayer != null && hasAny(lower, normalized, "come", "follow", "go to", "walk to", "move to", "approach", "find", "跟着", "跟随", "过来", "来我", "到我", "靠近", "走向", "走到", "去找", "过去", "接近")) {
             this.startFollowLoop(fake.name(), targetPlayer.getUniqueId(), 260, 2.4D, true);
             applied = true;
@@ -1059,7 +1143,7 @@ final class HunterRealFakePlayerManager {
             this.startMoveLoop(fake.name(), new MovePlan(1.0D, 0.0D, 60, false, true, false));
             applied = true;
         }
-        if (hasAny(lower, normalized, "armor", "armour", "wear", "穿甲", "穿戴", "护甲", "盔甲", "铠甲", "穿上")) {
+        if (hasAny(lower, normalized, "armor", "armour", "wear", "穿甲", "穿戴", "护甲", "盔甲", "铠甲", "穿上") || isArmorRequest(lower, normalized)) {
             final String tier = armorTier(lower, normalized);
             this.aiWear(fake.name(), "material=" + tier + "_helmet");
             this.aiWear(fake.name(), "material=" + tier + "_chestplate");
@@ -1073,14 +1157,20 @@ final class HunterRealFakePlayerManager {
             applied = true;
         }
         if (isBuildRequest(task)) {
-            this.startBuildPreset(fake.name(), controller.getLocation(), buildKind(task));
+            this.startBuildPreset(fake.name(), controller.getLocation(), buildKindClean(task));
             applied = true;
         }
-        if (hasAny(lower, normalized, "attack", "fight", "hit", "kill", "攻击", "打", "揍")) {
-            if (hasAny(lower, normalized, "me", "我", controller.getName().toLowerCase(Locale.ROOT))) {
-                this.aiLookAtPlayer(fake.name(), "player=" + controller.getName());
+        if (isCombatRequest(lower, normalized) || hasAny(lower, normalized, "attack", "fight", "hit", "kill", "攻击", "打", "揍")) {
+            if (targetPlayer != null && hasAny(lower, normalized, targetPlayer.getName().toLowerCase(Locale.ROOT), "me", "我", "玩家")) {
+                this.startCombatLoop(fake.name(), targetPlayer.getUniqueId(), 120, true);
+            } else {
+                final Entity target = nearestCombatTarget(fake, "target=hostile");
+                if (target != null) {
+                    this.startCombatLoop(fake.name(), target.getUniqueId(), 120, true);
+                } else {
+                    this.startTimedActionLoop(fake.name(), "attack", 60);
+                }
             }
-            this.startTimedActionLoop(fake.name(), "attack", 60);
             applied = true;
         }
         return applied;
@@ -1103,6 +1193,66 @@ final class HunterRealFakePlayerManager {
             }
         }
         return fallback;
+    }
+
+    private @Nullable Entity nearestCombatTarget(final FakePlayerSnapshot fake, final String args) {
+        final Location location = fake.location();
+        final World world = location.getWorld();
+        if (world == null) {
+            return null;
+        }
+        final double radius = clamp(doubleArg(args, "radius", 8.0D), 2.0D, 24.0D);
+        final String wanted = HunterToolsPreferences.normalize(firstNonBlank(
+            valueFor(args, "target"),
+            valueFor(args, "name"),
+            valueFor(args, "type"),
+            firstValue(args)
+        ));
+        Entity best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (final Entity entity : world.getNearbyEntities(location, radius, radius, radius)) {
+            if (!(entity instanceof final LivingEntity living) || living.isDead()) {
+                continue;
+            }
+            if (entity.getUniqueId().equals(fake.uuid()) || this.isFakePlayerUuid(entity.getUniqueId())) {
+                continue;
+            }
+            if (!wanted.isBlank() && !combatTargetMatches(entity, wanted)) {
+                continue;
+            }
+            double score = entity.getLocation().distanceSquared(location);
+            if (entity instanceof org.bukkit.entity.Monster) {
+                score -= 16.0D;
+            }
+            if (score < bestScore) {
+                best = entity;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private static boolean combatTargetMatches(final Entity entity, final String wanted) {
+        if (wanted.isBlank() || wanted.equals("nearest") || wanted.equals("any") || wanted.equals("target")) {
+            return true;
+        }
+        if (wanted.equals("player")) {
+            return entity instanceof Player;
+        }
+        if (wanted.equals("mob") || wanted.equals("monster") || wanted.equals("hostile")) {
+            return !(entity instanceof Player);
+        }
+        return HunterToolsPreferences.normalize(entity.getName()).contains(wanted)
+            || HunterToolsPreferences.normalize(entity.getType().key().value()).contains(wanted);
+    }
+
+    private boolean isFakePlayerUuid(final UUID uuid) {
+        for (final FakePlayerSnapshot snapshot : this.service().list()) {
+            if (snapshot.uuid().equals(uuid)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String recentChatContext() {
@@ -1174,7 +1324,7 @@ final class HunterRealFakePlayerManager {
             return;
         }
         final FakePlayerSnapshot fake = snapshot.get();
-        final String system = this.preferences.stringValue("modules.ai.fake-players.system-prompt", defaultFakeAiPrompt());
+        final String system = this.fakeAiSystemPrompt();
         final String prompt = this.fakeAiContext(profile, fake);
         this.aiBusy.add(key);
         this.aiLastActions.put(key, "thinking");
@@ -1186,9 +1336,16 @@ final class HunterRealFakePlayerManager {
                     this.plugin.getLogger().warning("HunterCore fake player AI failed for " + fake.name() + ": " + cleanError(error));
                     return;
                 }
+                final String responseFingerprint = responseFingerprint(response);
+                if (!responseFingerprint.isBlank() && responseFingerprint.equals(this.aiLastResponseFingerprints.get(key))) {
+                    this.aiLastActions.put(key, "ignored repeated AI plan");
+                    this.stopAiTask(key);
+                    return;
+                }
+                this.aiLastResponseFingerprints.put(key, responseFingerprint);
                 this.applyAiPlan(fake.name(), response);
                 final FakeAiProfile current = this.aiProfiles.get(key);
-                if (!manual && current != null && current.remainingTurns() > 0) {
+                if (current != null && current.remainingTurns() > 0) {
                     final int remaining = current.remainingTurns() - 1;
                     this.aiProfiles.put(key, new FakeAiProfile(
                         current.id(), current.name(), remaining > 0, current.goal(),
@@ -1208,6 +1365,19 @@ final class HunterRealFakePlayerManager {
             return base;
         }
         return Math.max(base, this.plugin.metricsSnapshot().adaptiveBudget().fakePlayerIntervalSeconds());
+    }
+
+    private String fakeAiSystemPrompt() {
+        final String configured = this.preferences.stringValue("modules.ai.fake-players.system-prompt", "").trim();
+        if (configured.isBlank()) {
+            return defaultFakeAiPrompt();
+        }
+        final String normalized = HunterToolsPreferences.normalize(configured);
+        if (normalized.startsWith("you control a huntercore real fake player")
+            && (!normalized.contains("respawn") || !normalized.contains("attack-player") || !normalized.contains("clear-build") || !normalized.contains("we-fill"))) {
+            return defaultFakeAiPrompt();
+        }
+        return configured;
     }
 
     private String fakeAiContext(final FakeAiProfile profile, final FakePlayerSnapshot snapshot) {
@@ -1234,6 +1404,20 @@ final class HunterRealFakePlayerManager {
                 .append(" saturation=").append(format(liveFakePlayer.getSaturation()))
                 .append(" fireTicks=").append(liveFakePlayer.getFireTicks())
                 .append(" fallDistance=").append(format(liveFakePlayer.getFallDistance()))
+                .append(" dead=").append(liveFakePlayer.isDead() || liveFakePlayer.getHealth() <= 0.0D)
+                .append('\n');
+            if (liveFakePlayer.isDead() || liveFakePlayer.getHealth() <= 0.0D) {
+                context.append("Critical: you are dead. Use [respawn] before movement, combat, building, items, or chat.\n");
+            }
+            context.append("Armor:");
+            final ItemStack helmet = liveFakePlayer.getInventory().getHelmet();
+            final ItemStack chestplate = liveFakePlayer.getInventory().getChestplate();
+            final ItemStack leggings = liveFakePlayer.getInventory().getLeggings();
+            final ItemStack boots = liveFakePlayer.getInventory().getBoots();
+            context.append(" head=").append(itemLine(helmet))
+                .append(" chest=").append(itemLine(chestplate))
+                .append(" legs=").append(itemLine(leggings))
+                .append(" feet=").append(itemLine(boots))
                 .append('\n');
             context.append("Hotbar:");
             for (int slot = 0; slot < 9; slot++) {
@@ -1251,6 +1435,26 @@ final class HunterRealFakePlayerManager {
                     context.append("(selected)");
                 }
                 context.append(';');
+            }
+            context.append('\n');
+            context.append("Inventory:");
+            int inventoryCount = 0;
+            for (int slot = 9; slot < liveFakePlayer.getInventory().getSize() && inventoryCount < 16; slot++) {
+                final ItemStack item = liveFakePlayer.getInventory().getItem(slot);
+                if (item == null || item.getType().isAir()) {
+                    continue;
+                }
+                context.append(' ')
+                    .append(slot)
+                    .append('=')
+                    .append(item.getType().key().value())
+                    .append('x')
+                    .append(item.getAmount())
+                    .append(';');
+                inventoryCount++;
+            }
+            if (inventoryCount == 0) {
+                context.append(" empty");
             }
             context.append('\n');
         }
@@ -1287,6 +1491,9 @@ final class HunterRealFakePlayerManager {
             direction.normalize();
             context.append("Front: ").append(blockLine(location.clone().add(direction).getBlock())).append('\n');
         }
+        context.append("WorldEdit anchor guide: use relative dx/dy/dz from your feet. Suggested build space starts at front-left/right around dx=0..8, dy=0..6, dz=2..10; keep one operation within ")
+            .append(Math.max(1, this.preferences.intValue("modules.ai.fake-players.worldedit.max-volume-blocks", 8192)))
+            .append(" blocks.\n");
 
         context.append("Nearby blocks:");
         int blockCount = 0;
@@ -1355,7 +1562,9 @@ final class HunterRealFakePlayerManager {
             context.append(" none");
         }
         context.append('\n');
-        context.append("Return only bracketed action lines. No prose, no reasoning, no analysis. Execute quickly: prefer 1-3 useful actions. Use [goto:x y z,ticks=240,sprint=true] or [follow:player=name,ticks=260,distance=2.4] for movement. Use [move:forward=1,ticks=60,sprint=true], [sneak:on], [sneak:off], [jump]. For combat use [look-at-player:player=name] then [attack:ticks=60]. For building use one preset: house/home/cabin => [build-house], tower => [build-tower], bridge => [build-bridge], wall => [build-wall], platform/floor => [build-platform]. For armor output every needed armor piece: [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots]. For items use [equip:slot=1,material=oak_planks,amount=64]. Use [say:OK.] only after actions, never for thinking. ")
+        context.append("Recent chat visible to you:\n").append(this.recentChatContext()).append('\n');
+        context.append("Last action result: ").append(this.aiLastActions.getOrDefault(snapshot.id(), "none")).append('\n');
+        context.append("Return only bracketed action lines. No prose, no reasoning, no analysis. Execute quickly: prefer 1-4 useful actions. If dead, first use [respawn]. Use [goto:x y z,ticks=240,sprint=true] or [follow:player=name,ticks=260,distance=2.4] for movement. Use [move:forward=1,ticks=60,sprint=true], [sneak:on], [sneak:off], [jump]. For combat use [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], or [look-at-player:player=name] then [attack:ticks=60]. For building use one preset: house/home => [build-house], cabin/hut/cottage => [build-cabin], bunker => [build-bunker], farm => [build-farm], stairs => [build-stairs], tower => [build-tower], bridge => [build-bridge], wall => [build-wall], platform/floor => [build-platform]. Use [clear-build] to dismantle your latest preset build. For HunterCore bundled WorldEdit, choose anchors from observed blocks or relative offsets and use [we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], or [we-undo:steps=1]. WorldEdit commands are executed with temporary permission and can be undone. For armor output every needed armor piece: [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots]. For items use [equip:slot=1,material=oak_planks,amount=64]. Use [say:OK.] only once after useful actions, never for thinking. ")
             .append("For temporary world settings use [gamerule:name=value,duration=60s], [weather:clear,duration=120s], [time:day,duration=60s], or [difficulty:peaceful,duration=120s]. ")
             .append("For temporary gameplay logic use reviewed declarative rules, never arbitrary code: ")
             .append("[rule:trigger=sneak,action=give,material=stone,amount=16,cooldown=3,duration=120s], ")
@@ -1470,12 +1679,19 @@ final class HunterRealFakePlayerManager {
             .trim();
     }
 
+    private static String responseFingerprint(final String response) {
+        return HunterToolsPreferences.normalize(stripCodeFences(response))
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
     private String applyAiAction(final String name, final String action, final String args) {
         final String blocked = this.guardHighRiskAction(name, action);
         if (!blocked.isBlank()) {
             return blocked;
         }
         return switch (action) {
+            case "respawn", "revive" -> resultLine(this.service().respawn(name));
             case "look" -> this.aiLook(name, args);
             case "look-at", "lookat" -> this.aiLookAt(name, args);
             case "turn", "rotate" -> this.aiTurn(name, args);
@@ -1485,9 +1701,12 @@ final class HunterRealFakePlayerManager {
             case "follow" -> this.aiFollow(name, args);
             case "mine", "dig", "break" -> this.aiTimedAction(name, "attack", args, "mine", true);
             case "attack", "left-click", "leftclick" -> this.aiTimedAction(name, "attack", args, "attack", true);
+            case "attack-player", "attackplayer", "fight-player", "fightplayer" -> this.aiAttackPlayer(name, args);
+            case "attack-nearest", "attacknearest", "fight", "combat" -> this.aiAttackNearest(name, args);
             case "use", "right-click", "rightclick", "interact" -> this.aiTimedAction(name, "use", args, "use", false);
             case "place", "place-block", "placeblock" -> this.aiPlace(name, args);
-            case "build", "build-house", "house", "hut", "build-tower", "tower", "build-bridge", "bridge", "build-wall", "wall", "build-platform", "platform" -> this.aiBuildPreset(name, action, args);
+            case "build", "build-house", "house", "home", "build-cabin", "cabin", "hut", "cottage", "build-bunker", "bunker", "build-farm", "farm", "build-stairs", "stairs", "build-tower", "tower", "build-bridge", "bridge", "build-wall", "wall", "build-platform", "platform" -> this.aiBuildPreset(name, action, args);
+            case "clear-build", "clearbuild", "remove-build", "removebuild", "demolish", "dismantle" -> this.aiClearBuild(name);
             case "equip", "item", "give-item", "material" -> this.aiEquip(name, args);
             case "wear", "armor", "armour", "put-on" -> this.aiWear(name, args);
             case "rule", "gameplay-rule", "temporary-rule", "temp-rule" -> this.gameplayRuleManager.applyAiRule(args);
@@ -1496,6 +1715,9 @@ final class HunterRealFakePlayerManager {
             case "weather" -> this.aiWeather(name, args);
             case "time", "set-time" -> this.aiTime(name, args);
             case "difficulty", "diff" -> this.aiDifficulty(name, args);
+            case "we-fill", "worldedit-fill", "world-edit-fill", "we-set", "worldedit-set" -> this.aiWorldEditFill(name, args, false);
+            case "we-clear", "worldedit-clear", "world-edit-clear" -> this.aiWorldEditFill(name, args, true);
+            case "we-undo", "worldedit-undo", "world-edit-undo", "undo-worldedit" -> this.aiWorldEditUndo(name, args);
             case "say", "chat" -> this.aiSay(name, args);
             case "wait", "pause" -> "wait " + Math.max(1, intArg(args, "ticks", 20)) + " ticks";
             case "jump" -> resultLine(this.service().jump(name));
@@ -1551,7 +1773,8 @@ final class HunterRealFakePlayerManager {
     private @Nullable HighRiskAction detectHighRiskAction(final String name, final String action) {
         if (!(action.equals("use") || action.equals("right-click") || action.equals("rightclick") || action.equals("interact")
             || action.equals("place") || action.equals("place-block") || action.equals("placeblock") || action.equals("build")
-            || action.equals("attack") || action.equals("left-click") || action.equals("leftclick")
+            || action.equals("attack") || action.equals("attack-player") || action.equals("attackplayer") || action.equals("attack-nearest") || action.equals("attacknearest")
+            || action.equals("fight") || action.equals("combat") || action.equals("left-click") || action.equals("leftclick")
             || action.equals("mine") || action.equals("dig") || action.equals("break"))) {
             return null;
         }
@@ -1713,6 +1936,40 @@ final class HunterRealFakePlayerManager {
         return label + " " + ticks + " ticks";
     }
 
+    private String aiAttackPlayer(final String name, final String args) {
+        final var snapshot = this.service().snapshot(name);
+        final Player target = playerArg(args, snapshot.map(FakePlayerSnapshot::location).orElse(null));
+        if (snapshot.isEmpty() || target == null) {
+            return "";
+        }
+        if (target.getUniqueId().equals(snapshot.get().uuid())) {
+            return "attack failed: target is self";
+        }
+        final int ticks = Math.max(20, Math.min(
+            Math.max(80, this.preferences.intValue("modules.ai.fake-players.max-action-ticks", 80) * 3),
+            intArg(args, "ticks", 120)
+        ));
+        this.startCombatLoop(name, target.getUniqueId(), ticks, true);
+        return "attack player " + target.getName();
+    }
+
+    private String aiAttackNearest(final String name, final String args) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return "";
+        }
+        final Entity target = nearestCombatTarget(snapshot.get(), args);
+        if (target == null) {
+            return "attack failed: no nearby target";
+        }
+        final int ticks = Math.max(20, Math.min(
+            Math.max(80, this.preferences.intValue("modules.ai.fake-players.max-action-ticks", 80) * 3),
+            intArg(args, "ticks", 120)
+        ));
+        this.startCombatLoop(name, target.getUniqueId(), ticks, true);
+        return "attack nearest " + target.getName();
+    }
+
     private String aiPlace(final String name, final String args) {
         if (!this.preferences.booleanValue("modules.ai.fake-players.allow-placing", true)) {
             return "placing disabled";
@@ -1872,6 +2129,67 @@ final class HunterRealFakePlayerManager {
         return "difficulty " + difficulty.name().toLowerCase(Locale.ROOT) + (seconds > 0 ? " for " + seconds + "s" : "");
     }
 
+    private String aiWorldEditFill(final String name, final String args, final boolean clear) {
+        if (!this.preferences.booleanValue("modules.ai.fake-players.allow-placing", true)) {
+            return "worldedit disabled: placing disabled";
+        }
+        if (Bukkit.getPluginManager().getPlugin("WorldEdit") == null) {
+            return "worldedit unavailable";
+        }
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return "";
+        }
+        final Player player = Bukkit.getPlayer(snapshot.get().uuid());
+        if (player == null) {
+            return "worldedit failed: fake player is not online";
+        }
+        final WorldEditRegion region = worldEditRegion(snapshot.get(), args);
+        if (region == null) {
+            return "worldedit failed: missing region anchors";
+        }
+        final int maxVolume = Math.max(1, this.preferences.intValue("modules.ai.fake-players.worldedit.max-volume-blocks", 8192));
+        if (region.volume() > maxVolume) {
+            return "worldedit blocked: region volume " + region.volume() + " exceeds " + maxVolume;
+        }
+        final Material material = clear ? Material.AIR : materialArg(args);
+        if (material == null || (!clear && !material.isBlock())) {
+            return "worldedit failed: unknown block material";
+        }
+        if (!clear && this.preferences.booleanValue("modules.ai.fake-players.high-risk-protection", true) && HIGH_RISK_MATERIALS.contains(material)) {
+            return "worldedit blocked: high-risk material " + material.key().value();
+        }
+        final String pattern = clear ? "air" : material.key().value();
+        final boolean ok = this.runPrivilegedWorldEdit(player, List.of(
+            "/pos1 " + blockCoords(region.first()),
+            "/pos2 " + blockCoords(region.second()),
+            "/set " + pattern
+        ));
+        return ok
+            ? "worldedit " + (clear ? "cleared" : "set " + pattern) + " volume=" + region.volume()
+            : "worldedit command failed";
+    }
+
+    private String aiWorldEditUndo(final String name, final String args) {
+        if (Bukkit.getPluginManager().getPlugin("WorldEdit") == null) {
+            return "worldedit unavailable";
+        }
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return "";
+        }
+        final Player player = Bukkit.getPlayer(snapshot.get().uuid());
+        if (player == null) {
+            return "worldedit undo failed: fake player is not online";
+        }
+        final int steps = Math.max(1, Math.min(10, intArg(args, "steps", intArg(args, "count", 1))));
+        boolean ok = true;
+        for (int i = 0; i < steps; i++) {
+            ok &= this.runPrivilegedWorldEdit(player, List.of("/undo"));
+        }
+        return ok ? "worldedit undo " + steps : "worldedit undo command failed";
+    }
+
     private String aiSlot(final String name, final String args) {
         final int slot = intArg(args, "slot", -1);
         if (slot < 1 || slot > 9) {
@@ -1921,22 +2239,33 @@ final class HunterRealFakePlayerManager {
         if (material == null || !material.isItem()) {
             return "wear failed: unknown armor material";
         }
-        final PlayerInventory inventory = player.getInventory();
-        final ItemStack stack = new ItemStack(material, 1);
         final String type = material.name().toLowerCase(Locale.ROOT);
-        if (type.endsWith("_helmet") || type.equals("turtle_helmet") || type.equals("carved_pumpkin")) {
-            inventory.setHelmet(stack);
-        } else if (type.endsWith("_chestplate") || type.equals("elytra")) {
-            inventory.setChestplate(stack);
-        } else if (type.endsWith("_leggings")) {
-            inventory.setLeggings(stack);
-        } else if (type.endsWith("_boots")) {
-            inventory.setBoots(stack);
-        } else {
+        if (!(type.endsWith("_helmet") || type.equals("turtle_helmet") || type.equals("carved_pumpkin")
+            || type.endsWith("_chestplate") || type.equals("elytra") || type.endsWith("_leggings") || type.endsWith("_boots"))) {
             return "wear failed: " + material.key().value() + " is not armor";
         }
-        player.updateInventory();
-        return "wearing " + material.key().value();
+        final int inventorySlot = firstInventorySlot(player, material);
+        final FakePlayerActionResult result = this.service().equipArmor(name, new ItemStack(material, 1));
+        if (result.success() && inventorySlot >= 0) {
+            final ItemStack existing = player.getInventory().getItem(inventorySlot);
+            if (existing != null && existing.getType() == material) {
+                final int nextAmount = existing.getAmount() - 1;
+                player.getInventory().setItem(inventorySlot, nextAmount <= 0 ? null : new ItemStack(material, nextAmount));
+                player.updateInventory();
+            }
+        }
+        return resultLine(result);
+    }
+
+    private static int firstInventorySlot(final Player player, final Material material) {
+        final ItemStack[] contents = player.getInventory().getStorageContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            final ItemStack item = contents[slot];
+            if (item != null && item.getType() == material && item.getAmount() > 0) {
+                return slot;
+            }
+        }
+        return -1;
     }
 
     private String aiBuildPreset(final String name, final String action, final String args) {
@@ -1951,11 +2280,42 @@ final class HunterRealFakePlayerManager {
                 case "build-bridge", "bridge" -> "bridge";
                 case "build-wall", "wall" -> "wall";
                 case "build-platform", "platform" -> "platform";
+                case "build-cabin", "cabin", "hut", "cottage" -> "cabin";
+                case "build-bunker", "bunker" -> "bunker";
+                case "build-farm", "farm" -> "farm";
+                case "build-stairs", "stairs" -> "stairs";
                 default -> "house";
             };
         }
         this.startBuildPreset(name, snapshot.get().location(), HunterToolsPreferences.normalize(kind));
         return "building " + HunterToolsPreferences.normalize(kind);
+    }
+
+    private String aiClearBuild(final String name) {
+        this.stopLoop(name, "build");
+        this.buildPlans.remove(playerId(name));
+        final List<BuildStep> active = this.activeBuildPlacements.remove(playerId(name));
+        final List<BuildStep> target;
+        if (active != null && !active.isEmpty()) {
+            target = active;
+        } else {
+            final Deque<List<BuildStep>> history = this.buildHistory.get(playerId(name));
+            target = history == null || history.isEmpty() ? List.of() : history.removeLast();
+        }
+        if (target.isEmpty()) {
+            return "clear-build skipped: no recorded build";
+        }
+        int cleared = 0;
+        for (int i = target.size() - 1; i >= 0; i--) {
+            final BuildStep step = target.get(i);
+            final Block block = step.location().getBlock();
+            if (block.getType() == step.material()) {
+                block.setType(Material.AIR, false);
+                cleared++;
+            }
+        }
+        this.aiLastActions.put(playerId(name), "cleared build " + cleared + "/" + target.size());
+        return "cleared latest build " + cleared + "/" + target.size();
     }
 
     private String aiSay(final String name, final String args) {
@@ -1970,8 +2330,23 @@ final class HunterRealFakePlayerManager {
         if (looksLikeAiMetaText(message)) {
             return "blocked AI meta chat";
         }
+        if (this.repeatedFakeAiLine(snapshot.get().id(), message, 45_000L)) {
+            return "suppressed duplicate say";
+        }
         Bukkit.broadcastMessage("<" + snapshot.get().name() + "> " + message);
         return "say";
+    }
+
+    private boolean repeatedFakeAiLine(final String id, final String message, final long windowMillis) {
+        final long now = System.currentTimeMillis();
+        this.recentFakeAiLines.entrySet().removeIf(entry -> now - entry.getValue().createdAtMillis() > Math.max(windowMillis, 60_000L));
+        final String fingerprint = messageFingerprint(message);
+        if (fingerprint.isBlank()) {
+            return false;
+        }
+        final String key = playerId(id);
+        final RecentFakeAiLine previous = this.recentFakeAiLines.put(key, new RecentFakeAiLine(fingerprint, now));
+        return previous != null && previous.fingerprint().equals(fingerprint) && now - previous.createdAtMillis() <= windowMillis;
     }
 
     private void startHouseBuild(final String name, final Location origin) {
@@ -1983,17 +2358,20 @@ final class HunterRealFakePlayerManager {
             return;
         }
         this.stopLoop(name, "build");
+        this.finishActiveBuild(name);
         final List<BuildStep> steps = buildPresetPlan(origin, kind);
         if (steps.isEmpty()) {
             return;
         }
         this.buildPlans.put(playerId(name), steps);
+        this.activeBuildPlacements.put(playerId(name), new ArrayList<>());
         final int[] index = {0};
         final BukkitTask task = this.plugin.getServer().getScheduler().runTaskTimer(this.plugin, () -> {
             final var snapshot = this.service().snapshot(name);
             if (snapshot.isEmpty() || index[0] >= steps.size()) {
                 this.stopLoop(name, "build");
                 this.buildPlans.remove(playerId(name));
+                this.finishActiveBuild(name);
                 return;
             }
             int placed = 0;
@@ -2002,6 +2380,7 @@ final class HunterRealFakePlayerManager {
                 final Block block = step.location().getBlock();
                 if (block.getType().isAir() || block.isPassable()) {
                     block.setType(step.material(), false);
+                    this.activeBuildPlacements.computeIfAbsent(playerId(name), ignored -> new ArrayList<>()).add(step);
                     placed++;
                     final Location fakeLocation = snapshot.get().location();
                     final float[] rotation = rotationTo(fakeLocation, block.getX() + 0.5D, block.getY() + 0.5D, block.getZ() + 0.5D);
@@ -2011,6 +2390,18 @@ final class HunterRealFakePlayerManager {
             this.aiLastActions.put(playerId(name), "building " + kind + " " + index[0] + "/" + steps.size());
         }, 1L, 2L);
         this.loops.put(loopKey(name, "build"), task);
+    }
+
+    private void finishActiveBuild(final String name) {
+        final List<BuildStep> placed = this.activeBuildPlacements.remove(playerId(name));
+        if (placed == null || placed.isEmpty()) {
+            return;
+        }
+        final Deque<List<BuildStep>> history = this.buildHistory.computeIfAbsent(playerId(name), ignored -> new ArrayDeque<>());
+        history.addLast(new ArrayList<>(placed));
+        while (history.size() > 16) {
+            history.removeFirst();
+        }
     }
 
     private void startLoop(final CommandSender sender, final String name, final String action) {
@@ -2116,6 +2507,43 @@ final class HunterRealFakePlayerManager {
         this.loops.put(loopKey(name, "follow"), task);
     }
 
+    private void startCombatLoop(final String name, final UUID targetId, final int ticks, final boolean chase) {
+        this.stopLoop(name, "combat");
+        final int[] remaining = {Math.max(1, ticks)};
+        final BukkitTask task = this.plugin.getServer().getScheduler().runTaskTimer(this.plugin, () -> {
+            final Entity target = Bukkit.getEntity(targetId);
+            final var snapshot = this.service().snapshot(name);
+            if (!(target instanceof final LivingEntity livingTarget) || livingTarget.isDead() || snapshot.isEmpty()) {
+                this.stopLoop(name, "combat");
+                this.service().move(name, 0.0D, 0.0D, false, false, false);
+                return;
+            }
+            final Location location = snapshot.get().location();
+            final Location targetLocation = target.getLocation();
+            if (location.getWorld() == null || targetLocation.getWorld() == null || !location.getWorld().equals(targetLocation.getWorld())) {
+                this.stopLoop(name, "combat");
+                this.service().move(name, 0.0D, 0.0D, false, false, false);
+                return;
+            }
+            if (--remaining[0] <= 0) {
+                this.stopLoop(name, "combat");
+                this.service().move(name, 0.0D, 0.0D, false, false, false);
+                return;
+            }
+            final Location targetEye = targetLocation.clone().add(0.0D, 1.0D, 0.0D);
+            final float[] rotation = rotationTo(location, targetEye.getX(), targetEye.getY(), targetEye.getZ());
+            this.service().look(name, rotation[0], rotation[1]);
+            final double distanceSquared = location.distanceSquared(targetLocation);
+            if (distanceSquared > 9.0D && chase) {
+                this.service().move(name, 1.0D, 0.0D, false, true, false);
+                return;
+            }
+            this.service().move(name, 0.0D, 0.0D, false, false, false);
+            this.service().attackEntity(name, target);
+        }, 1L, 1L);
+        this.loops.put(loopKey(name, "combat"), task);
+    }
+
     private FakePlayerActionResult runAction(final String action, final String name) {
         return switch (action) {
             case "jump" -> this.service().jump(name);
@@ -2126,10 +2554,11 @@ final class HunterRealFakePlayerManager {
     }
 
     private void stopLoops(final String name) {
-        for (final String action : List.of("jump", "use", "attack", "move", "goto", "follow", "build")) {
+        for (final String action : List.of("jump", "use", "attack", "move", "goto", "follow", "combat", "build")) {
             this.stopLoop(name, action);
         }
         this.buildPlans.remove(playerId(name));
+        this.finishActiveBuild(name);
     }
 
     private void stopLoop(final String name, final String action) {
@@ -2144,6 +2573,9 @@ final class HunterRealFakePlayerManager {
             task.cancel();
         }
         this.loops.clear();
+        for (final String id : new ArrayList<>(this.activeBuildPlacements.keySet())) {
+            this.finishActiveBuild(id);
+        }
     }
 
     private void stopAi(final String nameOrId) {
@@ -2152,6 +2584,7 @@ final class HunterRealFakePlayerManager {
         this.aiProfiles.remove(id);
         this.aiBusy.remove(id);
         this.aiLastActions.remove(id);
+        this.aiLastResponseFingerprints.remove(id);
     }
 
     private void stopAiTask(final String id) {
@@ -2169,11 +2602,12 @@ final class HunterRealFakePlayerManager {
         this.aiProfiles.clear();
         this.aiBusy.clear();
         this.aiLastActions.clear();
+        this.aiLastResponseFingerprints.clear();
     }
 
     private String loopLine(final String name) {
         final List<String> active = new ArrayList<>();
-        for (final String action : List.of("jump", "use", "attack", "move", "goto", "follow", "build")) {
+        for (final String action : List.of("jump", "use", "attack", "move", "goto", "follow", "combat", "build")) {
             if (this.loops.containsKey(loopKey(name, action))) {
                 active.add(action);
             }
@@ -2485,6 +2919,56 @@ final class HunterRealFakePlayerManager {
         return new Location(world, absolute[0], absolute[1], absolute[2]);
     }
 
+    private static @Nullable WorldEditRegion worldEditRegion(final FakePlayerSnapshot snapshot, final String args) {
+        final Location origin = snapshot.location();
+        final World world = origin.getWorld();
+        if (world == null) {
+            return null;
+        }
+        final double dx1 = doubleArg(args, "dx1", Double.NaN);
+        final double dy1 = doubleArg(args, "dy1", Double.NaN);
+        final double dz1 = doubleArg(args, "dz1", Double.NaN);
+        final double dx2 = doubleArg(args, "dx2", Double.NaN);
+        final double dy2 = doubleArg(args, "dy2", Double.NaN);
+        final double dz2 = doubleArg(args, "dz2", Double.NaN);
+        if (!Double.isNaN(dx1) && !Double.isNaN(dy1) && !Double.isNaN(dz1)
+            && !Double.isNaN(dx2) && !Double.isNaN(dy2) && !Double.isNaN(dz2)) {
+            return worldEditRegion(
+                new Location(world, origin.getBlockX() + dx1, origin.getBlockY() + dy1, origin.getBlockZ() + dz1),
+                new Location(world, origin.getBlockX() + dx2, origin.getBlockY() + dy2, origin.getBlockZ() + dz2)
+            );
+        }
+        final double x1 = doubleArg(args, "x1", Double.NaN);
+        final double y1 = doubleArg(args, "y1", Double.NaN);
+        final double z1 = doubleArg(args, "z1", Double.NaN);
+        final double x2 = doubleArg(args, "x2", Double.NaN);
+        final double y2 = doubleArg(args, "y2", Double.NaN);
+        final double z2 = doubleArg(args, "z2", Double.NaN);
+        if (!Double.isNaN(x1) && !Double.isNaN(y1) && !Double.isNaN(z1)
+            && !Double.isNaN(x2) && !Double.isNaN(y2) && !Double.isNaN(z2)) {
+            return worldEditRegion(new Location(world, x1, y1, z1), new Location(world, x2, y2, z2));
+        }
+        final double[] values = parseNumbers(args, 6);
+        if (values.length >= 6) {
+            return worldEditRegion(
+                new Location(world, values[0], values[1], values[2]),
+                new Location(world, values[3], values[4], values[5])
+            );
+        }
+        return null;
+    }
+
+    private static WorldEditRegion worldEditRegion(final Location first, final Location second) {
+        final int volume = (Math.abs(first.getBlockX() - second.getBlockX()) + 1)
+            * (Math.abs(first.getBlockY() - second.getBlockY()) + 1)
+            * (Math.abs(first.getBlockZ() - second.getBlockZ()) + 1);
+        return new WorldEditRegion(first, second, volume);
+    }
+
+    private static String blockCoords(final Location location) {
+        return location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
+    }
+
     private static @Nullable PlaceSurface autoPlaceSurface(final Block targetBlock) {
         final PlaceSurface[] candidates = {
             new PlaceSurface(targetBlock.getRelative(BlockFace.DOWN), BlockFace.UP),
@@ -2527,6 +3011,51 @@ final class HunterRealFakePlayerManager {
         }
         final var snapshot = this.service().snapshot(name);
         return snapshot.map(FakePlayerSnapshot::location).map(Location::getWorld).orElse(null);
+    }
+
+    private boolean runPrivilegedWorldEdit(final Player player, final List<String> commands) {
+        final boolean previousOp = player.isOp();
+        final PermissionAttachment attachment = player.addAttachment(this.plugin);
+        try {
+            attachment.setPermission("worldedit.*", true);
+            attachment.setPermission("worldedit.region.*", true);
+            attachment.setPermission("worldedit.selection.*", true);
+            attachment.setPermission("worldedit.history.undo", true);
+            attachment.setPermission("worldedit.history.redo", true);
+            player.setOp(true);
+            boolean ok = true;
+            for (final String command : commands) {
+                ok &= this.dispatchWorldEditCommand(player, command);
+            }
+            return ok;
+        } finally {
+            player.removeAttachment(attachment);
+            player.setOp(previousOp);
+        }
+    }
+
+    private boolean dispatchWorldEditCommand(final Player player, final String command) {
+        final String trimmed = command == null ? "" : command.trim();
+        if (trimmed.isBlank()) {
+            return false;
+        }
+        final List<String> candidates = new ArrayList<>();
+        candidates.add(trimmed);
+        if (trimmed.startsWith("/")) {
+            candidates.add("worldedit:" + trimmed);
+            candidates.add(trimmed.substring(1));
+            candidates.add("worldedit:" + trimmed.substring(1));
+        } else {
+            candidates.add("/" + trimmed);
+            candidates.add("worldedit:" + trimmed);
+            candidates.add("worldedit:/" + trimmed);
+        }
+        for (final String candidate : candidates) {
+            if (Bukkit.dispatchCommand(player, candidate)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static @Nullable Object parseGameRuleValue(final GameRule<?> rule, final String rawValue) {
@@ -2725,6 +3254,12 @@ final class HunterRealFakePlayerManager {
             || lower.contains("house")
             || lower.contains("home")
             || lower.contains("cabin")
+            || lower.contains("hut")
+            || lower.contains("cottage")
+            || lower.contains("bunker")
+            || lower.contains("farm")
+            || lower.contains("field")
+            || lower.contains("stairs")
             || lower.contains("tower")
             || lower.contains("bridge")
             || lower.contains("wall")
@@ -2732,10 +3267,75 @@ final class HunterRealFakePlayerManager {
             || lower.contains("\u5efa")
             || lower.contains("\u623f")
             || lower.contains("\u5c4b")
+            || lower.contains("\u6728\u5c4b")
+            || lower.contains("\u5730\u5821")
+            || lower.contains("\u519c\u7530")
+            || lower.contains("\u697c\u68af")
             || lower.contains("\u5854")
             || lower.contains("\u6865")
             || lower.contains("\u5899")
             || lower.contains("\u5e73\u53f0");
+    }
+
+    private static boolean isRespawnRequest(final String lower, final String normalized) {
+        return hasAny(lower, normalized, "respawn", "revive", "resurrect", "\u590d\u6d3b", "\u91cd\u751f", "\u8d77\u6765");
+    }
+
+    private static boolean isArmorRequest(final String lower, final String normalized) {
+        return hasAny(lower, normalized, "armor", "armour", "wear", "equip armor", "put on armor",
+            "\u7a7f\u7532", "\u7a7f\u76d4\u7532", "\u7a7f\u88c5\u5907", "\u62a4\u7532", "\u76d4\u7532", "\u7a7f\u4e0a");
+    }
+
+    private static boolean isComeRequest(final String lower, final String normalized) {
+        return hasAny(lower, normalized, "come", "come here", "follow", "follow me", "go to me", "walk to me",
+            "\u8fc7\u6765", "\u6765\u6211\u8fd9", "\u5230\u6211\u8fd9", "\u8ddf\u7740\u6211", "\u8ddf\u968f\u6211", "\u9760\u8fd1\u6211");
+    }
+
+    private static boolean isCombatRequest(final String lower, final String normalized) {
+        return hasAny(lower, normalized, "attack", "fight", "hit", "kill", "combat", "defend",
+            "\u653b\u51fb", "\u6253", "\u6253\u67b6", "\u51fb\u6740", "\u6218\u6597", "\u4fdd\u62a4");
+    }
+
+    private static boolean isBuildClearRequest(final String lower, final String normalized) {
+        return hasAny(lower, normalized, "clear build", "remove build", "demolish", "dismantle", "undo build",
+            "\u62c6\u6389", "\u62c6\u9664", "\u6e05\u9664\u5efa\u7b51", "\u64a4\u56de\u5efa\u7b51", "\u5220\u6389\u5efa\u7b51");
+    }
+
+    private static boolean isObservationOnlyRequest(final String lower, final String normalized) {
+        return hasAny(lower, normalized,
+            "observe", "look around", "inspect", "environment", "surrounding", "surroundings", "nearby",
+            "what do you see", "what block", "name the block", "naming the block", "report", "describe",
+            "\u89c2\u5bdf", "\u5468\u56f4", "\u73af\u5883", "\u770b\u5230", "\u770b\u770b", "\u811a\u4e0b", "\u524d\u65b9", "\u63cf\u8ff0");
+    }
+
+    private static String buildKindClean(final String task) {
+        final String lower = task == null ? "" : task.toLowerCase(Locale.ROOT);
+        final String normalized = HunterToolsPreferences.normalize(task == null ? "" : task);
+        if (hasAny(lower, normalized, "cabin", "hut", "cottage", "\u6728\u5c4b", "\u5c0f\u6728\u5c4b", "\u5c0f\u5c4b")) {
+            return "cabin";
+        }
+        if (hasAny(lower, normalized, "bunker", "fort", "shelter", "\u5730\u5821", "\u5821\u5792", "\u907f\u96be\u6240")) {
+            return "bunker";
+        }
+        if (hasAny(lower, normalized, "farm", "field", "crop", "\u519c\u7530", "\u7530", "\u79cd\u690d")) {
+            return "farm";
+        }
+        if (hasAny(lower, normalized, "stairs", "staircase", "\u697c\u68af", "\u53f0\u9636")) {
+            return "stairs";
+        }
+        if (hasAny(lower, normalized, "tower", "\u5854")) {
+            return "tower";
+        }
+        if (hasAny(lower, normalized, "bridge", "\u6865")) {
+            return "bridge";
+        }
+        if (hasAny(lower, normalized, "wall", "\u5899")) {
+            return "wall";
+        }
+        if (hasAny(lower, normalized, "platform", "floor", "\u5e73\u53f0", "\u5730\u677f")) {
+            return "platform";
+        }
+        return "house";
     }
 
     private static String buildKind(final String task) {
@@ -2824,6 +3424,10 @@ final class HunterRealFakePlayerManager {
 
     private static List<BuildStep> buildPresetPlan(final Location origin, final String kind) {
         return switch (HunterToolsPreferences.normalize(kind)) {
+            case "cabin", "hut", "cottage" -> cabinPlan(origin);
+            case "bunker" -> bunkerPlan(origin);
+            case "farm", "field" -> farmPlan(origin);
+            case "stairs", "stair", "staircase" -> stairsPlan(origin);
             case "tower" -> towerPlan(origin);
             case "bridge" -> bridgePlan(origin);
             case "wall" -> wallPlan(origin);
@@ -2866,6 +3470,115 @@ final class HunterRealFakePlayerManager {
         steps.add(new BuildStep(new Location(world, baseX + 1, baseY + 1, baseZ), Material.GLASS_PANE));
         steps.add(new BuildStep(new Location(world, baseX + 3, baseY + 1, baseZ), Material.GLASS_PANE));
         steps.add(new BuildStep(new Location(world, baseX + 2, baseY + 1, baseZ + 4), Material.GLASS_PANE));
+        return steps;
+    }
+
+    private static List<BuildStep> cabinPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 2;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        for (int x = 0; x < 7; x++) {
+            for (int z = 0; z < 6; z++) {
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY - 1, baseZ + z), Material.SPRUCE_PLANKS));
+            }
+        }
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 7; x++) {
+                for (int z = 0; z < 6; z++) {
+                    final boolean edge = x == 0 || x == 6 || z == 0 || z == 5;
+                    final boolean door = z == 0 && x == 3 && y <= 2;
+                    final boolean window = y == 2 && ((z == 0 && (x == 1 || x == 5)) || (z == 5 && (x == 2 || x == 4)));
+                    if (edge && !door) {
+                        steps.add(new BuildStep(new Location(world, baseX + x, baseY + y, baseZ + z), window ? Material.GLASS_PANE : Material.SPRUCE_LOG));
+                    }
+                }
+            }
+        }
+        for (int x = -1; x <= 7; x++) {
+            for (int z = -1; z <= 6; z++) {
+                final int ridge = Math.min(Math.min(x + 1, 7 - x), Math.min(z + 1, 6 - z));
+                final int y = baseY + 4 + Math.max(0, Math.min(2, ridge / 2));
+                steps.add(new BuildStep(new Location(world, baseX + x, y, baseZ + z), Material.DARK_OAK_STAIRS));
+            }
+        }
+        steps.add(new BuildStep(new Location(world, baseX + 3, baseY, baseZ), Material.SPRUCE_DOOR));
+        return steps;
+    }
+
+    private static List<BuildStep> bunkerPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 2;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        for (int x = 0; x < 7; x++) {
+            for (int z = 0; z < 7; z++) {
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY - 1, baseZ + z), Material.STONE_BRICKS));
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY + 3, baseZ + z), Material.STONE_BRICKS));
+            }
+        }
+        for (int y = 0; y < 3; y++) {
+            for (int x = 0; x < 7; x++) {
+                for (int z = 0; z < 7; z++) {
+                    final boolean edge = x == 0 || x == 6 || z == 0 || z == 6;
+                    final boolean door = z == 0 && x == 3 && y <= 1;
+                    if (edge && !door) {
+                        final boolean slit = y == 1 && ((z == 0 && (x == 1 || x == 5)) || (x == 0 && z == 3) || (x == 6 && z == 3));
+                        steps.add(new BuildStep(new Location(world, baseX + x, baseY + y, baseZ + z), slit ? Material.IRON_BARS : Material.DEEPSLATE_BRICKS));
+                    }
+                }
+            }
+        }
+        steps.add(new BuildStep(new Location(world, baseX + 3, baseY, baseZ), Material.IRON_DOOR));
+        return steps;
+    }
+
+    private static List<BuildStep> farmPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 2;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        for (int x = 0; x < 9; x++) {
+            for (int z = 0; z < 9; z++) {
+                final boolean water = x == 4 && z == 4;
+                final boolean border = x == 0 || x == 8 || z == 0 || z == 8;
+                final Material material = water ? Material.WATER : border ? Material.OAK_FENCE : Material.FARMLAND;
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY, baseZ + z), material));
+                if (!water && !border) {
+                    steps.add(new BuildStep(new Location(world, baseX + x, baseY + 1, baseZ + z), Material.WHEAT));
+                }
+            }
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> stairsPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 1;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        for (int i = 0; i < 10; i++) {
+            steps.add(new BuildStep(new Location(world, baseX + i, baseY + i, baseZ), Material.STONE_BRICK_STAIRS));
+            steps.add(new BuildStep(new Location(world, baseX + i, baseY + i, baseZ + 1), Material.STONE_BRICK_STAIRS));
+            steps.add(new BuildStep(new Location(world, baseX + i, baseY + i - 1, baseZ), Material.STONE_BRICKS));
+            steps.add(new BuildStep(new Location(world, baseX + i, baseY + i - 1, baseZ + 1), Material.STONE_BRICKS));
+        }
         return steps;
     }
 
@@ -2985,6 +3698,18 @@ final class HunterRealFakePlayerManager {
             || lower.contains("let's ");
     }
 
+    private static String messageFingerprint(final String message) {
+        if (message == null) {
+            return "";
+        }
+        final String colored = ChatColor.translateAlternateColorCodes('&', message);
+        final String stripped = ChatColor.stripColor(colored);
+        return (stripped == null ? "" : stripped)
+            .toLowerCase(Locale.ROOT)
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
     private static String truncatePlain(final String value, final int maxLength) {
         if (value == null) {
             return "";
@@ -3089,12 +3814,14 @@ final class HunterRealFakePlayerManager {
     private static String defaultFakeAiPrompt() {
         return "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines. Never write prose, reasoning, translations, summaries, or chain-of-thought. "
             + "Execute the player's intent immediately. Prefer 1-3 actions per turn unless equipping full armor. "
-            + "Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], "
+            + "Available actions: [respawn], [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], "
             + "[move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], "
             + "[follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], "
             + "[equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], "
-            + "[build-house], [build-tower], [build-bridge], [build-wall], [build-platform], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
-            + "For 'come/follow', use follow. For 'wear armor', output all four wear actions. For building, map house/home/cabin to [build-house], tower to [build-tower], bridge to [build-bridge], wall to [build-wall], platform/floor to [build-platform]. For attack, look at the target first if a player is named. If unsure, do a safe movement/look action and [say:OK.].";
+            + "[attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [build-house], [build-cabin], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-wall], [build-platform], [clear-build], "
+            + "[we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], [we-undo:steps=1], "
+            + "[slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
+            + "If dead, use [respawn] first. For 'come/follow', use follow. For 'wear armor', output all four wear actions. For building, use one preset and let the running build loop finish. For attack, use attack-player or attack-nearest. If unsure, do a safe movement/look action and at most one short [say:OK.].";
     }
 
     private static String defaultFakeAiGoal(final String name) {
@@ -3155,6 +3882,13 @@ final class HunterRealFakePlayerManager {
         return block.getType().key().value() + "@" + block.getX() + "," + block.getY() + "," + block.getZ();
     }
 
+    private static String itemLine(final @Nullable ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return "empty";
+        }
+        return item.getType().key().value() + "x" + item.getAmount();
+    }
+
     record RealFakePlayerView(
         String module,
         String id,
@@ -3193,6 +3927,9 @@ final class HunterRealFakePlayerManager {
     private record PlaceSurface(Block clickedBlock, BlockFace face) {
     }
 
+    private record WorldEditRegion(Location first, Location second, int volume) {
+    }
+
     private record BuildStep(Location location, Material material) {
     }
 
@@ -3206,6 +3943,9 @@ final class HunterRealFakePlayerManager {
     }
 
     private record ObservedChat(String player, String world, String message) {
+    }
+
+    private record RecentFakeAiLine(String fingerprint, long createdAtMillis) {
     }
 
     private record PendingRiskApproval(

@@ -26,6 +26,7 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.ItemStack;
@@ -40,7 +41,9 @@ import net.minecraft.world.phys.Vec3;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.block.BlockFace;
+import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.profile.PlayerProfile;
 import org.huntercore.api.fakeplayer.FakePlayerActionResult;
@@ -127,6 +130,36 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
     }
 
     @Override
+    public @NotNull FakePlayerActionResult respawn(@NotNull final String name) {
+        return this.sync(() -> {
+            final String id = id(name);
+            final ServerPlayer player = this.player(id);
+            final FakeEntry entry = this.players.get(id);
+            if (player == null || entry == null) {
+                return FakePlayerActionResult.fail("Fake player not found: " + name);
+            }
+            if (!player.isDeadOrDying() && player.getHealth() > 0.0F) {
+                return FakePlayerActionResult.ok(player.getGameProfile().name() + " is already alive.");
+            }
+            this.abortMining(id, player);
+            final ServerPlayer respawned = this.server().getPlayerList().respawn(
+                player,
+                false,
+                Entity.RemovalReason.KILLED,
+                PlayerRespawnEvent.RespawnReason.DEATH
+            );
+            if (respawned == null || respawned.hasDisconnected()) {
+                return FakePlayerActionResult.fail("Respawn failed for fake player " + entry.name() + ".");
+            }
+            respawned.getBukkitEntity().setPersistent(false);
+            respawned.getBukkitEntity().addScoreboardTag(SCOREBOARD_TAG);
+            respawned.hurtMarked = true;
+            this.players.put(id, new FakeEntry(id, entry.name(), respawned.getUUID()));
+            return FakePlayerActionResult.ok("Respawned real fake player " + respawned.getGameProfile().name() + ".");
+        });
+    }
+
+    @Override
     public @NotNull FakePlayerActionResult openInventoryEditor(@NotNull final String name, @NotNull final Player viewer) {
         return this.withPlayer(name, player -> {
             if (!viewer.isOnline()) {
@@ -200,6 +233,36 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             player.inventoryMenu.broadcastChanges();
             this.players.put(id, new FakeEntry(id, entry.name(), uuid));
             return FakePlayerActionResult.ok(skinProfile == null && textureValue == null ? "Cleared skin for real fake player " + profileName + "." : "Updated skin for real fake player " + profileName + ".");
+        });
+    }
+
+    @Override
+    public @NotNull FakePlayerActionResult equipArmor(@NotNull final String name, @NotNull final org.bukkit.inventory.ItemStack item) {
+        return this.withPlayer(name, player -> {
+            if (item.getType().isAir()) {
+                return FakePlayerActionResult.fail("Armor item is empty.");
+            }
+            final ItemStack nmsItem = CraftItemStack.asNMSCopy(item);
+            if (nmsItem.isEmpty()) {
+                return FakePlayerActionResult.fail("Armor item is empty.");
+            }
+            final EquipmentSlot slot = player.getEquipmentSlotForItem(nmsItem);
+            if (!isPlayerArmorSlot(slot)) {
+                return FakePlayerActionResult.fail(item.getType().key().value() + " is not wearable armor.");
+            }
+            final org.bukkit.inventory.ItemStack previous = CraftItemStack.asBukkitCopy(player.getItemBySlot(slot));
+            player.setItemSlot(slot, nmsItem, true);
+            if (previous != null && !previous.getType().isAir()) {
+                final java.util.Map<Integer, org.bukkit.inventory.ItemStack> leftovers = player.getBukkitEntity().getInventory().addItem(previous);
+                for (final org.bukkit.inventory.ItemStack leftover : leftovers.values()) {
+                    player.getBukkitEntity().getWorld().dropItemNaturally(player.getBukkitEntity().getLocation(), leftover);
+                }
+            }
+            player.detectEquipmentUpdates();
+            player.inventoryMenu.broadcastChanges();
+            player.getBukkitEntity().updateInventory();
+            player.hurtMarked = true;
+            return FakePlayerActionResult.ok(player.getGameProfile().name() + " equipped " + item.getType().key().value() + ".");
         });
     }
 
@@ -428,6 +491,35 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             this.mining.put(id, new MiningState(pos.immutable(), blockHit.getDirection(), gameTick(player)));
             player.swing(InteractionHand.MAIN_HAND, true);
             return FakePlayerActionResult.ok(player.getGameProfile().name() + " started mining " + blockLine(pos) + ".");
+        });
+    }
+
+    @Override
+    public @NotNull FakePlayerActionResult attackEntity(@NotNull final String name, @NotNull final org.bukkit.entity.Entity target) {
+        return this.withPlayer(name, player -> {
+            if (!(target instanceof final org.bukkit.craftbukkit.entity.CraftEntity craftTarget)) {
+                return FakePlayerActionResult.fail("Target entity is not a CraftBukkit entity.");
+            }
+            if (!player.getBukkitEntity().getWorld().equals(target.getWorld())) {
+                return FakePlayerActionResult.fail(target.getName() + " is in another world.");
+            }
+            final double range = Math.max(3.0D, player.entityInteractionRange() + 1.5D);
+            if (player.getBukkitEntity().getLocation().distanceSquared(target.getLocation()) > range * range) {
+                return FakePlayerActionResult.fail(target.getName() + " is too far away to attack.");
+            }
+            this.abortMining(id(name), player);
+            final double beforeHealth = target instanceof final org.bukkit.entity.LivingEntity livingTarget ? livingTarget.getHealth() : -1.0D;
+            player.attack(craftTarget.getHandle());
+            player.swing(InteractionHand.MAIN_HAND, true);
+            if (target instanceof final org.bukkit.entity.LivingEntity livingTarget
+                && !livingTarget.isDead()
+                && beforeHealth > 0.0D
+                && livingTarget.getHealth() >= beforeHealth - 0.01D) {
+                livingTarget.setNoDamageTicks(0);
+                livingTarget.damage(4.0D, player.getBukkitEntity());
+            }
+            player.inventoryMenu.broadcastChanges();
+            return FakePlayerActionResult.ok(player.getGameProfile().name() + " attacked entity " + target.getName() + ".");
         });
     }
 
@@ -726,6 +818,13 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             case DOWN -> Direction.DOWN;
             default -> null;
         };
+    }
+
+    private static boolean isPlayerArmorSlot(final EquipmentSlot slot) {
+        return slot == EquipmentSlot.HEAD
+            || slot == EquipmentSlot.CHEST
+            || slot == EquipmentSlot.LEGS
+            || slot == EquipmentSlot.FEET;
     }
 
     private static int gameTick(final ServerPlayer player) {

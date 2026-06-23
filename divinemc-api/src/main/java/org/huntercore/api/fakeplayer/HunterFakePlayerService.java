@@ -5,7 +5,9 @@ import java.util.Optional;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.block.BlockFace;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.profile.PlayerProfile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -20,6 +22,10 @@ public interface HunterFakePlayerService {
 
     @NotNull FakePlayerActionResult spawn(@NotNull String name, @NotNull Location location);
 
+    default @NotNull FakePlayerActionResult respawn(@NotNull final String name) {
+        return FakePlayerActionResult.fail("Fake player respawn is not supported by this service.");
+    }
+
     default @NotNull FakePlayerActionResult openInventoryEditor(@NotNull final String name, @NotNull final Player viewer) {
         return FakePlayerActionResult.fail("Fake player inventory editing is not supported by this service.");
     }
@@ -30,6 +36,10 @@ public interface HunterFakePlayerService {
 
     default @NotNull FakePlayerActionResult setSkinTexture(@NotNull final String name, @NotNull final String textureValue, @Nullable final String textureSignature) {
         return FakePlayerActionResult.fail("Fake player skin changes are not supported by this service.");
+    }
+
+    default @NotNull FakePlayerActionResult equipArmor(@NotNull final String name, @NotNull final ItemStack item) {
+        return FakePlayerActionResult.fail("Fake player armor equip is not supported by this service.");
     }
 
     @NotNull FakePlayerActionResult remove(@NotNull String name);
@@ -55,6 +65,10 @@ public interface HunterFakePlayerService {
     }
 
     @NotNull FakePlayerActionResult attack(@NotNull String name);
+
+    default @NotNull FakePlayerActionResult attackEntity(@NotNull final String name, @NotNull final Entity target) {
+        return FakePlayerActionResult.fail("Fake player direct entity attack is not supported by this service.");
+    }
 
     @NotNull FakePlayerActionResult stopActions(@NotNull String name);
 
