@@ -68,6 +68,42 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const ADMIN_PAGES = ['settings', 'access', 'ai', 'admin'];
+
+const FIELD_HELP = {
+  webServerName: 'Shown as the panel title and %server% display name.',
+  webF3ServerName: 'Shown in the Minecraft F3 brand line. Supports & color codes.',
+  webCpuMode: 'Threading preset. Use single-thread for stability, high-core for stronger CPUs.',
+  webBindAddress: 'Use 0.0.0.0 for LAN access, 127.0.0.1 for local-only.',
+  webPort: 'The web panel HTTP port.',
+  webExternalUrl: 'Public URL players should open for the panel or registration.',
+  webMapUrl: 'BlueMap URL. %host% is replaced by the panel host.',
+  tpsIntervalTicks: '20 ticks is about 1 second.',
+  tpsActionbarFormat: 'Supports & color codes and placeholders like %tps% and %mspt%.',
+  sidebarTitle: 'Sidebar title shown in game. Supports & color codes.',
+  sidebarIntervalTicks: 'How often the sidebar refreshes, in Minecraft ticks.',
+  sidebarLines: 'One sidebar line per row. Use placeholders listed below.',
+  motdLine1: 'First server list MOTD line. Supports & color codes.',
+  motdLine2: 'Second server list MOTD line. Supports placeholders.',
+  motdMaxPlayers: '-1 keeps the server default max player count.',
+  authMinimumPasswordLength: 'Minimum password length for /register and web registration.',
+  authRegistrationUrl: 'URL shown to unregistered players when web pre-registration is required.',
+  webCorsAllowOrigin: 'Use * for testing, or a specific frontend origin in production.',
+  webApiKey: 'Optional API key for standalone frontend/backend separation.',
+  aiBaseUrl: 'OpenAI-compatible API base URL, for example https://api.openai.com/v1.',
+  aiModel: 'Model name sent to the AI provider.',
+  aiApiKey: 'Stored server-side. Leave blank to keep the existing key.',
+  aiApiKeyEnv: 'Environment variable name used when no key is stored.',
+  aiTemperature: 'Higher is more creative; lower is more deterministic.',
+  aiMaxTokens: 'Maximum response size. Fake player actions usually need 200-600.',
+  aiTimeoutSeconds: 'AI request timeout in seconds.',
+  aiChatTriggerPrefix: 'Names or prefixes that trigger chat AI.',
+  aiFakePlayersIntervalSeconds: 'Seconds between autonomous fake-player AI turns.',
+  aiFakePlayersMaxActions: 'Maximum bracketed actions applied from one AI response.',
+  aiFakePlayersMaxMoveTicks: 'Maximum movement duration. 200 ticks is about 10 seconds.',
+  aiFakePlayersMaxPlaceDistanceBlocks: 'How far a fake player may place blocks from itself.',
+  aiFakePlayersChatControlPrefix: 'Optional command prefix. Bot names also trigger directly.',
+  aiFakePlayersSystemPrompt: 'Advanced instruction for real fake player AI. Use action syntax only.'
+};
 const PAGES = ['map', 'overview', 'runtime', 'plugins', 'tools', ...ADMIN_PAGES];
 
 const translations = {
@@ -831,6 +867,17 @@ function translateOptions(selectId, labels) {
   });
 }
 
+function applyFieldHelp() {
+  Object.entries(FIELD_HELP).forEach(([id, help]) => {
+    const field = $(id);
+    if (!field || !help) return;
+    field.setAttribute('title', help);
+    field.setAttribute('aria-description', help);
+    const label = field.closest('label');
+    if (label) label.setAttribute('title', help);
+  });
+}
+
 function applyTranslations() {
   document.documentElement.lang = state.lang === 'zh' ? 'zh-CN' : 'en';
   document.title = state.lang === 'zh' ? 'HunterCore 面板' : 'HunterCore Panel';
@@ -854,6 +901,7 @@ function applyTranslations() {
     custom: t('allowed.custom'),
     none: t('allowed.none')
   });
+  applyFieldHelp();
   translateOptions('actorModule', { npcs: t('actors.npc'), 'fake-players': t('actors.fakePlayer'), 'real-fake-players': t('actors.realFakePlayer') });
   translateOptions('actorKind', { villager: t('actors.villager'), mannequin: t('actors.mannequin') });
   const commandResult = $('commandResult');

@@ -10,8 +10,10 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import com.destroystokyo.paper.profile.SharedPlayerProfile;
 import net.minecraft.core.BlockPos;
@@ -24,6 +26,7 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
@@ -102,6 +105,7 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             final ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
             final UUID uuid = UUID.nameUUIDFromBytes((UUID_PREFIX + id).getBytes(StandardCharsets.UTF_8));
             final GameProfile profile = this.profile(profileName, uuid, null);
+            this.preloadLuckPermsUser(uuid, profileName);
             final ServerPlayer player = new ServerPlayer(server, level, profile, net.minecraft.server.level.ClientInformation.createDefault());
             player.snapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             player.getBukkitEntity().setPersistent(false);
@@ -136,6 +140,23 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
 
     @Override
     public @NotNull FakePlayerActionResult setSkinProfile(@NotNull final String name, final @Nullable PlayerProfile skinProfile) {
+        return this.setSkin(name, skinProfile, null, null);
+    }
+
+    @Override
+    public @NotNull FakePlayerActionResult setSkinTexture(@NotNull final String name, @NotNull final String textureValue, final @Nullable String textureSignature) {
+        if (textureValue.isBlank()) {
+            return FakePlayerActionResult.fail("Skin texture value is blank.");
+        }
+        return this.setSkin(name, null, textureValue, textureSignature);
+    }
+
+    private @NotNull FakePlayerActionResult setSkin(
+        @NotNull final String name,
+        final @Nullable PlayerProfile skinProfile,
+        final @Nullable String textureValue,
+        final @Nullable String textureSignature
+    ) {
         return this.sync(() -> {
             final String id = id(name);
             final ServerPlayer existing = this.player(id);
@@ -145,12 +166,18 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             }
             final Location location = existing.getBukkitEntity().getLocation();
             final GameMode gameMode = existing.getBukkitEntity().getGameMode();
+            final org.bukkit.inventory.ItemStack[] contents = existing.getBukkitEntity().getInventory().getContents();
+            final org.bukkit.inventory.ItemStack[] armor = existing.getBukkitEntity().getInventory().getArmorContents();
+            final org.bukkit.inventory.ItemStack offHand = existing.getBukkitEntity().getInventory().getItemInOffHand();
             final ServerLevel level = (ServerLevel) existing.level();
             final String profileName = existing.getGameProfile().name();
-            final UUID uuid = existing.getUUID();
+            final UUID uuid = skinProfile == null && textureValue == null
+                ? UUID.nameUUIDFromBytes((UUID_PREFIX + id).getBytes(StandardCharsets.UTF_8))
+                : UUID.randomUUID();
             this.server().getPlayerList().remove(existing, net.kyori.adventure.text.Component.text("HunterCore fake player skin refresh"));
 
-            final GameProfile profile = this.profile(profileName, uuid, skinProfile);
+            final GameProfile profile = this.profile(profileName, uuid, skinProfile, textureValue, textureSignature);
+            this.preloadLuckPermsUser(uuid, profileName);
             final ServerPlayer player = new ServerPlayer(this.server(), level, profile, net.minecraft.server.level.ClientInformation.createDefault());
             player.snapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             player.getBukkitEntity().setPersistent(false);
@@ -167,8 +194,12 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             player.getBukkitEntity().setPersistent(false);
             player.getBukkitEntity().addScoreboardTag(SCOREBOARD_TAG);
             player.getBukkitEntity().setGameMode(gameMode);
-            this.players.put(id, entry);
-            return FakePlayerActionResult.ok(skinProfile == null ? "Cleared skin for real fake player " + profileName + "." : "Updated skin for real fake player " + profileName + ".");
+            player.getBukkitEntity().getInventory().setContents(contents);
+            player.getBukkitEntity().getInventory().setArmorContents(armor);
+            player.getBukkitEntity().getInventory().setItemInOffHand(offHand);
+            player.inventoryMenu.broadcastChanges();
+            this.players.put(id, new FakeEntry(id, entry.name(), uuid));
+            return FakePlayerActionResult.ok(skinProfile == null && textureValue == null ? "Cleared skin for real fake player " + profileName + "." : "Updated skin for real fake player " + profileName + ".");
         });
     }
 
@@ -213,7 +244,16 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
                 return FakePlayerActionResult.fail("Location has no world.");
             }
             this.abortMining(id(name), player);
-            final boolean teleported = player.getBukkitEntity().teleport(location);
+            final ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
+            final boolean teleported;
+            if (player.level() == level) {
+                player.snapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+                teleported = true;
+            } else {
+                teleported = player.teleportTo(level, location.getX(), location.getY(), location.getZ(), Set.of(), location.getYaw(), location.getPitch(), true);
+            }
+            player.setDeltaMovement(Vec3.ZERO);
+            player.hurtMarked = true;
             return teleported
                 ? FakePlayerActionResult.ok("Teleported " + player.getGameProfile().name() + ".")
                 : FakePlayerActionResult.fail("Teleport failed for " + player.getGameProfile().name() + ".");
@@ -271,6 +311,7 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             final double z = (Math.cos(yaw) * clampedForward + Math.sin(yaw) * clampedSideways) * speed;
             final Vec3 current = player.getDeltaMovement();
             player.setDeltaMovement(x, current.y, z);
+            player.move(MoverType.SELF, new Vec3(x, 0.0D, z));
             player.hurtMarked = true;
             return FakePlayerActionResult.ok(player.getGameProfile().name() + " moved forward=" + format(clampedForward) + ", sideways=" + format(clampedSideways) + ".");
         });
@@ -558,6 +599,23 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
     }
 
     private GameProfile profile(final String profileName, final UUID uuid, final @Nullable PlayerProfile skinProfile) {
+        return this.profile(profileName, uuid, skinProfile, null, null);
+    }
+
+    private GameProfile profile(
+        final String profileName,
+        final UUID uuid,
+        final @Nullable PlayerProfile skinProfile,
+        final @Nullable String textureValue,
+        final @Nullable String textureSignature
+    ) {
+        if (textureValue != null && !textureValue.isBlank()) {
+            final var copiedProperties = LinkedHashMultimap.<String, com.mojang.authlib.properties.Property>create();
+            copiedProperties.put("textures", textureSignature == null || textureSignature.isBlank()
+                ? new com.mojang.authlib.properties.Property("textures", textureValue)
+                : new com.mojang.authlib.properties.Property("textures", textureValue, textureSignature));
+            return new GameProfile(uuid, profileName, new PropertyMap(copiedProperties));
+        }
         if (skinProfile == null) {
             return new GameProfile(uuid, profileName);
         }
@@ -566,6 +624,33 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
         copiedProperties.putAll(skin.properties());
         final PropertyMap properties = new PropertyMap(copiedProperties);
         return new GameProfile(uuid, profileName, properties);
+    }
+
+    private void preloadLuckPermsUser(final UUID uuid, final String name) {
+        try {
+            final Class<?> luckPermsClass = Class.forName("net.luckperms.api.LuckPerms");
+            final org.bukkit.plugin.RegisteredServiceProvider<?> registration = org.bukkit.Bukkit.getServicesManager().getRegistration(luckPermsClass);
+            if (registration == null) {
+                return;
+            }
+            final Object luckPerms = registration.getProvider();
+            final Object userManager = luckPerms.getClass().getMethod("getUserManager").invoke(luckPerms);
+            if ((boolean) userManager.getClass().getMethod("isLoaded", UUID.class).invoke(userManager, uuid)) {
+                return;
+            }
+            final Object future = userManager.getClass().getMethod("loadUser", UUID.class, String.class).invoke(userManager, uuid, name);
+            if (future instanceof final CompletableFuture<?> completableFuture) {
+                completableFuture.get(5L, TimeUnit.SECONDS);
+            }
+        } catch (final ReflectiveOperationException
+            | RuntimeException
+            | java.util.concurrent.ExecutionException
+            | InterruptedException
+            | java.util.concurrent.TimeoutException ignored) {
+            if (Thread.currentThread().isInterrupted()) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     private <T> T sync(final Supplier<T> supplier) {

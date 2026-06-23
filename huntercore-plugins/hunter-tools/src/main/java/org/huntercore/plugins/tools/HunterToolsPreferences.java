@@ -504,7 +504,7 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.enabled", true);
         changed |= this.setDefault("modules.ai.fake-players.interval-seconds", 6);
         changed |= this.setDefault("modules.ai.fake-players.max-actions", 5);
-        changed |= this.setDefault("modules.ai.fake-players.max-move-ticks", 40);
+        changed |= this.setDefault("modules.ai.fake-players.max-move-ticks", 200);
         changed |= this.setDefault("modules.ai.fake-players.max-action-ticks", 80);
         changed |= this.setDefault("modules.ai.fake-players.nearby-radius-blocks", 6);
         changed |= this.setDefault("modules.ai.fake-players.allow-movement", true);
@@ -517,7 +517,7 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.chat-control.cooldown-seconds", 3);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.require-permission", false);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer");
-        changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines, no prose. Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=20,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=60,sprint=true], [follow:player=name,ticks=80,distance=2.5], [mine:ticks=40], [use], [attack], [jump], [sneak:on], [sprint:off], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. Use small safe steps. For building requests, infer a compact style and dimensions from the player's request, choose suitable hotbar materials with [slot:n], and place one or a few visible nearby blocks per turn. Mine only when the goal requires it and the target block is visible.");
+        changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines, no prose. Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=20,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=200,sprint=true], [follow:player=name,ticks=200,distance=2.5], [mine:ticks=40], [use], [attack], [jump], [sneak:on], [sprint:off], [equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_chestplate], [build-house], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. Do not reveal chain-of-thought. For a house use [build-house] first.");
         changed |= this.setDefault("modules.ai.fake-players.high-risk-protection", true);
         changed |= this.setDefault("modules.ai.fake-players.high-risk-approval-window-seconds", 120);
         changed |= this.setDefault("modules.ai.adaptive-throttling.enabled", true);

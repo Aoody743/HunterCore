@@ -239,6 +239,7 @@ textarea {
 .chatDock,
 .authDialog,
 .panel,
+.pageBrand,
 .actionToast {
   --liquid-blur: 5px;
   --liquid-saturate: 1.18;
@@ -255,6 +256,7 @@ textarea {
 .chatDock::before,
 .authDialog::before,
 .panel::before,
+.pageBrand::before,
 .actionToast::before {
   content: "";
   position: absolute;
@@ -274,6 +276,7 @@ textarea {
 .chatDock::after,
 .authDialog::after,
 .panel::after,
+.pageBrand::after,
 .actionToast::after {
   content: "";
   position: absolute;
@@ -294,6 +297,7 @@ textarea {
 .chatDock > *,
 .authDialog > *,
 .panel > *,
+.pageBrand > *,
 .topNav > *,
 .actionToast > * {
   position: relative;
@@ -379,11 +383,6 @@ small {
   max-width: min(520px, calc(100% - 32px));
   padding: 10px 14px;
   border-radius: var(--radius);
-  background: linear-gradient(135deg, rgba(8, 16, 28, 0.70), rgba(18, 28, 44, 0.54));
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
   text-align: left;
   pointer-events: none;
 }

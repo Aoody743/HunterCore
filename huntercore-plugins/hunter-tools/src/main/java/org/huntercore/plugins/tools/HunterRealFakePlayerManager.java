@@ -1,5 +1,14 @@
 package org.huntercore.plugins.tools;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -25,6 +34,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
@@ -36,6 +46,7 @@ import org.jetbrains.annotations.Nullable;
 
 final class HunterRealFakePlayerManager {
     private static final String MODULE = "real-fake-players";
+    private static final HttpClient SKIN_HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10L)).build();
     private static final Set<Material> HIGH_RISK_MATERIALS = Set.of(
         Material.TNT,
         Material.TNT_MINECART,
@@ -57,6 +68,7 @@ final class HunterRealFakePlayerManager {
     private final Map<String, String> aiLastActions = new HashMap<>();
     private final Map<String, PendingRiskApproval> pendingRiskApprovals = new HashMap<>();
     private final Map<String, Long> chatControlCooldowns = new HashMap<>();
+    private final Map<String, List<BuildStep>> buildPlans = new HashMap<>();
     private final List<String> aiBusy = new ArrayList<>();
     private final Deque<ObservedChat> recentChat = new ArrayDeque<>();
     private HunterAiManager aiManager;
@@ -470,17 +482,24 @@ final class HunterRealFakePlayerManager {
             }
             case "once" -> {
                 final String goal = profile == null || profile.goal().isBlank() ? defaultFakeAiGoal(fake.name()) : profile.goal();
+                final boolean shortcutApplied = this.applyQuickGoalTask(fake, goal);
                 this.aiProfiles.put(fake.id(), new FakeAiProfile(
                     fake.id(),
                     fake.name(),
-                    profile != null && profile.enabled(),
+                    !shortcutApplied && profile != null && profile.enabled(),
                     goal,
                     profile == null ? null : profile.controllerUuid(),
                     profile == null ? null : profile.controllerName(),
-                    profile == null ? 0L : profile.highRiskAllowedUntilMillis()
+                    profile == null ? 0L : profile.highRiskAllowedUntilMillis(),
+                    shortcutApplied ? 0 : profile == null ? -1 : profile.remainingTurns()
                 ));
-                this.requestAi(fake.id(), true);
-                sender.sendMessage("HunterCore AI one-shot requested for " + fake.name() + ".");
+                if (shortcutApplied) {
+                    this.aiLastActions.put(fake.id(), "quick local task: " + truncatePlain(goal, 80));
+                    sender.sendMessage("HunterCore AI quick task applied for " + fake.name() + ".");
+                } else {
+                    this.requestAi(fake.id(), true);
+                    sender.sendMessage("HunterCore AI one-shot requested for " + fake.name() + ".");
+                }
                 return true;
             }
             case "approve" -> {
@@ -523,7 +542,7 @@ final class HunterRealFakePlayerManager {
         if (profile != null) {
             this.aiProfiles.put(key, new FakeAiProfile(
                 profile.id(), profile.name(), profile.enabled(), profile.goal(),
-                profile.controllerUuid(), profile.controllerName(), allowedUntil
+                profile.controllerUuid(), profile.controllerName(), allowedUntil, profile.remainingTurns()
             ));
         }
         this.pendingRiskApprovals.remove(key);
@@ -564,9 +583,9 @@ final class HunterRealFakePlayerManager {
             return true;
         }
         sender.sendMessage("Loading real fake player skin " + source + " for " + name + ".");
-        Bukkit.createProfile(source).update().thenAccept(profile -> this.plugin.getServer().getScheduler().runTask(this.plugin, () -> {
+        java.util.concurrent.CompletableFuture.supplyAsync(() -> fetchMojangSkinTexture(source)).thenAccept(texture -> this.plugin.getServer().getScheduler().runTask(this.plugin, () -> {
             try {
-                this.send(sender, this.service().setSkinProfile(name, profile));
+                this.send(sender, this.service().setSkinTexture(name, texture.value(), texture.signature()));
             } catch (final RuntimeException ex) {
                 sender.sendMessage(ChatColor.RED + "Skin apply failed: " + cleanError(ex));
                 this.plugin.getLogger().warning("HunterCore real fake player skin apply failed for " + name + ": " + cleanError(ex));
@@ -673,7 +692,7 @@ final class HunterRealFakePlayerManager {
         if (!enabled) {
             this.stopAi(fake.id());
             if (!cleanGoal.isBlank()) {
-                this.aiProfiles.put(fake.id(), new FakeAiProfile(fake.id(), fake.name(), false, cleanGoal, null, null, 0L));
+                this.aiProfiles.put(fake.id(), new FakeAiProfile(fake.id(), fake.name(), false, cleanGoal, null, null, 0L, 0));
             }
             return true;
         }
@@ -684,7 +703,8 @@ final class HunterRealFakePlayerManager {
             cleanGoal.isBlank() ? defaultFakeAiGoal(fake.name()) : cleanGoal,
             null,
             null,
-            0L
+            0L,
+            -1
         ));
         this.startAiLoop(fake.id());
         this.requestAi(fake.id(), true);
@@ -692,6 +712,9 @@ final class HunterRealFakePlayerManager {
     }
 
     void observeChat(final Player player, final String rawMessage) {
+        if (this.isRealFakePlayer(player)) {
+            return;
+        }
         final String message = rawMessage == null ? "" : rawMessage.trim();
         if (message.isBlank()) {
             return;
@@ -709,6 +732,9 @@ final class HunterRealFakePlayerManager {
     }
 
     boolean handleChatControl(final Player player, final String rawMessage) {
+        if (this.isRealFakePlayer(player)) {
+            return false;
+        }
         final String message = rawMessage == null ? "" : rawMessage.trim();
         final String prefix = this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot").trim();
         if (!this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true)) {
@@ -718,7 +744,7 @@ final class HunterRealFakePlayerManager {
             final String body = message.substring(prefix.length()).trim();
             final UUID playerId = player.getUniqueId();
             this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleChatControlMain(playerId, prefix, body));
-            return true;
+            return false;
         }
         final MentionedFakePlayer mentioned = this.mentionedFakePlayer(message);
         if (mentioned == null) {
@@ -727,6 +753,15 @@ final class HunterRealFakePlayerManager {
         final String body = mentioned.snapshot().name() + " " + mentioned.task();
         final UUID playerId = player.getUniqueId();
         this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleChatControlMain(playerId, mentioned.snapshot().name(), body));
+        return false;
+    }
+
+    private boolean isRealFakePlayer(final Player player) {
+        for (final FakePlayerSnapshot snapshot : this.service().list()) {
+            if (snapshot.uuid().equals(player.getUniqueId())) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -920,25 +955,154 @@ final class HunterRealFakePlayerManager {
             + " yaw=" + format(location.getYaw())
             + " pitch=" + format(location.getPitch()) + "\n"
             + "Recent chat:\n" + this.recentChatContext() + "\n"
-            + "Behave like a cooperative Minecraft helper. For follow/come tasks use [follow:player=" + player.getName() + "]. "
-            + "For travel tasks use [goto:x y z]. For mining or tool work, look at the target and use [mine:ticks=40] or [use]. "
-            + "For building tasks, infer a compact style, equip safe materials with [equip:slot=1,material=oak_planks,amount=64], then build in small steps with [slot:n] and [place:x y z,face=auto] or [place:dx=0,dy=0,dz=1,face=auto]. "
-            + "Stop if the task says stop.";
-        this.setAi(fake.name(), true, goal);
-        final FakeAiProfile profile = this.aiProfiles.get(fake.id());
-        if (profile != null) {
-            this.aiProfiles.put(fake.id(), new FakeAiProfile(
-                profile.id(),
-                profile.name(),
-                profile.enabled(),
-                profile.goal(),
-                player.getUniqueId(),
-                player.getName(),
-                profile.highRiskAllowedUntilMillis()
-            ));
+            + "Behave like a cooperative Minecraft helper. For follow/come tasks use [follow:player=" + player.getName() + ",ticks=200]. "
+            + "For travel tasks use [goto:x y z,ticks=200]. For mining or tool work, look at the target and use [mine:ticks=40] or [use]. "
+            + "For building use one preset action: [build-house], [build-tower], [build-bridge], [build-wall], or [build-platform]. "
+            + "For armor use all needed wear actions: [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots]. "
+            + "For combat use [look-at-player:player=name] then [attack:ticks=60], or attack nearby hostile mobs when requested. "
+            + "Reply only with one short [say:...] after useful actions. Never explain reasoning. Stop if the task says stop.";
+        final boolean shortcutApplied = this.applyQuickChatTask(player, fake, task);
+        final int turns = isBuildRequest(task) ? 8 : shortcutApplied ? 2 : 4;
+        this.aiProfiles.put(fake.id(), new FakeAiProfile(
+            fake.id(),
+            fake.name(),
+            !shortcutApplied,
+            goal,
+            player.getUniqueId(),
+            player.getName(),
+            0L,
+            shortcutApplied ? 0 : turns
+        ));
+        if (!shortcutApplied) {
+            this.startAiLoop(fake.id());
+            this.requestAi(fake.id(), true);
         }
         this.aiLastActions.put(fake.id(), "assigned by " + player.getName() + ": " + truncatePlain(task, 80));
-        this.aiSay(fake.name(), "好的。");
+        this.aiSay(fake.name(), "OK.");
+    }
+
+    private boolean applyQuickGoalTask(final FakePlayerSnapshot fake, final String task) {
+        final String lower = task == null ? "" : task.toLowerCase(Locale.ROOT);
+        final String normalized = HunterToolsPreferences.normalize(task == null ? "" : task);
+        boolean applied = false;
+        if (hasAny(lower, normalized, "stop", "halt", "cancel", "停止", "停下", "别动", "不要动")) {
+            this.stopLoops(fake.name());
+            this.service().stopActions(fake.name());
+            return true;
+        }
+        final Player targetPlayer = this.quickTargetPlayer(task, null, fake.uuid());
+        if (targetPlayer != null && hasAny(lower, normalized, "come", "follow", "go to", "walk to", "move to", "approach", "find", "跟着", "跟随", "过来", "来我", "到我", "靠近", "走向", "走到", "去找", "过去", "接近")) {
+            this.startFollowLoop(fake.name(), targetPlayer.getUniqueId(), 260, 2.4D, true);
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "sneak", "crouch", "shift", "潜行", "蹲下", "蹲着")) {
+            this.service().setSneaking(fake.name(), true);
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "jump", "跳")) {
+            final int times = hasAny(lower, normalized, "twice", "两", "二", "2") ? 2 : 1;
+            for (int i = 0; i < times; i++) {
+                this.service().jump(fake.name());
+            }
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "armor", "armour", "wear", "穿甲", "穿戴", "护甲", "盔甲", "铠甲", "穿上")) {
+            final String tier = armorTier(lower, normalized);
+            this.aiWear(fake.name(), "material=" + tier + "_helmet");
+            this.aiWear(fake.name(), "material=" + tier + "_chestplate");
+            this.aiWear(fake.name(), "material=" + tier + "_leggings");
+            this.aiWear(fake.name(), "material=" + tier + "_boots");
+            applied = true;
+        }
+        final Material requestedItem = quickItem(lower, normalized);
+        if (requestedItem != null) {
+            this.aiEquip(fake.name(), "slot=1,material=" + requestedItem.key().value() + ",amount=" + Math.max(1, Math.min(64, requestedItem.getMaxStackSize())));
+            applied = true;
+        }
+        if (isBuildRequest(task)) {
+            this.startBuildPreset(fake.name(), fake.location(), buildKind(task));
+            applied = true;
+        }
+        return applied;
+    }
+
+    private boolean applyQuickChatTask(final Player controller, final FakePlayerSnapshot fake, final String task) {
+        final String lower = task == null ? "" : task.toLowerCase(Locale.ROOT);
+        final String normalized = HunterToolsPreferences.normalize(task == null ? "" : task);
+        boolean applied = false;
+        if (hasAny(lower, normalized, "stop", "halt", "cancel", "停止", "停下", "别动", "不要动")) {
+            this.stopLoops(fake.name());
+            this.service().stopActions(fake.name());
+            return true;
+        }
+        final Player targetPlayer = this.quickTargetPlayer(task, controller, fake.uuid());
+        if (targetPlayer != null && hasAny(lower, normalized, "come", "follow", "go to", "walk to", "move to", "approach", "find", "跟着", "跟随", "过来", "来我", "到我", "靠近", "走向", "走到", "去找", "过去", "接近")) {
+            this.startFollowLoop(fake.name(), targetPlayer.getUniqueId(), 260, 2.4D, true);
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "sneak", "crouch", "shift", "潜行", "蹲下", "蹲着")) {
+            this.service().setSneaking(fake.name(), true);
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "stand", "unsneak", "站起来", "别蹲", "取消蹲")) {
+            this.service().setSneaking(fake.name(), false);
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "jump", "跳")) {
+            final int times = hasAny(lower, normalized, "twice", "两", "二", "2") ? 2 : 1;
+            for (int i = 0; i < times; i++) {
+                this.service().jump(fake.name());
+            }
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "walk", "forward", "前进", "往前", "走路", "向前")) {
+            this.startMoveLoop(fake.name(), new MovePlan(1.0D, 0.0D, 60, false, true, false));
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "armor", "armour", "wear", "穿甲", "穿戴", "护甲", "盔甲", "铠甲", "穿上")) {
+            final String tier = armorTier(lower, normalized);
+            this.aiWear(fake.name(), "material=" + tier + "_helmet");
+            this.aiWear(fake.name(), "material=" + tier + "_chestplate");
+            this.aiWear(fake.name(), "material=" + tier + "_leggings");
+            this.aiWear(fake.name(), "material=" + tier + "_boots");
+            applied = true;
+        }
+        final Material requestedItem = quickItem(lower, normalized);
+        if (requestedItem != null) {
+            this.aiEquip(fake.name(), "slot=1,material=" + requestedItem.key().value() + ",amount=" + Math.max(1, Math.min(64, requestedItem.getMaxStackSize())));
+            applied = true;
+        }
+        if (isBuildRequest(task)) {
+            this.startBuildPreset(fake.name(), controller.getLocation(), buildKind(task));
+            applied = true;
+        }
+        if (hasAny(lower, normalized, "attack", "fight", "hit", "kill", "攻击", "打", "揍")) {
+            if (hasAny(lower, normalized, "me", "我", controller.getName().toLowerCase(Locale.ROOT))) {
+                this.aiLookAtPlayer(fake.name(), "player=" + controller.getName());
+            }
+            this.startTimedActionLoop(fake.name(), "attack", 60);
+            applied = true;
+        }
+        return applied;
+    }
+
+    private @Nullable Player quickTargetPlayer(final String task, final @Nullable Player fallback, final UUID actorUuid) {
+        final String text = task == null ? "" : task.toLowerCase(Locale.ROOT);
+        final String normalized = HunterToolsPreferences.normalize(task == null ? "" : task);
+        if (fallback != null && !fallback.getUniqueId().equals(actorUuid) && (hasAny(text, normalized, "me", "my", "我", "我这里", "我身边")
+            || text.contains(fallback.getName().toLowerCase(Locale.ROOT)))) {
+            return fallback;
+        }
+        for (final Player online : Bukkit.getOnlinePlayers()) {
+            if (online.getUniqueId().equals(actorUuid)) {
+                continue;
+            }
+            final String name = online.getName();
+            if (text.contains(name.toLowerCase(Locale.ROOT)) || normalized.contains(HunterToolsPreferences.normalize(name))) {
+                return online;
+            }
+        }
+        return fallback;
     }
 
     private String recentChatContext() {
@@ -965,6 +1129,14 @@ final class HunterRealFakePlayerManager {
         if (profile == null || !profile.enabled()) {
             return;
         }
+        if (profile.remainingTurns() == 0) {
+            this.stopAiTask(profile.id());
+            this.aiProfiles.put(profile.id(), new FakeAiProfile(
+                profile.id(), profile.name(), false, profile.goal(),
+                profile.controllerUuid(), profile.controllerName(), profile.highRiskAllowedUntilMillis(), 0
+            ));
+            return;
+        }
         final long interval = Math.max(1L, this.runtimeFakePlayerIntervalSeconds()) * 20L;
         final BukkitTask task = this.plugin.getServer().getScheduler().runTaskTimer(this.plugin, () -> this.requestAi(profile.id(), false), interval, interval);
         this.aiTasks.put(profile.id(), task);
@@ -974,6 +1146,10 @@ final class HunterRealFakePlayerManager {
         final String key = playerId(id);
         final FakeAiProfile profile = this.aiProfiles.get(key);
         if (profile == null || this.aiBusy.contains(key)) {
+            return;
+        }
+        if (!manual && profile.remainingTurns() == 0) {
+            this.stopAiTask(profile.id());
             return;
         }
         if (!manual && (!profile.enabled()
@@ -1011,6 +1187,17 @@ final class HunterRealFakePlayerManager {
                     return;
                 }
                 this.applyAiPlan(fake.name(), response);
+                final FakeAiProfile current = this.aiProfiles.get(key);
+                if (!manual && current != null && current.remainingTurns() > 0) {
+                    final int remaining = current.remainingTurns() - 1;
+                    this.aiProfiles.put(key, new FakeAiProfile(
+                        current.id(), current.name(), remaining > 0, current.goal(),
+                        current.controllerUuid(), current.controllerName(), current.highRiskAllowedUntilMillis(), remaining
+                    ));
+                    if (remaining <= 0) {
+                        this.stopAiTask(key);
+                    }
+                }
             });
         });
     }
@@ -1168,7 +1355,7 @@ final class HunterRealFakePlayerManager {
             context.append(" none");
         }
         context.append('\n');
-        context.append("Return only action lines. Prefer small steps and continue mining with [mine:ticks=40] when breaking blocks. Use [goto:x y z] or [follow:player=name] for player work requests. For building, create a compact plan, equip safe materials with [equip:slot=1,material=oak_planks,amount=64], select materials with [slot:n], then place one or a few blocks per turn with [place:x y z,face=auto] or relative [place:dx=0,dy=0,dz=1,face=auto]. Continue across turns until the structure is recognizable. ")
+        context.append("Return only bracketed action lines. No prose, no reasoning, no analysis. Execute quickly: prefer 1-3 useful actions. Use [goto:x y z,ticks=240,sprint=true] or [follow:player=name,ticks=260,distance=2.4] for movement. Use [move:forward=1,ticks=60,sprint=true], [sneak:on], [sneak:off], [jump]. For combat use [look-at-player:player=name] then [attack:ticks=60]. For building use one preset: house/home/cabin => [build-house], tower => [build-tower], bridge => [build-bridge], wall => [build-wall], platform/floor => [build-platform]. For armor output every needed armor piece: [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots]. For items use [equip:slot=1,material=oak_planks,amount=64]. Use [say:OK.] only after actions, never for thinking. ")
             .append("For temporary world settings use [gamerule:name=value,duration=60s], [weather:clear,duration=120s], [time:day,duration=60s], or [difficulty:peaceful,duration=120s]. ")
             .append("For temporary gameplay logic use reviewed declarative rules, never arbitrary code: ")
             .append("[rule:trigger=sneak,action=give,material=stone,amount=16,cooldown=3,duration=120s], ")
@@ -1241,8 +1428,7 @@ final class HunterRealFakePlayerManager {
             this.startTimedActionLoop(name, "use", Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-action-ticks", 80)));
             return "use";
         }
-        final String say = this.aiSay(name, text);
-        return say.isBlank() ? "" : "say";
+        return "ignored non-action AI text";
     }
 
     private static List<String> extractAiActionBodies(final String response) {
@@ -1300,8 +1486,10 @@ final class HunterRealFakePlayerManager {
             case "mine", "dig", "break" -> this.aiTimedAction(name, "attack", args, "mine", true);
             case "attack", "left-click", "leftclick" -> this.aiTimedAction(name, "attack", args, "attack", true);
             case "use", "right-click", "rightclick", "interact" -> this.aiTimedAction(name, "use", args, "use", false);
-            case "place", "place-block", "placeblock", "build" -> this.aiPlace(name, args);
+            case "place", "place-block", "placeblock" -> this.aiPlace(name, args);
+            case "build", "build-house", "house", "hut", "build-tower", "tower", "build-bridge", "bridge", "build-wall", "wall", "build-platform", "platform" -> this.aiBuildPreset(name, action, args);
             case "equip", "item", "give-item", "material" -> this.aiEquip(name, args);
+            case "wear", "armor", "armour", "put-on" -> this.aiWear(name, args);
             case "rule", "gameplay-rule", "temporary-rule", "temp-rule" -> this.gameplayRuleManager.applyAiRule(args);
             case "recipe", "crafting-recipe" -> this.gameplayRuleManager.applyAiRule("action=recipe " + args);
             case "gamerule", "game-rule" -> this.aiGameRule(name, args);
@@ -1338,7 +1526,7 @@ final class HunterRealFakePlayerManager {
         if (profile != null && profile.highRiskAllowedUntilMillis() > System.currentTimeMillis()) {
             this.aiProfiles.put(key, new FakeAiProfile(
                 profile.id(), profile.name(), profile.enabled(), profile.goal(),
-                profile.controllerUuid(), profile.controllerName(), 0L
+                profile.controllerUuid(), profile.controllerName(), 0L, profile.remainingTurns()
             ));
             this.pendingRiskApprovals.remove(key);
             return "";
@@ -1480,7 +1668,7 @@ final class HunterRealFakePlayerManager {
             return "";
         }
         final int ticks = Math.max(1, Math.min(
-            Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 40)),
+            Math.max(200, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 200)),
             intArg(args, "ticks", 60)
         ));
         final boolean sprint = parseBooleanArg(args, "sprint", true);
@@ -1498,7 +1686,7 @@ final class HunterRealFakePlayerManager {
             return "";
         }
         final int ticks = Math.max(1, Math.min(
-            Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 40)),
+            Math.max(200, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 200)),
             intArg(args, "ticks", 80)
         ));
         final double distance = clamp(doubleArg(args, "distance", 2.5D), 1.0D, 8.0D);
@@ -1720,6 +1908,56 @@ final class HunterRealFakePlayerManager {
             : resultLine(slotResult);
     }
 
+    private String aiWear(final String name, final String args) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return "";
+        }
+        final Player player = Bukkit.getPlayer(snapshot.get().uuid());
+        if (player == null) {
+            return "wear failed: fake player is not online";
+        }
+        final Material material = materialArg(args);
+        if (material == null || !material.isItem()) {
+            return "wear failed: unknown armor material";
+        }
+        final PlayerInventory inventory = player.getInventory();
+        final ItemStack stack = new ItemStack(material, 1);
+        final String type = material.name().toLowerCase(Locale.ROOT);
+        if (type.endsWith("_helmet") || type.equals("turtle_helmet") || type.equals("carved_pumpkin")) {
+            inventory.setHelmet(stack);
+        } else if (type.endsWith("_chestplate") || type.equals("elytra")) {
+            inventory.setChestplate(stack);
+        } else if (type.endsWith("_leggings")) {
+            inventory.setLeggings(stack);
+        } else if (type.endsWith("_boots")) {
+            inventory.setBoots(stack);
+        } else {
+            return "wear failed: " + material.key().value() + " is not armor";
+        }
+        player.updateInventory();
+        return "wearing " + material.key().value();
+    }
+
+    private String aiBuildPreset(final String name, final String action, final String args) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return "";
+        }
+        String kind = firstNonBlank(valueFor(args, "kind"), valueFor(args, "type"), valueFor(args, "preset"));
+        if (kind.isBlank()) {
+            kind = switch (action) {
+                case "build-tower", "tower" -> "tower";
+                case "build-bridge", "bridge" -> "bridge";
+                case "build-wall", "wall" -> "wall";
+                case "build-platform", "platform" -> "platform";
+                default -> "house";
+            };
+        }
+        this.startBuildPreset(name, snapshot.get().location(), HunterToolsPreferences.normalize(kind));
+        return "building " + HunterToolsPreferences.normalize(kind);
+    }
+
     private String aiSay(final String name, final String args) {
         final var snapshot = this.service().snapshot(name);
         if (snapshot.isEmpty()) {
@@ -1729,8 +1967,50 @@ final class HunterRealFakePlayerManager {
         if (message.isBlank()) {
             return "";
         }
+        if (looksLikeAiMetaText(message)) {
+            return "blocked AI meta chat";
+        }
         Bukkit.broadcastMessage("<" + snapshot.get().name() + "> " + message);
         return "say";
+    }
+
+    private void startHouseBuild(final String name, final Location origin) {
+        this.startBuildPreset(name, origin, "house");
+    }
+
+    private void startBuildPreset(final String name, final Location origin, final String kind) {
+        if (!this.preferences.booleanValue("modules.ai.fake-players.allow-placing", true) || origin.getWorld() == null) {
+            return;
+        }
+        this.stopLoop(name, "build");
+        final List<BuildStep> steps = buildPresetPlan(origin, kind);
+        if (steps.isEmpty()) {
+            return;
+        }
+        this.buildPlans.put(playerId(name), steps);
+        final int[] index = {0};
+        final BukkitTask task = this.plugin.getServer().getScheduler().runTaskTimer(this.plugin, () -> {
+            final var snapshot = this.service().snapshot(name);
+            if (snapshot.isEmpty() || index[0] >= steps.size()) {
+                this.stopLoop(name, "build");
+                this.buildPlans.remove(playerId(name));
+                return;
+            }
+            int placed = 0;
+            while (index[0] < steps.size() && placed < 3) {
+                final BuildStep step = steps.get(index[0]++);
+                final Block block = step.location().getBlock();
+                if (block.getType().isAir() || block.isPassable()) {
+                    block.setType(step.material(), false);
+                    placed++;
+                    final Location fakeLocation = snapshot.get().location();
+                    final float[] rotation = rotationTo(fakeLocation, block.getX() + 0.5D, block.getY() + 0.5D, block.getZ() + 0.5D);
+                    this.service().look(name, rotation[0], rotation[1]);
+                }
+            }
+            this.aiLastActions.put(playerId(name), "building " + kind + " " + index[0] + "/" + steps.size());
+        }, 1L, 2L);
+        this.loops.put(loopKey(name, "build"), task);
     }
 
     private void startLoop(final CommandSender sender, final String name, final String action) {
@@ -1765,7 +2045,7 @@ final class HunterRealFakePlayerManager {
 
     private void startMoveLoop(final String name, final MovePlan plan) {
         this.stopLoop(name, "move");
-        final int maxTicks = Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 40));
+        final int maxTicks = Math.max(200, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 200));
         final int[] remaining = {Math.max(1, Math.min(maxTicks, plan.ticks()))};
         final BukkitTask task = this.plugin.getServer().getScheduler().runTaskTimer(this.plugin, () -> {
             final FakePlayerActionResult result = this.service().move(name, plan.forward(), plan.sideways(), plan.jump(), plan.sprinting(), plan.sneaking());
@@ -1778,7 +2058,7 @@ final class HunterRealFakePlayerManager {
 
     private void startGotoLoop(final String name, final double x, final double y, final double z, final int ticks, final boolean sprinting) {
         this.stopLoop(name, "goto");
-        final int maxTicks = Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 40));
+        final int maxTicks = Math.max(200, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 200));
         final int[] remaining = {Math.max(1, Math.min(maxTicks, ticks))};
         final BukkitTask task = this.plugin.getServer().getScheduler().runTaskTimer(this.plugin, () -> {
             final var snapshot = this.service().snapshot(name);
@@ -1804,7 +2084,7 @@ final class HunterRealFakePlayerManager {
 
     private void startFollowLoop(final String name, final UUID targetId, final int ticks, final double distance, final boolean sprinting) {
         this.stopLoop(name, "follow");
-        final int maxTicks = Math.max(1, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 40));
+        final int maxTicks = Math.max(200, this.preferences.intValue("modules.ai.fake-players.max-move-ticks", 200));
         final int[] remaining = {Math.max(1, Math.min(maxTicks, ticks))};
         final BukkitTask task = this.plugin.getServer().getScheduler().runTaskTimer(this.plugin, () -> {
             final Player target = Bukkit.getPlayer(targetId);
@@ -1846,9 +2126,10 @@ final class HunterRealFakePlayerManager {
     }
 
     private void stopLoops(final String name) {
-        for (final String action : List.of("jump", "use", "attack", "move", "goto", "follow")) {
+        for (final String action : List.of("jump", "use", "attack", "move", "goto", "follow", "build")) {
             this.stopLoop(name, action);
         }
+        this.buildPlans.remove(playerId(name));
     }
 
     private void stopLoop(final String name, final String action) {
@@ -1892,7 +2173,7 @@ final class HunterRealFakePlayerManager {
 
     private String loopLine(final String name) {
         final List<String> active = new ArrayList<>();
-        for (final String action : List.of("jump", "use", "attack", "move", "goto", "follow")) {
+        for (final String action : List.of("jump", "use", "attack", "move", "goto", "follow", "build")) {
             if (this.loops.containsKey(loopKey(name, action))) {
                 active.add(action);
             }
@@ -2438,6 +2719,236 @@ final class HunterRealFakePlayerManager {
         return nearest;
     }
 
+    private static boolean isBuildRequest(final String task) {
+        final String lower = task == null ? "" : task.toLowerCase(Locale.ROOT);
+        return lower.contains("build")
+            || lower.contains("house")
+            || lower.contains("home")
+            || lower.contains("cabin")
+            || lower.contains("tower")
+            || lower.contains("bridge")
+            || lower.contains("wall")
+            || lower.contains("platform")
+            || lower.contains("\u5efa")
+            || lower.contains("\u623f")
+            || lower.contains("\u5c4b")
+            || lower.contains("\u5854")
+            || lower.contains("\u6865")
+            || lower.contains("\u5899")
+            || lower.contains("\u5e73\u53f0");
+    }
+
+    private static String buildKind(final String task) {
+        final String lower = task == null ? "" : task.toLowerCase(Locale.ROOT);
+        final String normalized = HunterToolsPreferences.normalize(task == null ? "" : task);
+        if (hasAny(lower, normalized, "tower", "塔")) {
+            return "tower";
+        }
+        if (hasAny(lower, normalized, "bridge", "桥")) {
+            return "bridge";
+        }
+        if (hasAny(lower, normalized, "wall", "墙")) {
+            return "wall";
+        }
+        if (hasAny(lower, normalized, "platform", "floor", "平台", "地板")) {
+            return "platform";
+        }
+        return "house";
+    }
+
+    private static String armorTier(final String lower, final String normalized) {
+        if (hasAny(lower, normalized, "netherite", "下界合金")) {
+            return "netherite";
+        }
+        if (hasAny(lower, normalized, "diamond", "钻石")) {
+            return "diamond";
+        }
+        if (hasAny(lower, normalized, "gold", "golden", "金")) {
+            return "golden";
+        }
+        if (hasAny(lower, normalized, "chain", "chainmail", "锁链")) {
+            return "chainmail";
+        }
+        if (hasAny(lower, normalized, "leather", "皮革")) {
+            return "leather";
+        }
+        return "iron";
+    }
+
+    private static @Nullable Material quickItem(final String lower, final String normalized) {
+        if (!hasAny(lower, normalized, "equip", "hold", "take", "拿", "装备", "给自己", "物品", "方块", "剑", "斧", "弓")) {
+            return null;
+        }
+        if (hasAny(lower, normalized, "netherite sword", "下界合金剑")) {
+            return Material.NETHERITE_SWORD;
+        }
+        if (hasAny(lower, normalized, "diamond sword", "钻石剑")) {
+            return Material.DIAMOND_SWORD;
+        }
+        if (hasAny(lower, normalized, "iron sword", "铁剑", "剑")) {
+            return Material.IRON_SWORD;
+        }
+        if (hasAny(lower, normalized, "diamond axe", "钻石斧")) {
+            return Material.DIAMOND_AXE;
+        }
+        if (hasAny(lower, normalized, "iron axe", "铁斧", "斧")) {
+            return Material.IRON_AXE;
+        }
+        if (hasAny(lower, normalized, "bow", "弓")) {
+            return Material.BOW;
+        }
+        if (hasAny(lower, normalized, "stone", "石头", "圆石")) {
+            return Material.STONE;
+        }
+        if (hasAny(lower, normalized, "log", "wood", "木头", "原木")) {
+            return Material.OAK_LOG;
+        }
+        if (hasAny(lower, normalized, "plank", "wood plank", "木板", "方块")) {
+            return Material.OAK_PLANKS;
+        }
+        return null;
+    }
+
+    private static boolean hasAny(final String lower, final String normalized, final String... needles) {
+        for (final String needle : needles) {
+            if (needle == null || needle.isBlank()) {
+                continue;
+            }
+            final String lowerNeedle = needle.toLowerCase(Locale.ROOT);
+            if (lower.contains(lowerNeedle) || normalized.contains(HunterToolsPreferences.normalize(needle))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<BuildStep> buildPresetPlan(final Location origin, final String kind) {
+        return switch (HunterToolsPreferences.normalize(kind)) {
+            case "tower" -> towerPlan(origin);
+            case "bridge" -> bridgePlan(origin);
+            case "wall" -> wallPlan(origin);
+            case "platform" -> platformPlan(origin);
+            default -> smallHousePlan(origin);
+        };
+    }
+
+    private static List<BuildStep> smallHousePlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 2;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        for (int x = 0; x < 5; x++) {
+            for (int z = 0; z < 5; z++) {
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY - 1, baseZ + z), Material.OAK_PLANKS));
+            }
+        }
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 5; x++) {
+                for (int z = 0; z < 5; z++) {
+                    final boolean edge = x == 0 || x == 4 || z == 0 || z == 4;
+                    if (!edge || (y <= 2 && x == 2 && z == 0)) {
+                        continue;
+                    }
+                    steps.add(new BuildStep(new Location(world, baseX + x, baseY + y, baseZ + z), Material.OAK_PLANKS));
+                }
+            }
+        }
+        for (int x = -1; x <= 5; x++) {
+            for (int z = -1; z <= 5; z++) {
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY + 4, baseZ + z), Material.OAK_SLAB));
+            }
+        }
+        steps.add(new BuildStep(new Location(world, baseX + 2, baseY, baseZ), Material.OAK_DOOR));
+        steps.add(new BuildStep(new Location(world, baseX + 1, baseY + 1, baseZ), Material.GLASS_PANE));
+        steps.add(new BuildStep(new Location(world, baseX + 3, baseY + 1, baseZ), Material.GLASS_PANE));
+        steps.add(new BuildStep(new Location(world, baseX + 2, baseY + 1, baseZ + 4), Material.GLASS_PANE));
+        return steps;
+    }
+
+    private static List<BuildStep> towerPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 2;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 3; x++) {
+                for (int z = 0; z < 3; z++) {
+                    final boolean edge = x == 0 || x == 2 || z == 0 || z == 2;
+                    if (edge) {
+                        steps.add(new BuildStep(new Location(world, baseX + x, baseY + y, baseZ + z), Material.STONE_BRICKS));
+                    }
+                }
+            }
+        }
+        for (int x = -1; x <= 3; x++) {
+            for (int z = -1; z <= 3; z++) {
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY + 8, baseZ + z), Material.STONE_BRICK_SLAB));
+            }
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> bridgePlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 1;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        for (int x = 0; x < 9; x++) {
+            for (int z = 0; z < 3; z++) {
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY, baseZ + z), Material.OAK_PLANKS));
+            }
+            steps.add(new BuildStep(new Location(world, baseX + x, baseY + 1, baseZ - 1), Material.OAK_FENCE));
+            steps.add(new BuildStep(new Location(world, baseX + x, baseY + 1, baseZ + 3), Material.OAK_FENCE));
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> wallPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 1;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        for (int x = 0; x < 9; x++) {
+            for (int y = 0; y < 3; y++) {
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY + y, baseZ), Material.COBBLESTONE));
+            }
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> platformPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 1;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 1;
+        for (int x = 0; x < 7; x++) {
+            for (int z = 0; z < 7; z++) {
+                steps.add(new BuildStep(new Location(world, baseX + x, baseY, baseZ + z), Material.SMOOTH_STONE));
+            }
+        }
+        return steps;
+    }
+
     private static List<String> tokens(final String args) {
         final List<String> values = new ArrayList<>();
         if (args == null) {
@@ -2458,6 +2969,20 @@ final class HunterRealFakePlayerManager {
         }
         final String sanitized = message.replace('\n', ' ').replace('\r', ' ').trim();
         return sanitized.length() > 160 ? sanitized.substring(0, 160).trim() : sanitized;
+    }
+
+    private static boolean looksLikeAiMetaText(final String message) {
+        final String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("we need to")
+            || lower.contains("the player wants")
+            || lower.contains("the player's request")
+            || lower.contains("respond to recent chat")
+            || lower.contains("recent chat:")
+            || lower.contains("translates to")
+            || lower.contains("chain-of-thought")
+            || lower.contains("i need to")
+            || lower.contains("we should")
+            || lower.contains("let's ");
     }
 
     private static String truncatePlain(final String value, final int maxLength) {
@@ -2516,13 +3041,60 @@ final class HunterRealFakePlayerManager {
         return message.length() > 160 ? message.substring(0, 160) + "..." : message;
     }
 
+    private static MojangSkinTexture fetchMojangSkinTexture(final String playerName) {
+        try {
+            final String encodedName = URLEncoder.encode(playerName, StandardCharsets.UTF_8);
+            final HttpRequest profileRequest = HttpRequest.newBuilder(URI.create("https://api.mojang.com/users/profiles/minecraft/" + encodedName))
+                .timeout(Duration.ofSeconds(15L))
+                .GET()
+                .build();
+            final HttpResponse<String> profileResponse = SKIN_HTTP.send(profileRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (profileResponse.statusCode() != 200) {
+                throw new IllegalStateException("Mojang profile lookup returned HTTP " + profileResponse.statusCode());
+            }
+            final JsonObject profile = JsonParser.parseString(profileResponse.body()).getAsJsonObject();
+            final String id = profile.get("id").getAsString();
+            final HttpRequest sessionRequest = HttpRequest.newBuilder(URI.create("https://sessionserver.mojang.com/session/minecraft/profile/" + id + "?unsigned=false"))
+                .timeout(Duration.ofSeconds(15L))
+                .GET()
+                .build();
+            final HttpResponse<String> sessionResponse = SKIN_HTTP.send(sessionRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (sessionResponse.statusCode() != 200) {
+                throw new IllegalStateException("Mojang session lookup returned HTTP " + sessionResponse.statusCode());
+            }
+            final JsonObject session = JsonParser.parseString(sessionResponse.body()).getAsJsonObject();
+            for (final var property : session.getAsJsonArray("properties")) {
+                final JsonObject object = property.getAsJsonObject();
+                if (!"textures".equals(object.get("name").getAsString())) {
+                    continue;
+                }
+                final String value = object.get("value").getAsString();
+                final String signature = object.has("signature") ? object.get("signature").getAsString() : "";
+                if (value.isBlank()) {
+                    break;
+                }
+                return new MojangSkinTexture(value, signature);
+            }
+            throw new IllegalStateException("Mojang profile " + playerName + " did not include a skin texture.");
+        } catch (final java.io.IOException ex) {
+            throw new IllegalStateException("Mojang skin request failed: " + ex.getMessage(), ex);
+        } catch (final InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Mojang skin request was interrupted.", ex);
+        } catch (final RuntimeException ex) {
+            throw new IllegalStateException(ex.getMessage() == null ? "Mojang skin lookup failed." : ex.getMessage(), ex);
+        }
+    }
+
     private static String defaultFakeAiPrompt() {
-        return "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines, no prose. "
+        return "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines. Never write prose, reasoning, translations, summaries, or chain-of-thought. "
+            + "Execute the player's intent immediately. Prefer 1-3 actions per turn unless equipping full armor. "
             + "Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], "
-            + "[move:forward=1,sideways=0,ticks=20,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=60,sprint=true], "
-            + "[follow:player=name,ticks=80,distance=2.5], [mine:ticks=40], [use], [attack], [jump], [sneak:on], [sprint:off], "
-            + "[equip:slot=1,material=oak_planks,amount=64], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
-            + "Use small safe steps. For building requests, infer a compact style and dimensions from the player's request, equip safe building materials first, then place one or a few visible nearby blocks per turn. Keep continuing across turns until the build is recognizable. Mine only when the goal requires it and the target block is visible.";
+            + "[move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], "
+            + "[follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], "
+            + "[equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], "
+            + "[build-house], [build-tower], [build-bridge], [build-wall], [build-platform], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
+            + "For 'come/follow', use follow. For 'wear armor', output all four wear actions. For building, map house/home/cabin to [build-house], tower to [build-tower], bridge to [build-bridge], wall to [build-wall], platform/floor to [build-platform]. For attack, look at the target first if a player is named. If unsure, do a safe movement/look action and [say:OK.].";
     }
 
     private static String defaultFakeAiGoal(final String name) {
@@ -2610,7 +3182,8 @@ final class HunterRealFakePlayerManager {
         String goal,
         UUID controllerUuid,
         String controllerName,
-        long highRiskAllowedUntilMillis
+        long highRiskAllowedUntilMillis,
+        int remainingTurns
     ) {
     }
 
@@ -2618,6 +3191,12 @@ final class HunterRealFakePlayerManager {
     }
 
     private record PlaceSurface(Block clickedBlock, BlockFace face) {
+    }
+
+    private record BuildStep(Location location, Material material) {
+    }
+
+    private record MojangSkinTexture(String value, String signature) {
     }
 
     private record TargetTask(FakePlayerSnapshot snapshot, String task) {

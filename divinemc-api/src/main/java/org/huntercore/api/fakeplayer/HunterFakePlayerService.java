@@ -28,6 +28,10 @@ public interface HunterFakePlayerService {
         return FakePlayerActionResult.fail("Fake player skin changes are not supported by this service.");
     }
 
+    default @NotNull FakePlayerActionResult setSkinTexture(@NotNull final String name, @NotNull final String textureValue, @Nullable final String textureSignature) {
+        return FakePlayerActionResult.fail("Fake player skin changes are not supported by this service.");
+    }
+
     @NotNull FakePlayerActionResult remove(@NotNull String name);
 
     @NotNull FakePlayerActionResult removeAll();
