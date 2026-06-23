@@ -92,11 +92,12 @@ public final class HunterHelp {
         entry(AUTH, "logout", "/logout", "锁定当前登录会话。", "Locks your current auth session.", "hunterauth.command.logout"),
         entry(AUTH, "changepassword", "/changepassword <old> <new>", "修改 HunterAuth 密码。", "Changes your HunterAuth password.", "hunterauth.command.changepassword"),
 
-        entry(HPLAYER, "hplayer", "/hplayer <spawn|remove|kill|list|tp|tphere|look|move|sneak|sprint|jump|use|attack|stop|click|drop|dropstack|swap|gm|slot|ai|info|clear>", "管理真实 ServerPlayer 假人；别名 /playerbot。", "Manages real ServerPlayer fake players; alias /playerbot.", "huntertools.command.hplayer"),
+        entry(HPLAYER, "hplayer", "/player <spawn|remove|list|skin|move|use|attack|ai|info> ...", "管理真实玩家 Bot；别名 /hplayer、/playerbot。", "Manages real player bots; aliases /hplayer and /playerbot.", "huntertools.command.hplayer"),
         entry(HPLAYER, "hplayer spawn", "/hplayer spawn <name> [world x y z [yaw pitch]]", "生成真实假人。", "Spawns a real fake player.", "huntertools.command.hplayer"),
         entry(HPLAYER, "hplayer remove", "/hplayer remove <name>", "移除真实假人。", "Removes a real fake player.", "huntertools.command.hplayer"),
         entry(HPLAYER, "hplayer kill", "/hplayer kill <name>", "杀死真实假人实体。", "Kills the real fake player entity.", "huntertools.command.hplayer"),
         entry(HPLAYER, "hplayer list", "/hplayer list", "列出真实假人。", "Lists real fake players.", "huntertools.command.hplayer"),
+        entry(HPLAYER, "hplayer skin", "/player skin <name> <minecraftName|clear>", "用正版玩家 ID 给真实玩家 Bot 加载皮肤；clear 清除。", "Loads a real player bot skin from an official Minecraft name; clear resets it.", "huntertools.command.hplayer"),
         entry(HPLAYER, "hplayer tp", "/hplayer tp <name> [world x y z [yaw pitch]]", "传送真实假人。", "Teleports a real fake player.", "huntertools.command.hplayer"),
         entry(HPLAYER, "hplayer tphere", "/hplayer tphere <name>", "把真实假人传送到你身边。", "Teleports a real fake player to you.", "huntertools.command.hplayer"),
         entry(HPLAYER, "hplayer look", "/hplayer look <name> <yaw pitch|north|south|east|west|up|down>", "调整真实假人视角。", "Changes a real fake player's look direction.", "huntertools.command.hplayer"),
@@ -117,7 +118,7 @@ public final class HunterHelp {
         entry(HPLAYER, "hplayer info", "/hplayer info [name]", "查看真实假人状态。", "Shows real fake player status.", "huntertools.command.hplayer"),
         entry(HPLAYER, "hplayer clear", "/hplayer clear", "移除全部真实假人。", "Removes all real fake players.", "huntertools.command.hplayer"),
 
-        entry(HNPC, "hnpc", "/hnpc <spawn|remove|list|tp|tphere|look|pose|click|info|clear>", "管理 HunterCore NPC；/npc 是兼容别名。", "Manages HunterCore NPCs; /npc is a compatibility alias.", "huntertools.command.npc"),
+        entry(HNPC, "hnpc", "/npc <spawn|remove|list|skin|pose|click|info> ...", "管理展示 NPC；别名 /hnpc。", "Manages display NPCs; alias /hnpc.", "huntertools.command.npc"),
         entry(HNPC, "hnpc spawn", "/hnpc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]", "生成 NPC。", "Spawns an NPC.", "huntertools.command.npc"),
         entry(HNPC, "hnpc remove", "/hnpc remove <name>", "移除 NPC。", "Removes an NPC.", "huntertools.command.npc"),
         entry(HNPC, "hnpc list", "/hnpc list", "列出 NPC。", "Lists NPCs.", "huntertools.command.npc"),
@@ -125,11 +126,12 @@ public final class HunterHelp {
         entry(HNPC, "hnpc tphere", "/hnpc tphere <name>", "把 NPC 传送到你身边。", "Teleports an NPC to you.", "huntertools.command.npc"),
         entry(HNPC, "hnpc look", "/hnpc look <name> [yaw pitch|north|south|east|west|up|down]", "调整 NPC 朝向。", "Changes an NPC's look direction.", "huntertools.command.npc"),
         entry(HNPC, "hnpc pose", "/hnpc pose <name> <standing|sneaking|swimming|fall-flying|sleeping>", "设置 NPC 姿势。", "Sets an NPC pose.", "huntertools.command.npc"),
+        entry(HNPC, "hnpc skin", "/npc skin <name> <minecraftName|clear>", "给 mannequin 类型 NPC 加载正版玩家皮肤；村民类型不支持玩家皮肤。", "Loads an official player skin for mannequin NPCs; villager NPCs do not support player skins.", "huntertools.command.npc"),
         entry(HNPC, "hnpc click", "/hnpc click <name> [command|clear]", "设置点击 NPC 时执行的命令。", "Sets the command run when a player clicks the NPC.", "huntertools.command.npc"),
         entry(HNPC, "hnpc info", "/hnpc info [name]", "查看 NPC 状态。", "Shows NPC status.", "huntertools.command.npc"),
         entry(HNPC, "hnpc clear", "/hnpc clear", "移除全部 NPC。", "Removes all NPCs.", "huntertools.command.npc"),
 
-        entry(FAKEPLAYER, "hc fakeplayer", "/hc fakeplayer <spawn|remove|list|tp|tphere|look|pose|click|info|clear>", "管理轻量 Mannequin 假人，用于展示、占位和简单交互。", "Manages lightweight Mannequin fake players for display, placeholders, and simple interaction.", "huntertools.command.fakeplayer"),
+        entry(FAKEPLAYER, "hc fakeplayer", "/hc fakeplayer <spawn|remove|list|skin|pose|click|info> ...", "管理轻量 Mannequin 假人，用于展示、占位和简单交互。", "Manages lightweight Mannequin fake players for display, placeholders, and simple interaction.", "huntertools.command.fakeplayer"),
         entry(FAKEPLAYER, "hc fakeplayer spawn", "/hc fakeplayer spawn <name> [world x y z [yaw pitch]]", "生成轻量假人。", "Spawns a lightweight fake player.", "huntertools.command.fakeplayer"),
         entry(FAKEPLAYER, "hc fakeplayer remove", "/hc fakeplayer remove <name>", "移除轻量假人。", "Removes a lightweight fake player.", "huntertools.command.fakeplayer"),
         entry(FAKEPLAYER, "hc fakeplayer list", "/hc fakeplayer list", "列出轻量假人。", "Lists lightweight fake players.", "huntertools.command.fakeplayer"),
@@ -137,6 +139,7 @@ public final class HunterHelp {
         entry(FAKEPLAYER, "hc fakeplayer tphere", "/hc fakeplayer tphere <name>", "把轻量假人传送到你身边。", "Teleports a lightweight fake player to you.", "huntertools.command.fakeplayer"),
         entry(FAKEPLAYER, "hc fakeplayer look", "/hc fakeplayer look <name> [yaw pitch|north|south|east|west|up|down]", "调整轻量假人朝向。", "Changes a lightweight fake player's look direction.", "huntertools.command.fakeplayer"),
         entry(FAKEPLAYER, "hc fakeplayer pose", "/hc fakeplayer pose <name> <standing|sneaking|swimming|fall-flying|sleeping>", "设置轻量假人姿势。", "Sets a lightweight fake player pose.", "huntertools.command.fakeplayer"),
+        entry(FAKEPLAYER, "hc fakeplayer skin", "/hc fakeplayer skin <name> <minecraftName|clear>", "给轻量 Mannequin 假人加载正版玩家皮肤。", "Loads an official player skin for a lightweight mannequin fake player.", "huntertools.command.fakeplayer"),
         entry(FAKEPLAYER, "hc fakeplayer click", "/hc fakeplayer click <name> [command|clear]", "设置点击轻量假人时执行的命令。", "Sets the command run when a player clicks the lightweight fake player.", "huntertools.command.fakeplayer"),
         entry(FAKEPLAYER, "hc fakeplayer info", "/hc fakeplayer info [name]", "查看轻量假人状态。", "Shows lightweight fake player status.", "huntertools.command.fakeplayer"),
         entry(FAKEPLAYER, "hc fakeplayer clear", "/hc fakeplayer clear", "移除全部轻量假人。", "Removes all lightweight fake players.", "huntertools.command.fakeplayer")
@@ -150,7 +153,7 @@ public final class HunterHelp {
     }
 
     public static @NotNull List<String> topics() {
-        final List<String> topics = new ArrayList<>(List.of("all", CORE, ADMIN, SHORTCUTS, TPA, "teleport", "homes", AUTH, "login", HPLAYER, "playerbot", HNPC, "npc", FAKEPLAYER));
+        final List<String> topics = new ArrayList<>(List.of("all", CORE, ADMIN, SHORTCUTS, TPA, "teleport", "homes", AUTH, "login", HPLAYER, "player", "playerbot", HNPC, "npc", FAKEPLAYER));
         for (final CommandEntry entry : ENTRIES) {
             topics.add(entry.topic());
             topics.add(entry.topic().replace("hc ", ""));
@@ -240,7 +243,7 @@ public final class HunterHelp {
             case SHORTCUTS, "shortcut", "essentials", "essential" -> SHORTCUTS;
             case TPA, "teleport", "teleportation", "homes", "home" -> TPA;
             case AUTH, "login", "register", "password" -> AUTH;
-            case HPLAYER, "playerbot", "real-fake-player", "real-fake-players", "realfakeplayer" -> HPLAYER;
+            case HPLAYER, "player", "playerbot", "real-fake-player", "real-fake-players", "realfakeplayer" -> HPLAYER;
             case HNPC, "npc", "npcs" -> HNPC;
             case FAKEPLAYER, "fake-player", "fake-players" -> FAKEPLAYER;
             default -> null;

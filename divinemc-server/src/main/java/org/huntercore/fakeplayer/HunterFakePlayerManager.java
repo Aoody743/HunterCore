@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import com.destroystokyo.paper.profile.SharedPlayerProfile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
@@ -35,6 +36,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.block.BlockFace;
 import org.bukkit.craftbukkit.CraftWorld;
+import org.bukkit.profile.PlayerProfile;
 import org.huntercore.api.fakeplayer.FakePlayerActionResult;
 import org.huntercore.api.fakeplayer.FakePlayerSnapshot;
 import org.huntercore.api.fakeplayer.HunterFakePlayerService;
@@ -96,7 +98,7 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
 
             final ServerLevel level = ((CraftWorld) location.getWorld()).getHandle();
             final UUID uuid = UUID.nameUUIDFromBytes((UUID_PREFIX + id).getBytes(StandardCharsets.UTF_8));
-            final GameProfile profile = new GameProfile(uuid, profileName);
+            final GameProfile profile = this.profile(profileName, uuid, null);
             final ServerPlayer player = new ServerPlayer(server, level, profile, net.minecraft.server.level.ClientInformation.createDefault());
             player.snapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
             player.getBukkitEntity().setPersistent(false);
@@ -113,6 +115,43 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             player.getBukkitEntity().addScoreboardTag(SCOREBOARD_TAG);
             this.players.put(id, new FakeEntry(id, profileName, uuid));
             return FakePlayerActionResult.ok("Spawned real fake player " + profileName + ".");
+        });
+    }
+
+    @Override
+    public @NotNull FakePlayerActionResult setSkinProfile(@NotNull final String name, final @Nullable PlayerProfile skinProfile) {
+        return this.sync(() -> {
+            final String id = id(name);
+            final ServerPlayer existing = this.player(id);
+            final FakeEntry entry = this.players.get(id);
+            if (existing == null || entry == null) {
+                return FakePlayerActionResult.fail("Fake player not found: " + name);
+            }
+            final Location location = existing.getBukkitEntity().getLocation();
+            final GameMode gameMode = existing.getBukkitEntity().getGameMode();
+            final ServerLevel level = (ServerLevel) existing.level();
+            final String profileName = existing.getGameProfile().name();
+            final UUID uuid = existing.getUUID();
+            this.server().getPlayerList().remove(existing, net.kyori.adventure.text.Component.text("HunterCore fake player skin refresh"));
+
+            final GameProfile profile = this.profile(profileName, uuid, skinProfile);
+            final ServerPlayer player = new ServerPlayer(this.server(), level, profile, net.minecraft.server.level.ClientInformation.createDefault());
+            player.snapTo(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+            player.getBukkitEntity().setPersistent(false);
+            player.getBukkitEntity().addScoreboardTag(SCOREBOARD_TAG);
+
+            final HunterFakeConnection connection = new HunterFakeConnection();
+            final CommonListenerCookie cookie = CommonListenerCookie.createInitial(profile, false);
+            this.server().getPlayerList().placeNewPlayer(connection, player, cookie);
+            if (player.hasDisconnected() || this.server().getPlayerList().getPlayer(uuid) != player) {
+                this.players.remove(id);
+                return FakePlayerActionResult.fail("Fake player skin refresh was rejected by the server or a plugin: " + profileName);
+            }
+            player.getBukkitEntity().setPersistent(false);
+            player.getBukkitEntity().addScoreboardTag(SCOREBOARD_TAG);
+            player.getBukkitEntity().setGameMode(gameMode);
+            this.players.put(id, entry);
+            return FakePlayerActionResult.ok(skinProfile == null ? "Cleared skin for real fake player " + profileName + "." : "Updated skin for real fake player " + profileName + ".");
         });
     }
 
@@ -486,6 +525,16 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             throw new IllegalStateException("MinecraftServer is not available");
         }
         return server;
+    }
+
+    private GameProfile profile(final String profileName, final UUID uuid, final @Nullable PlayerProfile skinProfile) {
+        if (skinProfile == null) {
+            return new GameProfile(uuid, profileName);
+        }
+        final GameProfile skin = ((SharedPlayerProfile) skinProfile).buildGameProfile();
+        final GameProfile profile = new GameProfile(uuid, profileName);
+        profile.properties().putAll(skin.properties());
+        return profile;
     }
 
     private <T> T sync(final Supplier<T> supplier) {

@@ -91,7 +91,11 @@ final class HunterRealFakePlayerManager {
             return true;
         }
         final String sub = HunterToolsPreferences.normalize(args[0]);
-        final String command = sub.equals("kill") ? "remove" : sub;
+        final String command = switch (sub) {
+            case "kill" -> "remove";
+            case "setskin" -> "skin";
+            default -> sub;
+        };
         if (!this.preferences.commandEnabled(MODULE, command)) {
             sender.sendMessage("HunterCore real fake players command " + command + " is disabled in preferences.yml.");
             return true;
@@ -100,6 +104,7 @@ final class HunterRealFakePlayerManager {
             case "spawn" -> this.spawn(sender, label, args);
             case "remove", "kill" -> this.remove(sender, label, args);
             case "list" -> this.list(sender);
+            case "skin", "setskin" -> this.skin(sender, label, args);
             case "tp" -> this.teleport(sender, label, args);
             case "tphere" -> this.teleportHere(sender, label, args);
             case "look" -> this.look(sender, label, args);
@@ -128,11 +133,16 @@ final class HunterRealFakePlayerManager {
 
     List<String> completions(final String[] args) {
         if (args.length == 1) {
-            return matching(args[0], HunterToolsPreferences.realFakePlayerCommands());
+            final List<String> commands = new ArrayList<>(HunterToolsPreferences.realFakePlayerCommands());
+            commands.add("help");
+            return matching(args[0], commands);
         }
         final String sub = HunterToolsPreferences.normalize(args[0]);
+        if (args.length == 2 && sub.equals("help")) {
+            return matching(args[1], HunterToolsPreferences.realFakePlayerCommands());
+        }
         if (args.length == 2 && List.of(
-            "remove", "kill", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack", "stop",
+            "remove", "kill", "skin", "setskin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack", "stop",
             "click", "drop", "dropstack", "swap", "gm", "gamemode", "slot", "ai", "info"
         ).contains(sub)) {
             return matching(args[1], this.names());
@@ -505,6 +515,31 @@ final class HunterRealFakePlayerManager {
         return true;
     }
 
+    private boolean skin(final CommandSender sender, final String label, final String[] args) {
+        if (args.length != 3) {
+            sender.sendMessage("Usage: /" + label + " skin <name> <minecraftName|clear>");
+            return true;
+        }
+        final String name = args[1];
+        final String source = args[2].trim();
+        if (List.of("clear", "none", "off", "-").contains(HunterToolsPreferences.normalize(source))) {
+            this.send(sender, this.service().setSkinProfile(name, null));
+            return true;
+        }
+        if (source.contains("/") || source.contains("\\") || source.toLowerCase(Locale.ROOT).endsWith(".png")) {
+            sender.sendMessage("Local skin image files are not directly supported yet. Use an official Minecraft player name, or clear.");
+            return true;
+        }
+        sender.sendMessage("Loading real fake player skin " + source + " for " + name + ".");
+        Bukkit.createProfile(source).update().thenAccept(profile -> this.plugin.getServer().getScheduler().runTask(this.plugin, () ->
+            this.send(sender, this.service().setSkinProfile(name, profile))
+        )).exceptionally(error -> {
+            sender.sendMessage(ChatColor.RED + "Skin load failed: " + cleanError(error));
+            return null;
+        });
+        return true;
+    }
+
     private boolean info(final CommandSender sender, final String label, final String[] args) {
         if (args.length > 2) {
             sender.sendMessage("Usage: /" + label + " info [name]");
@@ -513,7 +548,7 @@ final class HunterRealFakePlayerManager {
         if (args.length == 1) {
             sender.sendMessage(ChatColor.GOLD + "HunterCore real fake players");
             sender.sendMessage("- True ServerPlayer instances: online list, chunk loading, player events and plugin visibility.");
-            sender.sendMessage("- Commands: spawn, remove, list, tp, tphere, look, move, sneak, sprint, jump, use, attack, stop, click, drop, dropstack, swap, gm, slot, ai, info, clear.");
+            sender.sendMessage("- Commands: spawn, remove, list, skin, tp, tphere, look, move, sneak, sprint, jump, use, attack, stop, click, drop, dropstack, swap, gm, slot, ai, info, clear.");
             sender.sendMessage("- use/attack/jump support once, continuous, and stop. AI can drive look, move, mine, place, use, slot and toggles.");
             sender.sendMessage("- Click command placeholders: %player%, %player_uuid%, %actor%, %actor_name%, %actor_uuid%, %module%, %world%, %x%, %y%, %z%.");
             return true;
@@ -1707,7 +1742,7 @@ final class HunterRealFakePlayerManager {
     }
 
     private void usage(final CommandSender sender, final String label) {
-        sender.sendMessage("Usage: /" + label + " <spawn|remove|list|tp|tphere|look|move|sneak|sprint|jump|use|attack|stop|click|drop|dropstack|swap|gm|slot|ai|info|clear>");
+        sender.sendMessage("Usage: /" + label + " <spawn|remove|list|skin|move|use|attack|ai|info|clear>. Try /" + label + " help.");
     }
 
     private void send(final CommandSender sender, final FakePlayerActionResult result) {

@@ -103,8 +103,11 @@ final class HunterActorManager {
     List<String> completions(final String module, final String[] args) {
         if (args.length == 1) {
             final List<String> commands = new ArrayList<>(HunterToolsPreferences.actorCommands());
-            commands.addAll(List.of("rm", "del", "here", "face", "setskin"));
+            commands.addAll(List.of("help", "rm", "del", "here", "face", "setskin"));
             return matching(args[0], commands);
+        }
+        if (args.length == 2 && HunterToolsPreferences.normalize(args[0]).equals("help")) {
+            return matching(args[1], HunterToolsPreferences.actorCommands());
         }
         if (args.length == 2 && List.of("remove", "tp", "tphere", "look", "pose", "skin", "click", "info").contains(HunterToolsPreferences.normalize(args[0]))) {
             return matching(args[1], this.knownActorIds(module));
@@ -533,7 +536,7 @@ final class HunterActorManager {
             sender.sendMessage(ChatColor.GOLD + "HunterCore " + module + " actors");
             sender.sendMessage("- Lightweight mannequin/villager entities for display, admin UI and placement tests.");
             sender.sendMessage("- They do not join as real ServerPlayer instances, occupy player slots, load chunks or run Carpet-style use/attack loops.");
-            sender.sendMessage("- Commands: spawn, remove, list, tp, tphere, look, pose, click, info, clear.");
+            sender.sendMessage("- Commands: spawn, remove, list, skin, tp, tphere, look, pose, click, info, clear.");
             sender.sendMessage("- Click command placeholders: %player%, %player_uuid%, %actor%, %actor_uuid%, %module%, %world%, %x%, %y%, %z%.");
             sender.sendMessage("- NPC AI can reply on click when HunterCore AI is enabled and no click command is configured.");
             return true;

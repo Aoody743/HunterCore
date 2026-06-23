@@ -640,7 +640,7 @@ final class HunterToolsPreferences {
 
     static List<String> realFakePlayerCommands() {
         return List.of(
-            "spawn", "remove", "kill", "list", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack",
+            "spawn", "remove", "kill", "list", "skin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack",
             "stop", "click", "drop", "dropstack", "swap", "gm", "gamemode", "slot", "ai", "info", "clear"
         );
     }

@@ -77,7 +77,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private static final List<String> HUNTERCORE_SHORTCUTS = List.of(
         "tps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
         "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
-        "hat", "craft", "enderchest", "trash", "fakeplayer"
+        "hat", "craft", "enderchest", "trash", "player", "npc", "fakeplayer"
     );
     private static final String[] SIDEBAR_KEYS = {
         "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a", "§b", "§c", "§d", "§e", "§f"
@@ -147,6 +147,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         @NotNull final String[] args
     ) {
         final String name = command.getName().toLowerCase(Locale.ROOT);
+        if (args.length > 0 && isHelp(args[0])) {
+            this.sendCommandHelp(sender, name, args);
+            return true;
+        }
         return switch (name) {
             case "htps" -> this.showTps(sender);
             case "heal" -> this.heal(sender, args);
@@ -342,6 +346,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "enderchest", "ec" -> this.enderChest(sender, args);
             case "trash", "disposal" -> this.trash(sender);
             case "fakeplayer" -> this.fakePlayer(sender, "hc fakeplayer", args);
+            case "player", "hplayer", "playerbot", "realfakeplayer" -> this.realFakePlayer(sender, "hc player", args);
+            case "npc", "hnpc" -> this.npc(sender, "hc npc", args);
             default -> false;
         };
     }
@@ -352,6 +358,12 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (label.equals("fakeplayer")) {
             return this.actorManager == null ? List.of() : this.actorManager.completions(FAKE_PLAYERS, args);
+        }
+        if (label.equals("player") || label.equals("hplayer") || label.equals("playerbot") || label.equals("realfakeplayer")) {
+            return this.realFakePlayerManager == null ? List.of() : this.realFakePlayerManager.completions(args);
+        }
+        if (label.equals("npc") || label.equals("hnpc")) {
+            return this.actorManager == null ? List.of() : this.actorManager.completions(NPCS, args);
         }
         return this.shortcutCompletions(sender, label, args);
     }
@@ -389,6 +401,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft" -> List.of("workbench", "wb");
             case "enderchest" -> List.of("ec");
             case "trash" -> List.of("disposal");
+            case "player" -> List.of("hplayer", "playerbot", "realfakeplayer");
+            case "npc" -> List.of("hnpc");
             default -> List.of();
         };
     }
@@ -402,6 +416,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "broadcast" -> "huntertools.command.broadcast";
             case "clearchat" -> "huntertools.command.clearchat";
             case "fakeplayer" -> "huntertools.command.fakeplayer";
+            case "player" -> "huntertools.command.hplayer";
+            case "npc" -> "huntertools.command.npc";
             default -> "huntertools.command." + command;
         };
     }
@@ -417,6 +433,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "setspawn" -> "set server spawn";
             case "enderchest" -> "open an ender chest";
             case "fakeplayer" -> "manage lightweight fake actors";
+            case "player" -> "manage real player bots";
+            case "npc" -> "manage display NPCs";
             default -> "run /" + command;
         };
     }
@@ -456,7 +474,12 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
         @Override
         public boolean execute(@NotNull final CommandSender sender, @NotNull final String label, @NotNull final String[] args) {
-            return HunterToolsPlugin.this.executeHunterCoreCommand(sender, HunterToolsPreferences.normalize(label), args);
+            final String normalized = HunterToolsPreferences.normalize(label);
+            if (args.length > 0 && isHelp(args[0])) {
+                HunterToolsPlugin.this.sendCommandHelp(sender, normalized, args);
+                return true;
+            }
+            return HunterToolsPlugin.this.executeHunterCoreCommand(sender, normalized, args);
         }
 
         @Override
@@ -1652,6 +1675,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (!this.require(sender, "huntertools.command.fakeplayer")) {
             return true;
         }
+        if (args.length == 0) {
+            this.sendHelp(sender, "fakeplayer");
+            return true;
+        }
         return this.actorManager != null && this.actorManager.fakePlayerCommand(sender, label, args);
     }
 
@@ -1659,11 +1686,19 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (!this.require(sender, "huntertools.command.hplayer")) {
             return true;
         }
+        if (args.length == 0) {
+            this.sendHelp(sender, "hplayer");
+            return true;
+        }
         return this.realFakePlayerManager != null && this.realFakePlayerManager.command(sender, label, args);
     }
 
     private boolean npc(final CommandSender sender, final String label, final String[] args) {
         if (!this.require(sender, "huntertools.command.npc")) {
+            return true;
+        }
+        if (args.length == 0) {
+            this.sendHelp(sender, "hnpc");
             return true;
         }
         return this.actorManager != null && this.actorManager.npcCommand(sender, label, args);
@@ -1935,6 +1970,35 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private void sendHelp(final CommandSender sender, final String... args) {
         HunterHelp.send(sender, this.language(), args);
+    }
+
+    private void sendCommandHelp(final CommandSender sender, final String command, final String[] args) {
+        final String topic = helpTopic(command);
+        if (args.length >= 2) {
+            this.sendHelp(sender, topic + " " + HunterToolsPreferences.normalize(args[1]));
+            return;
+        }
+        this.sendHelp(sender, topic);
+    }
+
+    private static boolean isHelp(final String value) {
+        final String normalized = HunterToolsPreferences.normalize(value);
+        return normalized.equals("help") || normalized.equals("?") || normalized.equals("usage");
+    }
+
+    private static String helpTopic(final String command) {
+        return switch (HunterToolsPreferences.normalize(command)) {
+            case "htps" -> "tps";
+            case "gms", "gmc", "gma", "gmsp" -> "gm";
+            case "bc" -> "broadcast";
+            case "cc" -> "clearchat";
+            case "workbench", "wb" -> "craft";
+            case "ec" -> "enderchest";
+            case "disposal" -> "trash";
+            case "hplayer", "player", "playerbot", "realfakeplayer" -> "hplayer";
+            case "hnpc", "npc" -> "hnpc";
+            default -> HunterToolsPreferences.normalize(command);
+        };
     }
 
     private void sendCommandOverride(final Player player, final String target) {
