@@ -92,57 +92,52 @@ To add another external bundled plugin, extend that script with a download/build
 /hc admin web allow <name> <inherit|none|*|command...>
 /hc admin web execution <name> <on|off>
 /hc admin web remove <name>
-/hc fakeplayer spawn <name> [world x y z [yaw pitch]]
-/hc fakeplayer remove <name>
-/hc fakeplayer list
-/hc fakeplayer tp <name> [world x y z [yaw pitch]]
-/hc fakeplayer tphere <name>
-/hc fakeplayer look <name> [yaw pitch|north|south|east|west|up|down]
-/hc fakeplayer pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
-/hc fakeplayer click <name> [command|clear]
-/hc fakeplayer info [name]
-/hc fakeplayer clear
-/hplayer spawn <name> [world x y z [yaw pitch]]
-/hplayer remove <name>
-/hplayer list
-/hplayer tp <name> [world x y z [yaw pitch]]
-/hplayer tphere <name>
-/hplayer look <name> [yaw pitch|north|south|east|west|up|down]
-/hplayer sneak <name> <on|off>
-/hplayer sprint <name> <on|off>
-/hplayer jump <name> [once|continuous|stop]
-/hplayer use <name> [once|continuous|stop]
-/hplayer attack <name> [once|continuous|stop]
-/hplayer stop <name>
-/hplayer click <name> [command|clear]
-/hplayer drop <name>
-/hplayer dropstack <name>
-/hplayer swap <name>
-/hplayer gm <name> <survival|creative|adventure|spectator>
-/hplayer slot <name> <1-9>
-/hplayer info [name]
-/hplayer clear
-/hnpc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]
-/hnpc remove <name>
-/hnpc list
-/hnpc tp <name> [world x y z [yaw pitch]]
-/hnpc tphere <name>
-/hnpc look <name> [yaw pitch|north|south|east|west|up|down]
-/hnpc pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
-/hnpc click <name> [command|clear]
-/hnpc info [name]
-/hnpc clear
+/player spawn <name> [world x y z [yaw pitch]]
+/player remove <name>
+/player list
+/player inv <name>
+/player skin <name> <minecraftName|clear>
+/player tp <name> [world x y z [yaw pitch]]
+/player tphere <name>
+/player look <name> [yaw pitch|north|south|east|west|up|down]
+/player move <name> <forward|back|left|right|stop|forwardValue> [sidewaysValue] [ticks] [jump]
+/player sneak <name> <on|off>
+/player sprint <name> <on|off>
+/player jump <name> [once|continuous|stop]
+/player use <name> [once|continuous|stop]
+/player attack <name> [once|continuous|stop]
+/player stop <name>
+/player click <name> [command|clear]
+/player drop <name>
+/player dropstack <name>
+/player swap <name>
+/player gm <name> <survival|creative|adventure|spectator>
+/player slot <name> <1-9>
+/player ai <name> <status|on|off|goal|once|approve|deny> [text]
+/player info [name]
+/player clear
+/npc spawn <name> [villager|mannequin] [world x y z [yaw pitch]]
+/npc remove <name>
+/npc list
+/npc skin <name> <minecraftName|clear>
+/npc tp <name> [world x y z [yaw pitch]]
+/npc tphere <name>
+/npc look <name> [yaw pitch|north|south|east|west|up|down]
+/npc pose <name> <standing|sneaking|swimming|fall-flying|sleeping>
+/npc click <name> [command|clear]
+/npc info [name]
+/npc clear
 ```
 
 `/about` is HunterCore-specific. `/hc system` prints JVM, OS, CPU, memory, uptime, player count, and plugin directory information.
 
 HunterTools provides TPS actionbar/sidebar display, a built-in MOTD module, and essentials-style commands such as `/heal`, `/feed`, `/fly`, `/gm`, `/day`, `/night`, `/sun`, `/rain`, `/thunder`, `/broadcast`, `/clearchat`, `/speed`, `/spawn`, `/setspawn`, `/back`, `/hat`, `/craft`, `/enderchest`, and `/trash`. The client F3 server brand defaults to `"HunterCore" Server` and can be changed from the web panel.
 
-`/hc fakeplayer` creates lightweight Mannequin-based fake players with placement commands for teleporting, moving to the sender, rotating, fixed poses, click-command actions, and info output. `/hnpc` creates managed Villager or Mannequin NPCs and shares the same placement/info/click-command commands where the entity type supports them. Both are persisted in `plugins/HunterCore/preferences.yml` and rebuilt on startup/reload.
+`/npc` creates managed Villager or Mannequin NPCs. Villagers are suitable for functional NPCs, while Mannequins are suitable for player-like display NPCs and support official Minecraft skin loading.
 
 These lightweight actors are not real `ServerPlayer` connections, so they do not occupy player slots, load chunks, or run Carpet-style continuous use/attack/jump/sneak actions.
 
-`/hplayer` is the real `ServerPlayer` fake player module, with `/playerbot` and `/realfakeplayer` aliases. It joins the online player list, fires the normal join/quit flow, participates in chunk loading, and supports Carpet-like continuous `use`, `attack`, and `jump` loops plus sneak, sprint, click-command actions, drop, dropstack, swap hands, game mode changes, and hotbar slot selection. Real fake players are runtime-only and have Bukkit persistence disabled; disabling `real-fake-players` or unloading HunterTools removes them according to preferences.
+`/player` is the real `ServerPlayer` bot module. It joins the online player list, fires the normal join/quit flow, participates in chunk loading, supports Carpet-like continuous `use`, `attack`, and `jump` loops, and can open its inventory for direct admin editing with `/player inv <name>`. Real player bots are runtime-only and have Bukkit persistence disabled; disabling `real-fake-players` or unloading HunterTools removes them according to preferences.
 
 ## Web Panel And Map
 

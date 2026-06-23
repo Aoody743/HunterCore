@@ -77,7 +77,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private static final List<String> HUNTERCORE_SHORTCUTS = List.of(
         "tps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
         "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
-        "hat", "craft", "enderchest", "trash", "player", "npc", "fakeplayer"
+        "hat", "craft", "enderchest", "trash"
     );
     private static final String[] SIDEBAR_KEYS = {
         "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a", "§b", "§c", "§d", "§e", "§f"
@@ -169,8 +169,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft" -> this.craft(sender);
             case "enderchest" -> this.enderChest(sender, args);
             case "trash" -> this.trash(sender);
-            case "hplayer" -> this.realFakePlayer(sender, label, args);
-            case "hnpc", "npc" -> this.npc(sender, "hnpc", args);
+            case "player" -> this.realFakePlayer(sender, "player", args);
+            case "npc" -> this.npc(sender, "npc", args);
             default -> false;
         };
     }
@@ -183,10 +183,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         @NotNull final String[] args
     ) {
         final String name = command.getName().toLowerCase(Locale.ROOT);
-        if (name.equals("hplayer")) {
+        if (name.equals("player")) {
             return this.realFakePlayerManager == null ? List.of() : this.realFakePlayerManager.completions(args);
         }
-        if (name.equals("hnpc") || name.equals("npc")) {
+        if (name.equals("npc")) {
             return this.actorManager == null ? List.of() : this.actorManager.completions(NPCS, args);
         }
         return this.shortcutCompletions(sender, name, args);
@@ -308,7 +308,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             "htps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
             "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
             "hat", "craft", "enderchest", "trash",
-            "hplayer", "hnpc"
+            "player", "npc"
         )) {
             final org.bukkit.command.PluginCommand pluginCommand = this.getCommand(command);
             if (pluginCommand != null) {
@@ -345,9 +345,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft", "workbench", "wb" -> this.craft(sender);
             case "enderchest", "ec" -> this.enderChest(sender, args);
             case "trash", "disposal" -> this.trash(sender);
-            case "fakeplayer" -> this.fakePlayer(sender, "hc fakeplayer", args);
-            case "player", "hplayer", "playerbot", "realfakeplayer" -> this.realFakePlayer(sender, "hc player", args);
-            case "npc", "hnpc" -> this.npc(sender, "hc npc", args);
             default -> false;
         };
     }
@@ -355,15 +352,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private List<String> hunterCoreCompletions(final CommandSender sender, final String label, final String[] args) {
         if (label.equals("admin")) {
             return this.adminCompletions(args);
-        }
-        if (label.equals("fakeplayer")) {
-            return this.actorManager == null ? List.of() : this.actorManager.completions(FAKE_PLAYERS, args);
-        }
-        if (label.equals("player") || label.equals("hplayer") || label.equals("playerbot") || label.equals("realfakeplayer")) {
-            return this.realFakePlayerManager == null ? List.of() : this.realFakePlayerManager.completions(args);
-        }
-        if (label.equals("npc") || label.equals("hnpc")) {
-            return this.actorManager == null ? List.of() : this.actorManager.completions(NPCS, args);
         }
         return this.shortcutCompletions(sender, label, args);
     }
@@ -401,8 +389,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft" -> List.of("workbench", "wb");
             case "enderchest" -> List.of("ec");
             case "trash" -> List.of("disposal");
-            case "player" -> List.of("hplayer", "playerbot", "realfakeplayer");
-            case "npc" -> List.of("hnpc");
             default -> List.of();
         };
     }
@@ -415,9 +401,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "sun", "rain", "thunder" -> "huntertools.command.weather";
             case "broadcast" -> "huntertools.command.broadcast";
             case "clearchat" -> "huntertools.command.clearchat";
-            case "fakeplayer" -> "huntertools.command.fakeplayer";
-            case "player" -> "huntertools.command.hplayer";
-            case "npc" -> "huntertools.command.npc";
             default -> "huntertools.command." + command;
         };
     }
@@ -432,9 +415,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "clearchat" -> "clear chat";
             case "setspawn" -> "set server spawn";
             case "enderchest" -> "open an ender chest";
-            case "fakeplayer" -> "manage lightweight fake actors";
-            case "player" -> "manage real player bots";
-            case "npc" -> "manage display NPCs";
             default -> "run /" + command;
         };
     }
@@ -1687,7 +1667,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length == 0) {
-            this.sendHelp(sender, "hplayer");
+            this.sendHelp(sender, "player");
             return true;
         }
         return this.realFakePlayerManager != null && this.realFakePlayerManager.command(sender, label, args);
@@ -1698,7 +1678,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length == 0) {
-            this.sendHelp(sender, "hnpc");
+            this.sendHelp(sender, "npc");
             return true;
         }
         return this.actorManager != null && this.actorManager.npcCommand(sender, label, args);
@@ -1995,8 +1975,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "workbench", "wb" -> "craft";
             case "ec" -> "enderchest";
             case "disposal" -> "trash";
-            case "hplayer", "player", "playerbot", "realfakeplayer" -> "hplayer";
-            case "hnpc", "npc" -> "hnpc";
+            case "player" -> "player";
+            case "npc" -> "npc";
             default -> HunterToolsPreferences.normalize(command);
         };
     }

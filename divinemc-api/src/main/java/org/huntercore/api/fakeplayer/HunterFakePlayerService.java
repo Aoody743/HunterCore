@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.block.BlockFace;
+import org.bukkit.entity.Player;
 import org.bukkit.profile.PlayerProfile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,6 +19,10 @@ public interface HunterFakePlayerService {
     @NotNull Optional<FakePlayerSnapshot> snapshot(@NotNull String name);
 
     @NotNull FakePlayerActionResult spawn(@NotNull String name, @NotNull Location location);
+
+    default @NotNull FakePlayerActionResult openInventoryEditor(@NotNull final String name, @NotNull final Player viewer) {
+        return FakePlayerActionResult.fail("Fake player inventory editing is not supported by this service.");
+    }
 
     default @NotNull FakePlayerActionResult setSkinProfile(@NotNull final String name, @Nullable final PlayerProfile skinProfile) {
         return FakePlayerActionResult.fail("Fake player skin changes are not supported by this service.");

@@ -93,7 +93,7 @@ final class HunterActorManager {
     }
 
     boolean npcCommand(final CommandSender sender, final String[] args) {
-        return this.npcCommand(sender, "hnpc", args);
+        return this.npcCommand(sender, "npc", args);
     }
 
     boolean npcCommand(final CommandSender sender, final String label, final String[] args) {

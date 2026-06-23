@@ -35,6 +35,7 @@ import net.minecraft.world.phys.Vec3;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.block.BlockFace;
+import org.bukkit.entity.Player;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.profile.PlayerProfile;
 import org.huntercore.api.fakeplayer.FakePlayerActionResult;
@@ -109,12 +110,25 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             server.getPlayerList().placeNewPlayer(connection, player, cookie);
 
             if (player.hasDisconnected() || server.getPlayerList().getPlayer(uuid) != player) {
+                this.cleanupRejectedPlayer(player);
                 return FakePlayerActionResult.fail("Fake player join was rejected by the server or a plugin: " + profileName);
             }
             player.getBukkitEntity().setPersistent(false);
             player.getBukkitEntity().addScoreboardTag(SCOREBOARD_TAG);
             this.players.put(id, new FakeEntry(id, profileName, uuid));
             return FakePlayerActionResult.ok("Spawned real fake player " + profileName + ".");
+        });
+    }
+
+    @Override
+    public @NotNull FakePlayerActionResult openInventoryEditor(@NotNull final String name, @NotNull final Player viewer) {
+        return this.withPlayer(name, player -> {
+            if (!viewer.isOnline()) {
+                return FakePlayerActionResult.fail("Inventory editor viewer is not online.");
+            }
+            viewer.openInventory(player.getBukkitEntity().getInventory());
+            player.inventoryMenu.broadcastChanges();
+            return FakePlayerActionResult.ok("Opened inventory for real fake player " + player.getGameProfile().name() + ".");
         });
     }
 
@@ -145,6 +159,7 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             this.server().getPlayerList().placeNewPlayer(connection, player, cookie);
             if (player.hasDisconnected() || this.server().getPlayerList().getPlayer(uuid) != player) {
                 this.players.remove(id);
+                this.cleanupRejectedPlayer(player);
                 return FakePlayerActionResult.fail("Fake player skin refresh was rejected by the server or a plugin: " + profileName);
             }
             player.getBukkitEntity().setPersistent(false);
@@ -525,6 +540,19 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             throw new IllegalStateException("MinecraftServer is not available");
         }
         return server;
+    }
+
+    private void cleanupRejectedPlayer(final ServerPlayer player) {
+        try {
+            player.getBukkitEntity().setPersistent(false);
+            if (this.server().getPlayerList().getPlayer(player.getUUID()) == player) {
+                this.server().getPlayerList().remove(player, net.kyori.adventure.text.Component.text("HunterCore fake player rejected"));
+            } else {
+                player.remove(Entity.RemovalReason.DISCARDED);
+            }
+        } catch (final RuntimeException ignored) {
+            player.remove(Entity.RemovalReason.DISCARDED);
+        }
     }
 
     private GameProfile profile(final String profileName, final UUID uuid, final @Nullable PlayerProfile skinProfile) {

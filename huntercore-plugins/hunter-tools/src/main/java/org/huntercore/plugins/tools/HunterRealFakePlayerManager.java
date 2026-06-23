@@ -92,8 +92,6 @@ final class HunterRealFakePlayerManager {
         }
         final String sub = HunterToolsPreferences.normalize(args[0]);
         final String command = switch (sub) {
-            case "kill" -> "remove";
-            case "setskin" -> "skin";
             default -> sub;
         };
         if (!this.preferences.commandEnabled(MODULE, command)) {
@@ -102,9 +100,10 @@ final class HunterRealFakePlayerManager {
         }
         return switch (sub) {
             case "spawn" -> this.spawn(sender, label, args);
-            case "remove", "kill" -> this.remove(sender, label, args);
+            case "remove" -> this.remove(sender, label, args);
             case "list" -> this.list(sender);
-            case "skin", "setskin" -> this.skin(sender, label, args);
+            case "inv", "inventory" -> this.inventory(sender, label, args);
+            case "skin" -> this.skin(sender, label, args);
             case "tp" -> this.teleport(sender, label, args);
             case "tphere" -> this.teleportHere(sender, label, args);
             case "look" -> this.look(sender, label, args);
@@ -142,7 +141,7 @@ final class HunterRealFakePlayerManager {
             return matching(args[1], HunterToolsPreferences.realFakePlayerCommands());
         }
         if (args.length == 2 && List.of(
-            "remove", "kill", "skin", "setskin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack", "stop",
+            "remove", "inv", "inventory", "skin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack", "stop",
             "click", "drop", "dropstack", "swap", "gm", "gamemode", "slot", "ai", "info"
         ).contains(sub)) {
             return matching(args[1], this.names());
@@ -216,6 +215,19 @@ final class HunterRealFakePlayerManager {
                 + ", sprinting=" + snapshot.sprinting()
                 + ", loops=" + this.loopLine(snapshot.name()));
         }
+        return true;
+    }
+
+    private boolean inventory(final CommandSender sender, final String label, final String[] args) {
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage("Usage: /" + label + " inv <name> must be run by a player.");
+            return true;
+        }
+        if (args.length != 2) {
+            sender.sendMessage("Usage: /" + label + " inv <name>");
+            return true;
+        }
+        this.send(sender, this.service().openInventoryEditor(args[1], player));
         return true;
     }
 
@@ -548,7 +560,7 @@ final class HunterRealFakePlayerManager {
         if (args.length == 1) {
             sender.sendMessage(ChatColor.GOLD + "HunterCore real fake players");
             sender.sendMessage("- True ServerPlayer instances: online list, chunk loading, player events and plugin visibility.");
-            sender.sendMessage("- Commands: spawn, remove, list, skin, tp, tphere, look, move, sneak, sprint, jump, use, attack, stop, click, drop, dropstack, swap, gm, slot, ai, info, clear.");
+            sender.sendMessage("- Commands: spawn, remove, list, inv, skin, tp, tphere, look, move, sneak, sprint, jump, use, attack, stop, click, drop, dropstack, swap, gm, slot, ai, info, clear.");
             sender.sendMessage("- use/attack/jump support once, continuous, and stop. AI can drive look, move, mine, place, use, slot and toggles.");
             sender.sendMessage("- Click command placeholders: %player%, %player_uuid%, %actor%, %actor_name%, %actor_uuid%, %module%, %world%, %x%, %y%, %z%.");
             return true;
@@ -1003,6 +1015,13 @@ final class HunterRealFakePlayerManager {
             .append(" pitch=").append(format(location.getPitch())).append('\n');
         final Player liveFakePlayer = Bukkit.getPlayer(snapshot.uuid());
         if (liveFakePlayer != null) {
+            context.append("Vitals: health=").append(format(liveFakePlayer.getHealth()))
+                .append('/').append(format(liveFakePlayer.getMaxHealth()))
+                .append(" food=").append(liveFakePlayer.getFoodLevel())
+                .append(" saturation=").append(format(liveFakePlayer.getSaturation()))
+                .append(" fireTicks=").append(liveFakePlayer.getFireTicks())
+                .append(" fallDistance=").append(format(liveFakePlayer.getFallDistance()))
+                .append('\n');
             context.append("Hotbar:");
             for (int slot = 0; slot < 9; slot++) {
                 final ItemStack item = liveFakePlayer.getInventory().getItem(slot);
@@ -1027,6 +1046,11 @@ final class HunterRealFakePlayerManager {
         if (world == null) {
             return context.append("World is not loaded.\n").toString();
         }
+        context.append("World state: time=").append(world.getTime())
+            .append(" fullTime=").append(world.getFullTime())
+            .append(" storm=").append(world.hasStorm())
+            .append(" thundering=").append(world.isThundering())
+            .append('\n');
         final int radius = Math.max(2, Math.min(12, this.preferences.intValue("modules.ai.fake-players.nearby-radius-blocks", 6)));
         final Location eye = location.clone().add(0.0D, 1.62D, 0.0D);
         final RayTraceResult ray = world.rayTraceBlocks(eye, location.getDirection(), Math.max(2.0D, radius), FluidCollisionMode.NEVER, true);
@@ -1323,7 +1347,7 @@ final class HunterRealFakePlayerManager {
             + ChatColor.RED + " requested high-risk AI action: " + ChatColor.WHITE + pending.label()
             + ChatColor.GRAY + " (" + pending.detail() + ")"
             + (pending.controllerName().isBlank() ? "" : ChatColor.GRAY + " requested by " + pending.controllerName())
-            + ChatColor.DARK_GRAY + " | /hplayer ai " + pending.fakePlayerName() + " approve";
+            + ChatColor.DARK_GRAY + " | /player ai " + pending.fakePlayerName() + " approve";
         for (final Player online : Bukkit.getOnlinePlayers()) {
             if (online.isOp() || online.hasPermission("huntertools.command.admin")) {
                 online.sendMessage(message);

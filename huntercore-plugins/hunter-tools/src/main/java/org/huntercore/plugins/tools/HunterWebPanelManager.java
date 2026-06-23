@@ -1422,7 +1422,7 @@ final class HunterWebPanelManager {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"ai_only_supports_npcs_and_real_fake_players\"}");
             return;
         }
-        final WebSession session = this.adminOperator(exchange, module.equals("npcs") ? "hnpc" : "hplayer");
+        final WebSession session = this.adminOperator(exchange, module.equals("npcs") ? "npc" : "player");
         if (session == null) {
             return;
         }
@@ -1885,7 +1885,7 @@ final class HunterWebPanelManager {
     }
 
     private void adminAiApproval(final HttpExchange exchange) throws IOException, InterruptedException, ExecutionException, TimeoutException {
-        final WebSession session = this.adminOperator(exchange, "hplayer");
+        final WebSession session = this.adminOperator(exchange, "player");
         if (session == null) {
             return;
         }
@@ -1897,7 +1897,7 @@ final class HunterWebPanelManager {
             return;
         }
         this.invalidateStatusCaches();
-        this.sendCommandResult(exchange, 200, this.dispatchConfiguredCommand("hplayer ai " + name + " " + action));
+        this.sendCommandResult(exchange, 200, this.dispatchConfiguredCommand("player ai " + name + " " + action));
     }
 
     private void adminPlugin(final HttpExchange exchange) throws IOException, InterruptedException, ExecutionException, TimeoutException {
@@ -2338,9 +2338,8 @@ final class HunterWebPanelManager {
 
     private static String actorCommandLabel(final String module) {
         return switch (module) {
-            case "fake-players" -> "hc fakeplayer";
-            case "real-fake-players" -> "hplayer";
-            case "npcs" -> "hnpc";
+            case "real-fake-players" -> "player";
+            case "npcs" -> "npc";
             default -> null;
         };
     }

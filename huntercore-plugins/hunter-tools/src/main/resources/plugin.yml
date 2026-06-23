@@ -107,15 +107,13 @@ commands:
     usage: /trash
     aliases: [disposal]
     permission: huntertools.command.trash
-  hplayer:
-    description: Manage HunterCore real ServerPlayer fake players.
-    usage: /hplayer <spawn|remove|list|skin|tp|tphere|look|move|sneak|sprint|jump|use|attack|stop|click|drop|dropstack|swap|gm|slot|ai|info|clear>
-    aliases: [player, playerbot, realfakeplayer]
+  player:
+    description: Manage HunterCore real ServerPlayer bots.
+    usage: /player <help|spawn|remove|list|inv|skin|tp|tphere|look|move|sneak|sprint|jump|use|attack|stop|drop|dropstack|swap|gm|slot|ai|info|clear>
     permission: huntertools.command.hplayer
-  hnpc:
+  npc:
     description: Manage HunterCore NPCs.
-    usage: /hnpc <spawn|remove|list|tp|tphere|look|pose|click|info|clear>
-    aliases: [npc]
+    usage: /npc <help|spawn|remove|list|skin|tp|tphere|look|pose|click|info|clear>
     permission: huntertools.command.npc
 permissions:
   huntertools.command.tps:
