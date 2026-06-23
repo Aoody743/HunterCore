@@ -66,7 +66,11 @@ jobs:
           esac
           tag_version="${tag#v}"
           huntercore_version="$(grep '^huntercoreVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
-          huntercore_build="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER}}"
+          if [[ "$tag_version" =~ -build\.([0-9]+)$ ]]; then
+            huntercore_build="${BASH_REMATCH[1]}"
+          else
+            huntercore_build="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER}}"
+          fi
           huntercore_version_label="${huntercore_version}-build.${huntercore_build}"
           mc_version="$(grep '^mcVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           release_channel="$(grep '^releaseChannel=' gradle.properties | cut -d= -f2 | tr -d '\r')"
