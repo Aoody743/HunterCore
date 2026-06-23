@@ -1,6 +1,8 @@
 package org.huntercore.fakeplayer;
 
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.PropertyMap;
+import com.google.common.collect.LinkedHashMultimap;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -560,9 +562,10 @@ public final class HunterFakePlayerManager implements HunterFakePlayerService {
             return new GameProfile(uuid, profileName);
         }
         final GameProfile skin = ((SharedPlayerProfile) skinProfile).buildGameProfile();
-        final GameProfile profile = new GameProfile(uuid, profileName);
-        profile.properties().putAll(skin.properties());
-        return profile;
+        final var copiedProperties = LinkedHashMultimap.<String, com.mojang.authlib.properties.Property>create();
+        copiedProperties.putAll(skin.properties());
+        final PropertyMap properties = new PropertyMap(copiedProperties);
+        return new GameProfile(uuid, profileName, properties);
     }
 
     private <T> T sync(final Supplier<T> supplier) {

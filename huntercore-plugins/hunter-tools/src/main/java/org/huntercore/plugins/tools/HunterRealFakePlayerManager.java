@@ -12,8 +12,10 @@ import java.util.Set;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Difficulty;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.GameMode;
+import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -47,6 +49,7 @@ final class HunterRealFakePlayerManager {
 
     private final HunterToolsPlugin plugin;
     private final HunterToolsPreferences preferences;
+    private final HunterGameplayRuleManager gameplayRuleManager;
     private final Map<String, BukkitTask> loops = new HashMap<>();
     private final Map<String, String> clickCommands = new HashMap<>();
     private final Map<String, FakeAiProfile> aiProfiles = new HashMap<>();
@@ -58,10 +61,16 @@ final class HunterRealFakePlayerManager {
     private final Deque<ObservedChat> recentChat = new ArrayDeque<>();
     private HunterAiManager aiManager;
 
-    HunterRealFakePlayerManager(final HunterToolsPlugin plugin, final HunterToolsPreferences preferences, final HunterAiManager aiManager) {
+    HunterRealFakePlayerManager(
+        final HunterToolsPlugin plugin,
+        final HunterToolsPreferences preferences,
+        final HunterAiManager aiManager,
+        final HunterGameplayRuleManager gameplayRuleManager
+    ) {
         this.plugin = plugin;
         this.preferences = preferences;
         this.aiManager = aiManager;
+        this.gameplayRuleManager = gameplayRuleManager;
     }
 
     void setAiManager(final HunterAiManager aiManager) {
@@ -165,7 +174,10 @@ final class HunterRealFakePlayerManager {
             return matching(args[2], List.of("forward", "back", "left", "right", "stop", "1", "-1"));
         }
         if (args.length == 3 && sub.equals("ai")) {
-            return matching(args[2], List.of("status", "on", "off", "goal", "once", "approve", "deny"));
+            return matching(args[2], List.of("status", "on", "off", "goal", "once", "approve", "deny", "rules"));
+        }
+        if (args.length == 4 && sub.equals("ai") && HunterToolsPreferences.normalize(args[2]).equals("rules")) {
+            return matching(args[3], List.of("list", "clear"));
         }
         if ((sub.equals("spawn") && args.length == 3) || (sub.equals("tp") && args.length == 3)) {
             return matching(args[2], Bukkit.getWorlds().stream().map(World::getName).toList());
@@ -477,8 +489,17 @@ final class HunterRealFakePlayerManager {
             case "deny" -> {
                 return this.denyRisk(sender, fake.name());
             }
+            case "rules", "rule" -> {
+                if (args.length >= 4 && List.of("clear", "restore", "reset").contains(HunterToolsPreferences.normalize(args[3]))) {
+                    sender.sendMessage(this.gameplayRuleManager.clear());
+                    return true;
+                }
+                sender.sendMessage(ChatColor.GRAY + "Temporary gameplay rules: " + ChatColor.WHITE + this.gameplayRuleManager.summary());
+                sender.sendMessage(ChatColor.GRAY + "Restore with /" + label + " ai " + fake.name() + " rules clear");
+                return true;
+            }
             default -> {
-                sender.sendMessage("Usage: /" + label + " ai <name> [status|on|off|goal <text>|once|approve|deny]");
+                sender.sendMessage("Usage: /" + label + " ai <name> [status|on|off|goal <text>|once|approve|deny|rules clear]");
                 return true;
             }
         }
@@ -543,9 +564,14 @@ final class HunterRealFakePlayerManager {
             return true;
         }
         sender.sendMessage("Loading real fake player skin " + source + " for " + name + ".");
-        Bukkit.createProfile(source).update().thenAccept(profile -> this.plugin.getServer().getScheduler().runTask(this.plugin, () ->
-            this.send(sender, this.service().setSkinProfile(name, profile))
-        )).exceptionally(error -> {
+        Bukkit.createProfile(source).update().thenAccept(profile -> this.plugin.getServer().getScheduler().runTask(this.plugin, () -> {
+            try {
+                this.send(sender, this.service().setSkinProfile(name, profile));
+            } catch (final RuntimeException ex) {
+                sender.sendMessage(ChatColor.RED + "Skin apply failed: " + cleanError(ex));
+                this.plugin.getLogger().warning("HunterCore real fake player skin apply failed for " + name + ": " + cleanError(ex));
+            }
+        })).exceptionally(error -> {
             sender.sendMessage(ChatColor.RED + "Skin load failed: " + cleanError(error));
             return null;
         });
@@ -896,7 +922,7 @@ final class HunterRealFakePlayerManager {
             + "Recent chat:\n" + this.recentChatContext() + "\n"
             + "Behave like a cooperative Minecraft helper. For follow/come tasks use [follow:player=" + player.getName() + "]. "
             + "For travel tasks use [goto:x y z]. For mining or tool work, look at the target and use [mine:ticks=40] or [use]. "
-            + "For building tasks, infer a compact style and build it in small steps with [slot:n] and [place:x y z,face=auto] or [place:dx=0,dy=0,dz=1,face=auto]. "
+            + "For building tasks, infer a compact style, equip safe materials with [equip:slot=1,material=oak_planks,amount=64], then build in small steps with [slot:n] and [place:x y z,face=auto] or [place:dx=0,dy=0,dz=1,face=auto]. "
             + "Stop if the task says stop.";
         this.setAi(fake.name(), true, goal);
         final FakeAiProfile profile = this.aiProfiles.get(fake.id());
@@ -1048,9 +1074,17 @@ final class HunterRealFakePlayerManager {
         }
         context.append("World state: time=").append(world.getTime())
             .append(" fullTime=").append(world.getFullTime())
+            .append(" difficulty=").append(world.getDifficulty().name().toLowerCase(Locale.ROOT))
             .append(" storm=").append(world.hasStorm())
             .append(" thundering=").append(world.isThundering())
             .append('\n');
+        context.append("Useful gamerules: keepInventory=").append(world.getGameRuleValue(GameRule.KEEP_INVENTORY))
+            .append(" doDaylightCycle=").append(world.getGameRuleValue(GameRule.DO_DAYLIGHT_CYCLE))
+            .append(" doWeatherCycle=").append(world.getGameRuleValue(GameRule.DO_WEATHER_CYCLE))
+            .append(" mobGriefing=").append(world.getGameRuleValue(GameRule.MOB_GRIEFING))
+            .append(" doMobSpawning=").append(world.getGameRuleValue(GameRule.DO_MOB_SPAWNING))
+            .append('\n');
+        context.append("Temporary gameplay rules: ").append(this.gameplayRuleManager.summary()).append('\n');
         final int radius = Math.max(2, Math.min(12, this.preferences.intValue("modules.ai.fake-players.nearby-radius-blocks", 6)));
         final Location eye = location.clone().add(0.0D, 1.62D, 0.0D);
         final RayTraceResult ray = world.rayTraceBlocks(eye, location.getDirection(), Math.max(2.0D, radius), FluidCollisionMode.NEVER, true);
@@ -1134,7 +1168,14 @@ final class HunterRealFakePlayerManager {
             context.append(" none");
         }
         context.append('\n');
-        context.append("Return only action lines. Prefer small steps and continue mining with [mine:ticks=40] when breaking blocks. Use [goto:x y z] or [follow:player=name] for player work requests. For building, use hotbar materials with [slot:n], then place one or a few blocks per turn with [place:x y z,face=auto] or relative [place:dx=0,dy=0,dz=1,face=auto].");
+        context.append("Return only action lines. Prefer small steps and continue mining with [mine:ticks=40] when breaking blocks. Use [goto:x y z] or [follow:player=name] for player work requests. For building, create a compact plan, equip safe materials with [equip:slot=1,material=oak_planks,amount=64], select materials with [slot:n], then place one or a few blocks per turn with [place:x y z,face=auto] or relative [place:dx=0,dy=0,dz=1,face=auto]. Continue across turns until the structure is recognizable. ")
+            .append("For temporary world settings use [gamerule:name=value,duration=60s], [weather:clear,duration=120s], [time:day,duration=60s], or [difficulty:peaceful,duration=120s]. ")
+            .append("For temporary gameplay logic use reviewed declarative rules, never arbitrary code: ")
+            .append("[rule:trigger=sneak,action=give,material=stone,amount=16,cooldown=3,duration=120s], ")
+            .append("[rule:trigger=sneak,action=setblock,material=diamond_block,dx=0,dy=-1,dz=0,duration=30s], ")
+            .append("[rule:trigger=chat,contains=gift,action=drop,material=oak_log,amount=4,duration=120s], ")
+            .append("[recipe:result=torch,amount=4,ingredients=coal+stick,duration=120s]. ")
+            .append("Use [rule:clear] to restore temporary gameplay rules.");
         return context.toString();
     }
 
@@ -1260,6 +1301,13 @@ final class HunterRealFakePlayerManager {
             case "attack", "left-click", "leftclick" -> this.aiTimedAction(name, "attack", args, "attack", true);
             case "use", "right-click", "rightclick", "interact" -> this.aiTimedAction(name, "use", args, "use", false);
             case "place", "place-block", "placeblock", "build" -> this.aiPlace(name, args);
+            case "equip", "item", "give-item", "material" -> this.aiEquip(name, args);
+            case "rule", "gameplay-rule", "temporary-rule", "temp-rule" -> this.gameplayRuleManager.applyAiRule(args);
+            case "recipe", "crafting-recipe" -> this.gameplayRuleManager.applyAiRule("action=recipe " + args);
+            case "gamerule", "game-rule" -> this.aiGameRule(name, args);
+            case "weather" -> this.aiWeather(name, args);
+            case "time", "set-time" -> this.aiTime(name, args);
+            case "difficulty", "diff" -> this.aiDifficulty(name, args);
             case "say", "chat" -> this.aiSay(name, args);
             case "wait", "pause" -> "wait " + Math.max(1, intArg(args, "ticks", 20)) + " ticks";
             case "jump" -> resultLine(this.service().jump(name));
@@ -1516,12 +1564,160 @@ final class HunterRealFakePlayerManager {
         return resultLine(this.service().placeBlock(name, surface.clickedBlock().getLocation(), surface.face()));
     }
 
+    private String aiGameRule(final String name, final String args) {
+        if (!this.preferences.booleanValue("modules.ai.fake-players.allow-game-rules", true)) {
+            return "game rule changes disabled";
+        }
+        final World world = this.aiWorld(name, args);
+        if (world == null) {
+            return "";
+        }
+        final String ruleName = firstNonBlank(valueFor(args, "name"), valueFor(args, "rule"), firstValue(args), firstAssignmentKey(args));
+        final String rawValue = firstNonBlank(valueFor(args, "value"), valueFor(args, "set"), firstAssignmentValue(args), valueAfterFirst(args));
+        if (ruleName.isBlank() || rawValue.isBlank()) {
+            return "";
+        }
+        final GameRule<?> rule = GameRule.getByName(ruleName);
+        if (rule == null) {
+            return "unknown gamerule " + ruleName;
+        }
+        final Object previous = world.getGameRuleValue(rule);
+        final Object value = parseGameRuleValue(rule, rawValue);
+        if (value == null) {
+            return "invalid gamerule value " + rawValue;
+        }
+        if (!setGameRuleValue(world, rule, value)) {
+            return "failed gamerule " + rule.getName();
+        }
+        final int seconds = durationSeconds(args, 0);
+        if (seconds > 0 && previous != null) {
+            this.plugin.getServer().getScheduler().runTaskLater(this.plugin, () -> setGameRuleValue(world, rule, previous), seconds * 20L);
+        }
+        return "gamerule " + rule.getName() + "=" + value + (seconds > 0 ? " for " + seconds + "s" : "");
+    }
+
+    private String aiWeather(final String name, final String args) {
+        if (!this.preferences.booleanValue("modules.ai.fake-players.allow-game-rules", true)) {
+            return "weather changes disabled";
+        }
+        final World world = this.aiWorld(name, args);
+        final String mode = HunterToolsPreferences.normalize(firstNonBlank(valueFor(args, "mode"), firstValue(args)));
+        if (world == null || mode.isBlank()) {
+            return "";
+        }
+        final boolean previousStorm = world.hasStorm();
+        final boolean previousThunder = world.isThundering();
+        switch (mode) {
+            case "clear", "sun", "sunny" -> {
+                world.setStorm(false);
+                world.setThundering(false);
+            }
+            case "rain", "storm" -> {
+                world.setStorm(true);
+                world.setThundering(false);
+            }
+            case "thunder", "thundering" -> {
+                world.setStorm(true);
+                world.setThundering(true);
+            }
+            default -> {
+                return "unknown weather " + mode;
+            }
+        }
+        final int seconds = durationSeconds(args, 0);
+        if (seconds > 0) {
+            this.plugin.getServer().getScheduler().runTaskLater(this.plugin, () -> {
+                world.setStorm(previousStorm);
+                world.setThundering(previousThunder);
+            }, seconds * 20L);
+        }
+        return "weather " + mode + (seconds > 0 ? " for " + seconds + "s" : "");
+    }
+
+    private String aiTime(final String name, final String args) {
+        if (!this.preferences.booleanValue("modules.ai.fake-players.allow-game-rules", true)) {
+            return "time changes disabled";
+        }
+        final World world = this.aiWorld(name, args);
+        if (world == null) {
+            return "";
+        }
+        final long previous = world.getTime();
+        final String value = firstNonBlank(valueFor(args, "value"), valueFor(args, "set"), firstValue(args));
+        final Long ticks = parseTimeTicks(value);
+        if (ticks == null) {
+            return "unknown time " + value;
+        }
+        world.setTime(ticks);
+        final int seconds = durationSeconds(args, 0);
+        if (seconds > 0) {
+            this.plugin.getServer().getScheduler().runTaskLater(this.plugin, () -> world.setTime(previous), seconds * 20L);
+        }
+        return "time " + ticks + (seconds > 0 ? " for " + seconds + "s" : "");
+    }
+
+    private String aiDifficulty(final String name, final String args) {
+        if (!this.preferences.booleanValue("modules.ai.fake-players.allow-game-rules", true)) {
+            return "difficulty changes disabled";
+        }
+        final World world = this.aiWorld(name, args);
+        final String value = HunterToolsPreferences.normalize(firstNonBlank(valueFor(args, "value"), valueFor(args, "mode"), firstValue(args)));
+        if (world == null || value.isBlank()) {
+            return "";
+        }
+        final Difficulty difficulty = switch (value) {
+            case "peaceful", "0" -> Difficulty.PEACEFUL;
+            case "easy", "1" -> Difficulty.EASY;
+            case "normal", "2" -> Difficulty.NORMAL;
+            case "hard", "3" -> Difficulty.HARD;
+            default -> null;
+        };
+        if (difficulty == null) {
+            return "unknown difficulty " + value;
+        }
+        final Difficulty previous = world.getDifficulty();
+        world.setDifficulty(difficulty);
+        final int seconds = durationSeconds(args, 0);
+        if (seconds > 0) {
+            this.plugin.getServer().getScheduler().runTaskLater(this.plugin, () -> world.setDifficulty(previous), seconds * 20L);
+        }
+        return "difficulty " + difficulty.name().toLowerCase(Locale.ROOT) + (seconds > 0 ? " for " + seconds + "s" : "");
+    }
+
     private String aiSlot(final String name, final String args) {
         final int slot = intArg(args, "slot", -1);
         if (slot < 1 || slot > 9) {
             return "";
         }
         return resultLine(this.service().setSelectedSlot(name, slot));
+    }
+
+    private String aiEquip(final String name, final String args) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return "";
+        }
+        final Player player = Bukkit.getPlayer(snapshot.get().uuid());
+        if (player == null) {
+            return "equip failed: fake player is not online";
+        }
+        final int slot = intArg(args, "slot", 1);
+        if (slot < 1 || slot > 9) {
+            return "equip failed: slot must be 1-9";
+        }
+        final Material material = materialArg(args);
+        if (material == null || !material.isItem()) {
+            return "equip failed: unknown item material";
+        }
+        if (this.preferences.booleanValue("modules.ai.fake-players.high-risk-protection", true) && HIGH_RISK_MATERIALS.contains(material)) {
+            return "equip blocked: high-risk material " + material.key().value();
+        }
+        final int amount = Math.max(1, Math.min(material.getMaxStackSize(), intArg(args, "amount", material.getMaxStackSize())));
+        player.getInventory().setItem(slot - 1, new ItemStack(material, amount));
+        final FakePlayerActionResult slotResult = this.service().setSelectedSlot(name, slot);
+        return slotResult.success()
+            ? "equipped " + material.key().value() + " in slot " + slot
+            : resultLine(slotResult);
     }
 
     private String aiSay(final String name, final String args) {
@@ -1922,6 +2118,21 @@ final class HunterRealFakePlayerManager {
         }
     }
 
+    private static @Nullable Material materialArg(final String args) {
+        String value = valueFor(args, "material");
+        if (value.isBlank()) {
+            value = valueFor(args, "item");
+        }
+        if (value.isBlank()) {
+            value = firstValue(args);
+        }
+        if (value.isBlank()) {
+            return null;
+        }
+        final String normalized = value.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace("MINECRAFT:", "");
+        return Material.matchMaterial(normalized);
+    }
+
     private static double doubleArg(final String args, final String key, final double fallback) {
         final String keyed = valueFor(args, key);
         if (keyed.isBlank()) {
@@ -2028,6 +2239,62 @@ final class HunterRealFakePlayerManager {
         };
     }
 
+    private World aiWorld(final String name, final String args) {
+        final String worldName = firstNonBlank(valueFor(args, "world"), valueFor(args, "dimension"));
+        if (!worldName.isBlank()) {
+            return Bukkit.getWorld(worldName);
+        }
+        final var snapshot = this.service().snapshot(name);
+        return snapshot.map(FakePlayerSnapshot::location).map(Location::getWorld).orElse(null);
+    }
+
+    private static @Nullable Object parseGameRuleValue(final GameRule<?> rule, final String rawValue) {
+        final Class<?> type = rule.getType();
+        if (type == Boolean.class) {
+            final Boolean value = parseToggle(rawValue);
+            return value == null ? null : value;
+        }
+        if (type == Integer.class) {
+            try {
+                return Integer.parseInt(rawValue.trim());
+            } catch (final NumberFormatException ex) {
+                return null;
+            }
+        }
+        return rawValue;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static boolean setGameRuleValue(final World world, final GameRule<?> rule, final Object value) {
+        try {
+            return world.setGameRule((GameRule) rule, value);
+        } catch (final IllegalArgumentException | ClassCastException ex) {
+            return false;
+        }
+    }
+
+    private static @Nullable Long parseTimeTicks(final String rawValue) {
+        final String value = HunterToolsPreferences.normalize(rawValue);
+        if (value.isBlank()) {
+            return null;
+        }
+        return switch (value) {
+            case "day", "morning" -> 1000L;
+            case "noon" -> 6000L;
+            case "night" -> 13000L;
+            case "midnight" -> 18000L;
+            case "sunrise" -> 23000L;
+            case "sunset", "evening" -> 12000L;
+            default -> {
+                try {
+                    yield Long.parseLong(value);
+                } catch (final NumberFormatException ex) {
+                    yield null;
+                }
+            }
+        };
+    }
+
     private static String valueFor(final String args, final String key) {
         final String normalizedKey = HunterToolsPreferences.normalize(key);
         for (final String token : tokens(args)) {
@@ -2041,6 +2308,93 @@ final class HunterRealFakePlayerManager {
             }
         }
         return "";
+    }
+
+    private static String firstAssignmentKey(final String args) {
+        for (final String token : tokens(args)) {
+            final int equals = token.indexOf('=');
+            if (equals <= 0) {
+                continue;
+            }
+            final String key = HunterToolsPreferences.normalize(token.substring(0, equals));
+            if (!List.of("duration", "seconds", "sec", "world", "dimension", "value", "set", "name", "rule").contains(key)) {
+                return token.substring(0, equals).trim();
+            }
+        }
+        return "";
+    }
+
+    private static String firstAssignmentValue(final String args) {
+        for (final String token : tokens(args)) {
+            final int equals = token.indexOf('=');
+            if (equals <= 0) {
+                continue;
+            }
+            final String key = HunterToolsPreferences.normalize(token.substring(0, equals));
+            if (!List.of("duration", "seconds", "sec", "world", "dimension", "value", "set", "name", "rule").contains(key)) {
+                return token.substring(equals + 1).trim();
+            }
+        }
+        return "";
+    }
+
+    private static String valueAfterFirst(final String args) {
+        boolean foundFirst = false;
+        for (final String token : tokens(args)) {
+            if (token.contains("=")) {
+                continue;
+            }
+            if (!foundFirst) {
+                foundFirst = true;
+                continue;
+            }
+            return token;
+        }
+        return "";
+    }
+
+    private static String firstNonBlank(final String... values) {
+        for (final String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return "";
+    }
+
+    private static int durationSeconds(final String args, final int fallback) {
+        final String raw = firstNonBlank(valueFor(args, "duration"), valueFor(args, "seconds"), valueFor(args, "sec"));
+        if (raw.isBlank()) {
+            return fallback;
+        }
+        final String value = raw.trim().toLowerCase(Locale.ROOT);
+        final int multiplier;
+        final String number;
+        if (value.endsWith("ticks") || value.endsWith("tick")) {
+            final String stripped = value.replace("ticks", "").replace("tick", "").trim();
+            try {
+                return Math.max(0, Math.min(86_400, (int) Math.ceil(Integer.parseInt(stripped) / 20.0D)));
+            } catch (final NumberFormatException ex) {
+                return fallback;
+            }
+        } else if (value.endsWith("h")) {
+            multiplier = 3600;
+            number = value.substring(0, value.length() - 1);
+        } else if (value.endsWith("m")) {
+            multiplier = 60;
+            number = value.substring(0, value.length() - 1);
+        } else if (value.endsWith("s")) {
+            multiplier = 1;
+            number = value.substring(0, value.length() - 1);
+        } else {
+            multiplier = 1;
+            number = value;
+        }
+        try {
+            return Math.max(0, Math.min(86_400, Integer.parseInt(number.trim()) * multiplier));
+        } catch (final NumberFormatException ex) {
+            return fallback;
+        }
     }
 
     private static boolean hasKey(final String args, final String key) {
@@ -2167,8 +2521,8 @@ final class HunterRealFakePlayerManager {
             + "Available actions: [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], "
             + "[move:forward=1,sideways=0,ticks=20,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=60,sprint=true], "
             + "[follow:player=name,ticks=80,distance=2.5], [mine:ticks=40], [use], [attack], [jump], [sneak:on], [sprint:off], "
-            + "[slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
-            + "Use small safe steps. For building requests, infer a compact style and dimensions from the player's request, choose suitable hotbar materials with [slot:n], and place one or a few visible nearby blocks per turn. Mine only when the goal requires it and the target block is visible.";
+            + "[equip:slot=1,material=oak_planks,amount=64], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:text], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
+            + "Use small safe steps. For building requests, infer a compact style and dimensions from the player's request, equip safe building materials first, then place one or a few visible nearby blocks per turn. Keep continuing across turns until the build is recognizable. Mine only when the goal requires it and the target block is visible.";
     }
 
     private static String defaultFakeAiGoal(final String name) {

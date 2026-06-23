@@ -55,6 +55,7 @@ import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.command.ConsoleCommandSender;
@@ -1132,7 +1133,8 @@ final class HunterWebPanelManager {
             this.send(exchange, 401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_login\"}");
             return;
         }
-        final String role = webPassword && user != null ? normalizeRole(user.role()) : "player";
+        final boolean operator = this.operatorUsername(username);
+        final String role = operator ? "admin" : webPassword && user != null ? normalizeRole(user.role()) : "player";
         final String id = webPassword && user != null ? user.id() : HunterToolsPreferences.webUserId(username);
         final String displayName = webPassword && user != null ? user.displayName() : username;
         final boolean commandExecution = webPassword && user != null ? user.commandExecution() : true;
@@ -1145,8 +1147,8 @@ final class HunterWebPanelManager {
             id,
             displayName,
             role,
-            webPassword ? "web" : "hunterauth",
-            commandExecution,
+            operator ? (webPassword ? "web-op" : "hunterauth-op") : webPassword ? "web" : "hunterauth",
+            operator || commandExecution,
             allowedCommandsConfigured,
             allowedCommands,
             Instant.now().plusSeconds(minutes * 60L).toEpochMilli()
@@ -1154,6 +1156,42 @@ final class HunterWebPanelManager {
         this.sessions.put(session.token(), session);
         exchange.getResponseHeaders().add("Set-Cookie", SESSION_COOKIE + "=" + session.token() + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" + (minutes * 60L));
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"session\":" + sessionJson(session) + "}");
+    }
+
+    private boolean operatorUsername(final String username) {
+        final String id = HunterToolsPreferences.webUserId(username);
+        if (id.isBlank()) {
+            return false;
+        }
+        try {
+            if (Bukkit.isPrimaryThread()) {
+                return this.operatorUsernameMain(id);
+            }
+            return Bukkit.getScheduler()
+                .callSyncMethod(this.plugin, () -> this.operatorUsernameMain(id))
+                .get(3L, TimeUnit.SECONDS);
+        } catch (final InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (final ExecutionException | TimeoutException ex) {
+            this.plugin.getLogger().warning("HunterCore web panel could not check OP role for " + username + ": " + ex.getMessage());
+            return false;
+        }
+    }
+
+    private boolean operatorUsernameMain(final String id) {
+        for (final Player player : Bukkit.getOnlinePlayers()) {
+            if (HunterToolsPreferences.webUserId(player.getName()).equals(id) && player.isOp()) {
+                return true;
+            }
+        }
+        for (final OfflinePlayer operator : Bukkit.getOperators()) {
+            final String name = operator.getName();
+            if (name != null && HunterToolsPreferences.webUserId(name).equals(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void authRegister(final HttpExchange exchange) throws IOException {
@@ -3411,15 +3449,36 @@ final class HunterWebPanelManager {
         <body>
           <main class="shell">
             <section class="topbar">
-              <div>
-                <h1>HunterCore</h1>
-                <p id="serverLine">Loading server status...</p>
-              </div>
-              <form id="loginForm" class="login">
+              <nav class="authActions" aria-label="Account">
+                <button id="openLoginButton" type="button">Login</button>
+                <button id="openRegisterButton" type="button">Register</button>
+                <button id="logoutButton" type="button" hidden>Logout</button>
+              </nav>
+            </section>
+            <div id="modalBackdrop" class="modalBackdrop" hidden></div>
+            <section id="loginModal" class="authModal" role="dialog" aria-modal="true" aria-labelledby="loginTitle" hidden>
+              <form id="loginForm" class="authBox">
+                <div class="sectionTitle">
+                  <h2 id="loginTitle">Login</h2>
+                  <button class="ghostButton" type="button" data-close-modal="true">Close</button>
+                </div>
                 <input id="username" name="username" autocomplete="username" placeholder="username">
                 <input id="password" name="password" type="password" autocomplete="current-password" placeholder="password">
                 <button type="submit">Login</button>
-                <button id="logoutButton" type="button" hidden>Logout</button>
+                <p id="loginMessage" class="muted"></p>
+              </form>
+            </section>
+            <section id="registerModal" class="authModal" role="dialog" aria-modal="true" aria-labelledby="registerTitle" hidden>
+              <form id="registerForm" class="authBox">
+                <div class="sectionTitle">
+                  <h2 id="registerTitle">Register</h2>
+                  <button class="ghostButton" type="button" data-close-modal="true">Close</button>
+                </div>
+                <input id="registerUsername" name="username" autocomplete="username" placeholder="player name">
+                <input id="registerPassword" name="password" type="password" autocomplete="new-password" placeholder="password">
+                <input id="registerPasswordConfirm" name="confirmPassword" type="password" autocomplete="new-password" placeholder="confirm password">
+                <button type="submit">Register</button>
+                <p id="registerMessage" class="muted"></p>
               </form>
             </section>
             <section class="metrics">
@@ -3526,6 +3585,10 @@ final class HunterWebPanelManager {
               </div>
               <iframe id="mapFrame" title="BlueMap"></iframe>
             </section>
+            <footer class="pageTitle">
+              <h1>HunterCore</h1>
+              <p id="serverLine">Loading server status...</p>
+            </footer>
           </main>
           <script src="/assets/app.js"></script>
         </body>
@@ -3535,9 +3598,10 @@ final class HunterWebPanelManager {
     private static final String APP_CSS = """
         :root { color-scheme: dark; --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#2f81f7; --good:#3fb950; --warn:#d29922; --bad:#f85149; }
         * { box-sizing: border-box; }
-        body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
-        .shell { width:min(1280px, calc(100% - 32px)); margin:0 auto; padding:24px 0 32px; }
-        .topbar { display:flex; justify-content:space-between; gap:16px; align-items:center; padding-bottom:18px; border-bottom:1px solid var(--line); }
+        html { min-height:100%; overflow-y:auto; scroll-behavior:smooth; }
+        body { min-height:100%; margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); overflow-y:auto; }
+        .shell { width:min(1280px, calc(100% - 32px)); margin:0 auto; padding:18px 0 36px; }
+        .topbar { position:sticky; top:0; z-index:20; display:flex; justify-content:center; gap:16px; align-items:center; padding:10px 0 16px; margin-bottom:18px; background:linear-gradient(180deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 92%, transparent) 100%); border-bottom:1px solid var(--line); backdrop-filter:blur(10px); }
         h1, h2, h3, p { margin:0; }
         h1 { font-size:28px; }
         h2 { font-size:16px; margin-bottom:12px; }
@@ -3545,7 +3609,13 @@ final class HunterWebPanelManager {
         p, .muted { color:var(--muted); }
         input, select, button { height:36px; border-radius:6px; border:1px solid var(--line); background:#0d1117; color:var(--text); padding:0 10px; }
         button { background:var(--accent); border-color:var(--accent); font-weight:650; cursor:pointer; }
-        .login, .command { display:flex; gap:8px; flex-wrap:wrap; }
+        .authActions, .command { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+        .ghostButton { background:#0d1117; border-color:var(--line); color:var(--muted); }
+        .modalBackdrop { position:fixed; inset:0; z-index:80; background:rgba(1, 4, 9, .62); backdrop-filter:blur(7px); }
+        .authModal { position:fixed; inset:0; z-index:90; display:grid; place-items:start center; padding:76px 16px 24px; overflow:auto; }
+        .authModal[hidden], .modalBackdrop[hidden] { display:none; }
+        .authBox { width:min(380px, 100%); display:grid; gap:10px; padding:16px; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 20px 50px rgba(0,0,0,.32); }
+        .authBox input, .authBox button { width:100%; }
         .metrics { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin:18px 0; }
         .metrics div, article, .mapPanel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; }
         .metrics span { display:block; color:var(--muted); font-size:12px; }
@@ -3578,14 +3648,17 @@ final class HunterWebPanelManager {
         .mapHeader { display:flex; justify-content:space-between; align-items:center; padding:14px; border-bottom:1px solid var(--line); }
         a { color:#58a6ff; }
         iframe { display:block; width:100%; height:min(70vh, 720px); border:0; background:#0d1117; }
+        .pageTitle { display:grid; place-items:center; gap:4px; padding:20px 0 4px; text-align:center; color:var(--muted); }
+        .pageTitle h1 { color:var(--text); }
         @media (max-width: 800px) {
           .topbar, .grid { grid-template-columns:1fr; display:grid; }
+          .topbar { justify-items:center; }
           .metrics { grid-template-columns:repeat(2, minmax(0,1fr)); }
         }
         """;
 
     private static final String APP_JS = """
-        const state = { session: null, csrf: '', webUsers: [] };
+        const state = { session: null, csrf: '', webUsers: [], auth: {} };
         const $ = (id) => document.getElementById(id);
         const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
           '&': '&amp;',
@@ -3610,6 +3683,36 @@ final class HunterWebPanelManager {
         const webUserLine = (user) =>
           `<div class="item"><span>${esc(user.displayName)} <small>${esc(user.role)} · ${user.passwordConfigured ? 'password set' : 'no password'} · commands ${user.commandExecution ? 'on' : 'off'} · ${esc(allowedLine(user))}</small></span><span class="userActions"><button type="button" data-user-edit="${esc(user.id)}">Edit</button><button type="button" data-user-remove="${esc(user.id)}">Remove</button></span></div>`;
 
+        function closeAuthModals() {
+          $('modalBackdrop').hidden = true;
+          $('loginModal').hidden = true;
+          $('registerModal').hidden = true;
+          $('loginMessage').textContent = '';
+          $('registerMessage').textContent = '';
+        }
+
+        function openAuthModal(kind) {
+          if (state.session) {
+            closeAuthModals();
+            return;
+          }
+          $('modalBackdrop').hidden = false;
+          $('loginModal').hidden = kind !== 'login';
+          $('registerModal').hidden = kind !== 'register';
+          if (kind === 'register' && !state.auth.webRegistrationEnabled) {
+            $('registerMessage').textContent = 'Web registration is not enabled on this server.';
+          }
+          setTimeout(() => (kind === 'register' ? $('registerUsername') : $('username'))?.focus(), 0);
+        }
+
+        function updateAuthControls() {
+          const loggedIn = Boolean(state.session);
+          $('openLoginButton').hidden = loggedIn;
+          $('openRegisterButton').hidden = loggedIn || !state.auth.webRegistrationEnabled;
+          $('logoutButton').hidden = !loggedIn;
+          if (loggedIn) closeAuthModals();
+        }
+
         async function json(url, options = {}) {
           const headers = { ...(options.headers || {}) };
           if (state.csrf) headers['X-HunterCore-CSRF'] = state.csrf;
@@ -3622,6 +3725,7 @@ final class HunterWebPanelManager {
           const data = await json('/api/status');
           state.session = data.session;
           state.csrf = data.session?.csrf || state.csrf;
+          state.auth = data.auth || {};
           $('serverLine').textContent = `${data.server.name} · ${data.server.version}`;
           $('tps').textContent = Number(data.server.tps1).toFixed(2);
           $('mspt').textContent = Number(data.server.mspt).toFixed(1);
@@ -3644,8 +3748,7 @@ final class HunterWebPanelManager {
             item('Web workers', data.optimization.webPanelWorkers),
             item('Guest cache', `${data.optimization.guestStatusCacheMillis}ms`)
           ].join('');
-          $('logoutButton').hidden = !state.session;
-          $('loginForm').classList.toggle('isLoggedIn', !!state.session);
+          updateAuthControls();
           if (data.players) $('playerList').innerHTML = data.players.map(p => item(p.name, `${p.world} · ${p.ping}ms`)).join('') || '<p class="muted">No players online.</p>';
           if (data.plugins) $('pluginList').innerHTML = data.plugins.map(p => item(p.name, p.enabled ? p.version : 'disabled')).join('');
           renderActorWorlds(data.worlds || []);
@@ -3720,6 +3823,14 @@ final class HunterWebPanelManager {
           }
         }
 
+        $('openLoginButton').addEventListener('click', () => openAuthModal('login'));
+        $('openRegisterButton').addEventListener('click', () => openAuthModal('register'));
+        $('modalBackdrop').addEventListener('click', closeAuthModals);
+        document.querySelectorAll('[data-close-modal="true"]').forEach(button => button.addEventListener('click', closeAuthModals));
+        window.addEventListener('keydown', event => {
+          if (event.key === 'Escape') closeAuthModals();
+        });
+
         $('loginForm').addEventListener('submit', async (event) => {
           event.preventDefault();
           const payload = JSON.stringify({ username: $('username').value, password: $('password').value });
@@ -3728,8 +3839,50 @@ final class HunterWebPanelManager {
           if (result.ok) {
             state.session = result.session;
             state.csrf = result.session.csrf || '';
+            closeAuthModals();
           }
+          $('loginMessage').textContent = result.ok ? `Logged in as ${result.session.username}.` : 'Login failed.';
           $('commandResult').textContent = result.ok ? `Logged in as ${result.session.username} (${result.session.role}).` : 'Login failed.';
+          await refresh();
+        });
+
+        $('registerForm').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!state.auth.webRegistrationEnabled) {
+            $('registerMessage').textContent = 'Web registration is not enabled on this server.';
+            return;
+          }
+          const username = $('registerUsername').value;
+          const password = $('registerPassword').value;
+          const confirmPassword = $('registerPasswordConfirm').value;
+          const minimum = Number(state.auth.minimumPasswordLength || 4);
+          if (password.length < minimum || password !== confirmPassword) {
+            $('registerMessage').textContent = `Password must be at least ${minimum} characters and match confirmation.`;
+            return;
+          }
+          const result = await json('/api/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ username, password, confirmPassword })
+          });
+          if (!result.ok) {
+            $('registerMessage').textContent = `Register failed: ${result.error || 'unknown error'}`;
+            return;
+          }
+          const login = await json('/api/login', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+          });
+          $('registerPassword').value = '';
+          $('registerPasswordConfirm').value = '';
+          if (login.ok) {
+            state.session = login.session;
+            state.csrf = login.session.csrf || '';
+            closeAuthModals();
+            $('commandResult').textContent = `Registered and logged in as ${login.session.username}.`;
+          } else {
+            $('registerMessage').textContent = 'Registered. Please log in.';
+            openAuthModal('login');
+          }
           await refresh();
         });
 
@@ -3737,6 +3890,7 @@ final class HunterWebPanelManager {
           await json('/api/logout', { method: 'POST' });
           state.session = null;
           state.csrf = '';
+          closeAuthModals();
           $('commandResult').textContent = 'Logged out.';
           await refresh();
         });
@@ -3824,7 +3978,12 @@ final class HunterWebPanelManager {
           await refresh();
         });
 
-        refresh().catch(err => $('serverLine').textContent = err.message);
+        refresh()
+          .then(() => {
+            if (location.hash === '#register') openAuthModal('register');
+            if (location.hash === '#login') openAuthModal('login');
+          })
+          .catch(err => $('serverLine').textContent = err.message);
         refreshMap().catch(() => {});
         updateActorKind();
         setInterval(refresh, 5000);

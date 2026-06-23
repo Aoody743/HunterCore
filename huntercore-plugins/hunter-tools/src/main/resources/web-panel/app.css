@@ -28,12 +28,14 @@
 html {
   scroll-behavior: smooth;
   background: var(--page);
+  overflow-y: auto;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   overflow-x: hidden;
+  overflow-y: auto;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(222, 239, 245, 0.16) 28%, rgba(187, 221, 215, 0.30)),
     linear-gradient(90deg, rgba(244, 248, 255, 0.36), rgba(244, 248, 255, 0.08) 42%, rgba(244, 248, 255, 0.22)),
@@ -173,15 +175,16 @@ a {
 
 .topChrome {
   position: fixed;
-  top: 16px;
+  top: 66px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 3;
+  z-index: 30;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 18px;
   padding: 0;
+  pointer-events: none;
 }
 
 .brandBlock {
@@ -195,6 +198,7 @@ a {
 .topNav,
 .sessionDock,
 .chatDock,
+.authDialog,
 .panel,
 .actionToast,
 .statusPill,
@@ -233,6 +237,7 @@ textarea {
 .topNav,
 .sessionDock,
 .chatDock,
+.authDialog,
 .panel,
 .actionToast {
   --liquid-blur: 5px;
@@ -248,6 +253,7 @@ textarea {
 .topNav::before,
 .sessionDock::before,
 .chatDock::before,
+.authDialog::before,
 .panel::before,
 .actionToast::before {
   content: "";
@@ -266,6 +272,7 @@ textarea {
 .topNav::after,
 .sessionDock::after,
 .chatDock::after,
+.authDialog::after,
 .panel::after,
 .actionToast::after {
   content: "";
@@ -285,6 +292,7 @@ textarea {
 
 .sessionDock > *,
 .chatDock > *,
+.authDialog > *,
 .panel > *,
 .topNav > *,
 .actionToast > * {
@@ -361,6 +369,25 @@ small {
   font-size: 13px;
 }
 
+.pageBrand {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 4;
+  transform: translateX(-50%);
+  justify-content: center;
+  max-width: min(520px, calc(100% - 32px));
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(8, 16, 28, 0.70), rgba(18, 28, 44, 0.54));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  text-align: left;
+  pointer-events: none;
+}
+
 .topNav {
   display: flex;
   flex-wrap: wrap;
@@ -368,6 +395,46 @@ small {
   gap: 6px;
   min-height: 50px;
   padding: 7px;
+  pointer-events: auto;
+}
+
+.authBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(232, 239, 244, 0.56);
+  backdrop-filter: blur(10px) saturate(1.08);
+  -webkit-backdrop-filter: blur(10px) saturate(1.08);
+}
+
+.authBackdrop[hidden],
+.authModal[hidden] {
+  display: none !important;
+}
+
+.authModal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: start center;
+  padding: 96px 16px 32px;
+  overflow: auto;
+}
+
+.authDialog {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: var(--radius);
+}
+
+.modalHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
 }
 
 .navButton {
@@ -1361,7 +1428,7 @@ textarea {
   }
 
   .topChrome {
-    top: 10px;
+    top: 60px;
   }
 
   .topNav {

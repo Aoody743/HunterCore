@@ -1031,9 +1031,10 @@ async function json(url, options = {}) {
 
 function renderAuthPublic(auth) {
   const form = $('registerForm');
-  if (!form) return;
+  const toggle = $('registerToggle');
+  if (!form || !toggle) return;
   const enabled = Boolean(auth?.enabled && auth?.registrationRequired && auth?.webRegistrationEnabled);
-  form.hidden = !enabled;
+  toggle.hidden = Boolean(state.session) || !enabled;
   $('registerButton').disabled = !enabled;
   const description = form.querySelector('.subtleLine');
   if (description) {
@@ -1041,6 +1042,26 @@ function renderAuthPublic(auth) {
       ? t('register.description')
       : t('register.closed');
   }
+}
+
+function closeAuthModals() {
+  $('authBackdrop').hidden = true;
+  $('loginModal').hidden = true;
+  $('registerModal').hidden = true;
+}
+
+function openAuthModal(kind) {
+  if (state.session) {
+    closeAuthModals();
+    return;
+  }
+  $('authBackdrop').hidden = false;
+  $('loginModal').hidden = kind !== 'login';
+  $('registerModal').hidden = kind !== 'register';
+  if (kind === 'register' && $('registerButton').disabled) {
+    setOutput(t('register.closed'));
+  }
+  setTimeout(() => (kind === 'register' ? $('registerUsername') : $('username'))?.focus(), 0);
 }
 
 function setAdminVisibility(admin) {
@@ -1058,9 +1079,11 @@ function updateSessionChrome() {
   const admin = Boolean(session?.admin);
   setAdminVisibility(admin);
   if (!admin && ADMIN_PAGES.includes(state.page)) showPage('overview');
-  $('sessionToggle').textContent = session ? session.username : t('login.action');
+  $('sessionToggle').hidden = Boolean(session);
+  $('sessionToggle').textContent = t('login.action');
+  $('registerToggle').hidden = Boolean(session) || $('registerButton')?.disabled;
   $('logoutButton').hidden = !session;
-  $('loginForm').hidden = Boolean(session);
+  if (session) closeAuthModals();
   $('sessionTitle').textContent = session
     ? `${session.username} · ${roleLabel(session.role)}${session.authSource ? ` · ${session.authSource}` : ''}`
     : t('session.guest');
@@ -1367,9 +1390,9 @@ async function refresh() {
   $('mspt').textContent = Number(data.server.mspt).toFixed(1);
   $('players').textContent = `${data.server.online}/${data.server.maxPlayers}`;
   $('memory').textContent = data.server.memory;
+  renderAuthPublic(data.auth);
   updateSessionChrome();
   renderHealth(data.health);
-  renderAuthPublic(data.auth);
   renderBackendConnection();
   renderOverview(data);
   renderActorWorlds(data.worlds);
@@ -1553,7 +1576,14 @@ function bindEvents() {
   });
 
   $('sessionToggle').addEventListener('click', () => {
-    $('sessionDock').classList.toggle('isOpen');
+    openAuthModal('login');
+  });
+
+  $('registerToggle').addEventListener('click', () => openAuthModal('register'));
+  $('authBackdrop').addEventListener('click', closeAuthModals);
+  $$('[data-close-auth]').forEach((button) => button.addEventListener('click', closeAuthModals));
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeAuthModals();
   });
 
   $('loginForm').addEventListener('submit', async (event) => {
@@ -1567,7 +1597,7 @@ function bindEvents() {
       state.sessionToken = result.session?.token || '';
       storeValue(SESSION_TOKEN_KEY, state.backendUrl ? state.sessionToken : '');
       setOutput(t('command.loggedIn', { username: result.session.username, role: roleLabel(result.session.role) }));
-      $('sessionDock').classList.remove('isOpen');
+      closeAuthModals();
       await refresh();
     } catch {
       $('password').value = '';
@@ -1582,24 +1612,33 @@ function bindEvents() {
     state.sessionToken = '';
     storeValue(SESSION_TOKEN_KEY, '');
     setOutput(t('command.loggedOut'));
-    $('sessionDock').classList.remove('isOpen');
+    closeAuthModals();
     await refresh();
   });
 
   $('registerForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
+      const username = $('registerUsername').value;
+      const password = $('registerPassword').value;
       await json('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify({
-          username: $('registerUsername').value,
-          password: $('registerPassword').value,
+          username,
+          password,
           confirmPassword: $('registerConfirmPassword').value
         })
       });
+      const login = await json('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) });
       $('registerPassword').value = '';
       $('registerConfirmPassword').value = '';
-      setOutput(t('register.done'));
+      state.session = login.session;
+      state.csrf = login.session?.csrf || '';
+      state.sessionToken = login.session?.token || '';
+      storeValue(SESSION_TOKEN_KEY, state.backendUrl ? state.sessionToken : '');
+      closeAuthModals();
+      setOutput(t('command.loggedIn', { username: login.session.username, role: roleLabel(login.session.role) }));
+      await refresh();
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));
     }
@@ -2039,9 +2078,14 @@ bindEvents();
 showPage(pageFromLocation(), false);
 updateActorKind();
 renderBackendConnection();
-refresh().catch((error) => {
-  $('serverLine').textContent = error.message;
-});
+refresh()
+  .then(() => {
+    if (window.location.hash === '#register') openAuthModal('register');
+    if (window.location.hash === '#login') openAuthModal('login');
+  })
+  .catch((error) => {
+    $('serverLine').textContent = error.message;
+  });
 refreshMap().catch(() => {});
 state.refreshTimer = setInterval(() => {
   refresh().catch(() => {});

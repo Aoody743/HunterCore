@@ -28,16 +28,6 @@
   </svg>
   <main class="app">
     <header class="topChrome">
-      <div class="brandBlock">
-        <span id="productMark" class="productMark" aria-hidden="true">
-          <img id="serverIcon" src="assets/server-icon.png" alt="">
-          <span id="serverIconFallback">HC</span>
-        </span>
-        <div>
-          <h1 id="serverNameTitle">HunterCore</h1>
-          <p id="serverLine" data-i18n="server.loading">Loading server status...</p>
-        </div>
-      </div>
       <nav class="topNav" aria-label="Panel sections">
         <button type="button" class="navButton isActive" data-page-target="map" data-i18n="nav.map">Map</button>
         <button type="button" class="navButton" data-page-target="overview" data-i18n="nav.overview">Overview</button>
@@ -49,10 +39,43 @@
         <button type="button" class="navButton adminOnly" data-page-target="ai" data-i18n="nav.ai" hidden>AI</button>
         <button type="button" class="navButton adminOnly" data-page-target="admin" data-i18n="nav.admin" hidden>Admin</button>
         <button id="sessionToggle" type="button" class="navButton" data-i18n="login.action">Login</button>
+        <button id="registerToggle" type="button" class="navButton" data-i18n="register.action">Register player</button>
+        <button id="logoutButton" type="button" class="navButton" data-i18n="logout.action" hidden>Logout</button>
         <button id="languageToggle" type="button" class="navButton langButton" data-i18n-title="language.switch">EN</button>
       </nav>
     </header>
     <div id="actionToast" class="actionToast" role="status" aria-live="polite" hidden></div>
+    <div id="authBackdrop" class="authBackdrop" hidden></div>
+    <section id="loginModal" class="authModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle" hidden>
+      <form id="loginForm" class="loginForm authDialog">
+        <div class="modalHead">
+          <div>
+            <span class="eyebrow" data-i18n="session.eyebrow">Web console</span>
+            <h2 id="loginModalTitle" data-i18n="login.action">Login</h2>
+          </div>
+          <button type="button" class="smallButton" data-close-auth>Close</button>
+        </div>
+        <input id="username" name="username" autocomplete="username" placeholder="HunterAuth username" data-i18n-placeholder="login.username">
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Password" data-i18n-placeholder="login.password">
+        <button type="submit" class="primaryButton" data-i18n="login.action">Login</button>
+      </form>
+    </section>
+    <section id="registerModal" class="authModal" role="dialog" aria-modal="true" aria-labelledby="registerModalTitle" hidden>
+      <form id="registerForm" class="loginForm authDialog">
+        <div class="modalHead">
+          <div>
+            <span class="eyebrow" data-i18n="access.tab.auth">HunterAuth</span>
+            <h2 id="registerModalTitle" data-i18n="register.action">Register player</h2>
+          </div>
+          <button type="button" class="smallButton" data-close-auth>Close</button>
+        </div>
+        <p class="subtleLine" data-i18n="register.description">Register here before joining the server.</p>
+        <input id="registerUsername" autocomplete="username" placeholder="Player name" data-i18n-placeholder="register.username">
+        <input id="registerPassword" type="password" autocomplete="new-password" placeholder="Password" data-i18n-placeholder="register.password">
+        <input id="registerConfirmPassword" type="password" autocomplete="new-password" placeholder="Confirm password" data-i18n-placeholder="register.confirm">
+        <button id="registerButton" type="submit" class="secondaryButton" data-i18n="register.action">Register player</button>
+      </form>
+    </section>
 
     <section id="map" class="pageView mapStage isActive" aria-label="Server map">
       <iframe id="mapFrame" title="BlueMap"></iframe>
@@ -66,19 +89,6 @@
           </div>
           <span id="healthStatus" class="statusPill">--</span>
         </div>
-        <form id="loginForm" class="loginForm">
-          <input id="username" name="username" autocomplete="username" placeholder="HunterAuth username" data-i18n-placeholder="login.username">
-          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Password" data-i18n-placeholder="login.password">
-          <button type="submit" class="primaryButton" data-i18n="login.action">Login</button>
-        </form>
-        <button id="logoutButton" type="button" class="secondaryButton" data-i18n="logout.action" hidden>Logout</button>
-        <form id="registerForm" class="loginForm registerForm" hidden>
-          <p class="subtleLine" data-i18n="register.description">Register here before joining the server.</p>
-          <input id="registerUsername" autocomplete="username" placeholder="Player name" data-i18n-placeholder="register.username">
-          <input id="registerPassword" type="password" autocomplete="new-password" placeholder="Password" data-i18n-placeholder="register.password">
-          <input id="registerConfirmPassword" type="password" autocomplete="new-password" placeholder="Confirm password" data-i18n-placeholder="register.confirm">
-          <button id="registerButton" type="submit" class="secondaryButton" data-i18n="register.action">Register player</button>
-        </form>
         <form id="connectionForm" class="loginForm remoteForm">
           <p class="subtleLine" data-i18n="remote.description">Standalone mode: fill backend URL and optional API key.</p>
           <input id="backendUrl" autocomplete="url" placeholder="http://127.0.0.1:8088" data-i18n-placeholder="remote.backendUrl">
@@ -579,6 +589,16 @@
         </div>
       </div>
     </section>
+    <footer class="brandBlock pageBrand">
+      <span id="productMark" class="productMark" aria-hidden="true">
+        <img id="serverIcon" src="assets/server-icon.png" alt="">
+        <span id="serverIconFallback">HC</span>
+      </span>
+      <div>
+        <h1 id="serverNameTitle">HunterCore</h1>
+        <p id="serverLine" data-i18n="server.loading">Loading server status...</p>
+      </div>
+    </footer>
   </main>
   <script src="assets/app.js"></script>
 </body>

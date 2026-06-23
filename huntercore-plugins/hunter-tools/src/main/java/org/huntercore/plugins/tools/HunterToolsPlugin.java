@@ -88,6 +88,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private HunterToolsPreferences preferences;
     private HunterActorManager actorManager;
     private HunterRealFakePlayerManager realFakePlayerManager;
+    private HunterGameplayRuleManager gameplayRuleManager;
     private HunterAiManager aiManager;
     private HunterWebPanelManager webPanelManager;
     private ExecutorService workerExecutor;
@@ -104,11 +105,13 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.workerExecutor = this.createWorkerExecutor();
         this.actorManager = new HunterActorManager(this, this.preferences, this.workerExecutor);
         this.aiManager = new HunterAiManager(this, this.preferences, this.workerExecutor);
-        this.realFakePlayerManager = new HunterRealFakePlayerManager(this, this.preferences, this.aiManager);
+        this.gameplayRuleManager = new HunterGameplayRuleManager(this);
+        this.realFakePlayerManager = new HunterRealFakePlayerManager(this, this.preferences, this.aiManager, this.gameplayRuleManager);
         this.webPanelManager = new HunterWebPanelManager(this, this.preferences);
         this.registerCommands();
         this.registerHunterCoreCommands();
         this.getServer().getPluginManager().registerEvents(this, this);
+        this.getServer().getPluginManager().registerEvents(this.gameplayRuleManager, this);
         this.startTasks();
         this.actorManager.reload();
         this.webPanelManager.start();
@@ -123,6 +126,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (this.realFakePlayerManager != null) {
             this.realFakePlayerManager.shutdown();
+        }
+        if (this.gameplayRuleManager != null) {
+            this.gameplayRuleManager.shutdown();
         }
         if (this.webPanelManager != null) {
             this.webPanelManager.stop();

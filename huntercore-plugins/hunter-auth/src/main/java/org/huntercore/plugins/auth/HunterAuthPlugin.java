@@ -49,12 +49,13 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private static final int SALT_BYTES = 16;
     private static final int ITERATIONS = 120_000;
     private static final int KEY_BITS = 256;
-    private static final String GUI_TITLE = "HunterAuth";
+    private static final String GUI_TITLE = "HunterAuth Workbench";
     private static final Set<String> ALLOWED_COMMANDS = Set.of("/login", "/l", "/register", "/reg");
 
     private final SecureRandom random = new SecureRandom();
     private final Set<UUID> authenticated = new HashSet<>();
     private final Map<UUID, PendingInput> pendingInputs = new HashMap<>();
+    private final Map<UUID, GuiSession> guiSessions = new HashMap<>();
     private File usersFile;
     private YamlConfiguration users;
     private long usersModified;
@@ -153,6 +154,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     public void onQuit(final PlayerQuitEvent event) {
         this.authenticated.remove(event.getPlayer().getUniqueId());
         this.pendingInputs.remove(event.getPlayer().getUniqueId());
+        this.guiSessions.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
@@ -207,10 +209,39 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.closeInventory();
             return;
         }
+        final GuiSession session = this.guiSessions.computeIfAbsent(
+            player.getUniqueId(),
+            ignored -> new GuiSession(this.isRegistered(player) ? InputMode.LOGIN : InputMode.REGISTER)
+        );
+        final int digit = this.digitForSlot(event.getRawSlot());
+        if (digit >= 0) {
+            if (session.current().length() < 64) {
+                session.append(digit);
+            }
+            this.renderAuthGui(player, event.getView().getTopInventory(), session);
+            return;
+        }
         switch (event.getRawSlot()) {
-            case 11 -> this.startGuiInput(player, InputMode.LOGIN);
-            case 15 -> this.startGuiInput(player, InputMode.REGISTER);
-            case 22 -> this.sendLoginPrompt(player);
+            case 11 -> {
+                session.mode(InputMode.LOGIN);
+                session.reset();
+                this.renderAuthGui(player, event.getView().getTopInventory(), session);
+            }
+            case 15 -> {
+                session.mode(InputMode.REGISTER);
+                session.reset();
+                this.renderAuthGui(player, event.getView().getTopInventory(), session);
+            }
+            case 18 -> {
+                session.backspace();
+                this.renderAuthGui(player, event.getView().getTopInventory(), session);
+            }
+            case 20 -> {
+                session.reset();
+                this.renderAuthGui(player, event.getView().getTopInventory(), session);
+            }
+            case 22 -> this.submitGuiPassword(player, session, event.getView().getTopInventory());
+            case 26 -> this.sendLoginPrompt(player);
             default -> {
             }
         }
@@ -221,13 +252,10 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         if (!(event.getPlayer() instanceof final Player player) || this.isAuthenticated(player) || !this.guiEnabled()) {
             return;
         }
-        if (this.pendingInputs.containsKey(player.getUniqueId())) {
-            return;
-        }
         if (!this.isAuthGui(event.getView().title())) {
             return;
         }
-        this.openAuthGuiSoon(player);
+        this.guiSessions.remove(player.getUniqueId());
     }
 
     private boolean register(final Player player, final String[] args) {
@@ -258,6 +286,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
         this.setPassword(player, args[0]);
         this.authenticated.add(player.getUniqueId());
+        this.guiSessions.remove(player.getUniqueId());
         player.closeInventory();
         player.sendMessage(this.text("注册成功，并已登录。", "Registered and logged in."));
         return true;
@@ -287,6 +316,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         }
         this.authenticated.add(player.getUniqueId());
         this.pendingInputs.remove(player.getUniqueId());
+        this.guiSessions.remove(player.getUniqueId());
         player.closeInventory();
         player.sendMessage(this.text("登录成功。", "Logged in."));
         return true;
@@ -333,10 +363,13 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         if (!this.guiEnabled() || this.isAuthenticated(player)) {
             return;
         }
+        final GuiSession session = new GuiSession(this.isRegistered(player) ? InputMode.LOGIN : InputMode.REGISTER);
+        this.guiSessions.put(player.getUniqueId(), session);
         final Inventory inventory = Bukkit.createInventory(player, 27, ComponentTitle.HUNTER_AUTH);
         inventory.setItem(11, item(Material.EMERALD, this.text("登录", "Login"), List.of("/login <password>", this.text("点击后在聊天栏输入密码。", "Click, then type your password in chat."))));
         inventory.setItem(15, item(Material.WRITABLE_BOOK, this.text("注册", "Register"), List.of("/register <password> <password>", this.text("点击后输入两次密码，用空格分开。", "Click, then type password twice separated by a space."))));
         inventory.setItem(22, item(Material.PAPER, this.text("命令也可用", "Commands still work"), List.of("/login <password>", "/register <password> <password>", "/changepassword <old> <new>")));
+        this.renderAuthGui(player, inventory, session);
         player.openInventory(inventory);
     }
 
@@ -349,6 +382,64 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
                 this.openAuthGui(player);
             }
         }, 2L);
+    }
+
+    private void renderAuthGui(final Player player, final Inventory inventory, final GuiSession session) {
+        inventory.clear();
+        for (int digit = 1; digit <= 9; digit++) {
+            inventory.setItem(digit - 1, digitItem(digit));
+        }
+        inventory.setItem(9, digitItem(0));
+        inventory.setItem(11, item(
+            session.mode() == InputMode.LOGIN ? Material.LIME_DYE : Material.EMERALD,
+            this.text("登录模式", "Login mode"),
+            List.of("/login <password>", this.text("点击切换到登录。", "Click to switch to login."))
+        ));
+        inventory.setItem(13, item(
+            Material.CRAFTING_TABLE,
+            session.mode() == InputMode.LOGIN ? this.text("输入登录密码", "Enter login password") : this.text("输入注册密码", "Enter register password"),
+            List.of(
+                this.text("已输入：", "Entered: ") + "*".repeat(session.current().length()),
+                session.firstPassword() == null ? this.text("点击数字玻璃输入密码。", "Click glass panes to enter the password.") : this.text("请再次输入同样的密码。", "Enter the same password again."),
+                this.text("可以随时关闭窗口并使用命令。", "You can close this GUI and use commands anytime.")
+            )
+        ));
+        inventory.setItem(15, item(
+            session.mode() == InputMode.REGISTER ? Material.LIME_DYE : Material.WRITABLE_BOOK,
+            this.text("注册模式", "Register mode"),
+            List.of("/register <password> <password>", this.text("点击切换到注册。", "Click to switch to register."))
+        ));
+        inventory.setItem(18, item(Material.RED_STAINED_GLASS_PANE, this.text("退格", "Backspace"), List.of(this.text("删除最后一位。", "Delete the last digit."))));
+        inventory.setItem(20, item(Material.GRAY_STAINED_GLASS_PANE, this.text("清空", "Clear"), List.of(this.text("清空当前输入。", "Clear current input."))));
+        inventory.setItem(22, item(Material.GREEN_STAINED_GLASS_PANE, this.text("确认", "Confirm"), List.of(this.text("提交当前密码。", "Submit the current password."))));
+        inventory.setItem(26, item(Material.PAPER, this.text("命令登录", "Commands"), List.of("/login <password>", "/register <password> <password>", "/changepassword <old> <new>")));
+    }
+
+    private void submitGuiPassword(final Player player, final GuiSession session, final Inventory inventory) {
+        final String password = session.current();
+        if (password.isBlank()) {
+            player.sendMessage(this.text("请先点击玻璃输入密码。", "Click the glass panes to enter a password first."));
+            return;
+        }
+        if (session.mode() == InputMode.LOGIN) {
+            this.login(player, new String[] {password});
+            return;
+        }
+        if (session.firstPassword() == null) {
+            session.firstPassword(password);
+            session.current("");
+            player.sendMessage(this.text("请再次输入同样的密码并确认。", "Enter the same password again and confirm."));
+            this.renderAuthGui(player, inventory, session);
+            return;
+        }
+        this.register(player, new String[] {session.firstPassword(), password});
+    }
+
+    private int digitForSlot(final int slot) {
+        if (slot >= 0 && slot <= 8) {
+            return slot + 1;
+        }
+        return slot == 9 ? 0 : -1;
     }
 
     private void startGuiInput(final Player player, final InputMode mode) {
@@ -532,6 +623,17 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         return HunterLanguage.choose(HunterCoreProvider.get().language(), zhCn, enUs);
     }
 
+    private static ItemStack digitItem(final int digit) {
+        final int amount = digit == 0 ? 10 : digit;
+        final Material material = digit == 0 ? Material.BLACK_STAINED_GLASS_PANE : Material.LIGHT_BLUE_STAINED_GLASS_PANE;
+        final ItemStack item = new ItemStack(material, amount);
+        final ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(ChatColor.AQUA + "Digit " + digit);
+        meta.setLore(List.of(ChatColor.GRAY + "Click to input " + digit + "."));
+        item.setItemMeta(meta);
+        return item;
+    }
+
     private static ItemStack item(final Material material, final String name, final List<String> lore) {
         final ItemStack item = new ItemStack(material);
         final ItemMeta meta = item.getItemMeta();
@@ -565,6 +667,55 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private record PendingInput(InputMode mode) {
+    }
+
+    private static final class GuiSession {
+        private InputMode mode;
+        private String firstPassword;
+        private String current = "";
+
+        GuiSession(final InputMode mode) {
+            this.mode = mode;
+        }
+
+        private InputMode mode() {
+            return this.mode;
+        }
+
+        private void mode(final InputMode mode) {
+            this.mode = mode;
+        }
+
+        private String firstPassword() {
+            return this.firstPassword;
+        }
+
+        private void firstPassword(final String firstPassword) {
+            this.firstPassword = firstPassword;
+        }
+
+        private String current() {
+            return this.current;
+        }
+
+        private void current(final String current) {
+            this.current = current;
+        }
+
+        private void append(final int digit) {
+            this.current += digit;
+        }
+
+        private void backspace() {
+            if (!this.current.isEmpty()) {
+                this.current = this.current.substring(0, this.current.length() - 1);
+            }
+        }
+
+        private void reset() {
+            this.firstPassword = null;
+            this.current = "";
+        }
     }
 
     private static final class ComponentTitle {
