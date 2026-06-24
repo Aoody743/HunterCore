@@ -441,6 +441,16 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.command-overrides.enabled", true);
         changed |= this.setDefault("modules.command-overrides.messages.about", defaultCommandOverrideLines("about"));
         changed |= this.setDefault("modules.command-overrides.messages.plugins", defaultCommandOverrideLines("plugins"));
+        changed |= this.setDefault("modules.command-overrides.messages.version", defaultCommandOverrideLines("version"));
+        changed |= this.setDefault("modules.command-overrides.messages.rules", defaultCommandOverrideLines("rules"));
+        changed |= this.setDefault("modules.command-overrides.messages.discord", defaultCommandOverrideLines("discord"));
+        changed |= this.setDefault("modules.command-overrides.messages.website", defaultCommandOverrideLines("website"));
+        changed |= this.setDefault("modules.command-overrides.messages.motd", defaultCommandOverrideLines("motd"));
+        changed |= this.setDefault("modules.command-overrides.messages.info", defaultCommandOverrideLines("info"));
+        changed |= this.setDefault("modules.command-overrides.messages.server", defaultCommandOverrideLines("server"));
+        changed |= this.setDefault("modules.command-overrides.messages.links", defaultCommandOverrideLines("links"));
+        changed |= this.setDefault("modules.command-overrides.messages.qq", defaultCommandOverrideLines("qq"));
+        changed |= this.setDefault("modules.command-overrides.messages.group", defaultCommandOverrideLines("group"));
         changed |= this.setDefault("modules.command-overrides.messages.op-denied", defaultCommandOverrideLines("op-denied"));
         changed |= this.setDefault("modules.essentials.enabled", true);
         for (final String command : essentialsCommands()) {
@@ -511,6 +521,7 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.allow-breaking", true);
         changed |= this.setDefault("modules.ai.fake-players.allow-placing", true);
         changed |= this.setDefault("modules.ai.fake-players.allow-interaction", true);
+        changed |= this.setDefault("modules.ai.fake-players.quick-response.mode", "off");
         changed |= this.setDefault("modules.ai.fake-players.max-place-distance-blocks", 6);
         changed |= this.setDefault("modules.ai.fake-players.worldedit.max-volume-blocks", 8192);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.enabled", true);
@@ -518,7 +529,7 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.chat-control.cooldown-seconds", 3);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.require-permission", false);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer");
-        changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines. Never write prose, reasoning, translations, summaries, or chain-of-thought. Available actions: [respawn], [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], [follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], [equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], [build-house], [build-cabin], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-wall], [build-platform], [clear-build], [we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], [we-undo:steps=1], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. If dead, use [respawn] first. Use at most one short [say:...] after useful actions.");
+        changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines. Never write prose, reasoning, translations, summaries, or chain-of-thought. Available actions: [respawn], [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], [follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], [equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], [build-house], [build-cabin], [build-cottage], [build-barn], [build-greenhouse], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-rope-bridge], [build-wall], [build-platform], [build-dock], [build-well], [build-camp], [build-mine], [build-market], [build-gate], [build-road], [build-windmill], [clear-build], [we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], [we-undo:steps=1], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. If dead, use [respawn] first. Use exactly one build/worldedit/place construction macro per reply, and at most one short [say:...] after useful actions.");
         changed |= this.setDefault("modules.ai.fake-players.high-risk-protection", true);
         changed |= this.setDefault("modules.ai.fake-players.high-risk-approval-window-seconds", 120);
         changed |= this.setDefault("modules.ai.adaptive-throttling.enabled", true);
@@ -650,11 +661,64 @@ final class HunterToolsPreferences {
         return List.of("help", "list", "me", "msg", "tell", "spawn", "tps", "htps");
     }
 
+    static List<String> legacyDefaultCommandOverrideLines(final String target) {
+        return switch (normalize(target)) {
+            case "plugins" -> List.of(
+                "&6插件列表 &8| &f此服务器由 &bHunterCore &f托管",
+                "&7基础插件和管理能力已集成，具体插件列表由管理员维护。"
+            );
+            case "op-denied" -> List.of(
+                "&c你没有权限使用 /op。",
+                "&7如需管理员权限，请联系服务器管理组。"
+            );
+            default -> List.of(
+                "&b\"HunterCraft\" Server &8| &fPowered by &6HunterCore",
+                "&7高性能自定义核心 · 网页面板 · 假人调试 · 地图管理"
+            );
+        };
+    }
+
     static List<String> defaultCommandOverrideLines(final String target) {
         return switch (normalize(target)) {
             case "plugins" -> List.of(
                 "&6插件列表 &8| &f此服务器由 &bHunterCore &f托管",
                 "&7基础插件和管理能力已集成，具体插件列表由管理员维护。"
+            );
+            case "version" -> List.of(
+                "&6版本信息 &8| &fPowered by &bHunterCore",
+                "&7使用 /hc about 查看核心版本，使用网页面板查看运行状态。"
+            );
+            case "rules" -> List.of(
+                "&6服务器规则",
+                "&71. 尊重其他玩家。",
+                "&72. 不要恶意破坏或刷屏。",
+                "&73. 管理员可在 HunterCore 面板修改这里的内容。"
+            );
+            case "discord" -> List.of(
+                "&6Discord",
+                "&7管理员还没有配置 Discord 链接。"
+            );
+            case "website" -> List.of(
+                "&6网站",
+                "&7管理员还没有配置网站链接。"
+            );
+            case "motd" -> List.of(
+                "&bHunterCore &8| &f欢迎来到服务器",
+                "&7管理员可在网页面板修改 MOTD 和公共命令文案。"
+            );
+            case "info", "server" -> List.of(
+                "&b%server% &8| &f服务器信息",
+                "&7在线：&f%online%/%max% &8| &7核心：&bHunterCore",
+                "&7管理员可在网页面板修改这里的介绍。"
+            );
+            case "links" -> List.of(
+                "&6服务器链接",
+                "&7网站：&f请在 HunterCore 面板填写",
+                "&7地图：&f请在 HunterCore 面板填写"
+            );
+            case "qq", "group" -> List.of(
+                "&6服务器社群",
+                "&7QQ群/社群链接尚未配置，请联系管理员。"
             );
             case "op-denied" -> List.of(
                 "&c你没有权限使用 /op。",

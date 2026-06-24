@@ -64,7 +64,7 @@ public final class HunterCoreCommand extends Command {
 
         final HunterCommandExtension extension = this.resolve(args[0]);
         if (extension == null) {
-            this.sendHelp(sender, new String[] {args[0]});
+            this.sendUnknownSubcommand(sender, args[0]);
             return true;
         }
 
@@ -107,6 +107,15 @@ public final class HunterCoreCommand extends Command {
 
     private void sendHelp(final CommandSender sender, final String[] args) {
         HunterHelp.send(sender, language(), args);
+    }
+
+    private void sendUnknownSubcommand(final CommandSender sender, final String label) {
+        final String normalized = label.toLowerCase(Locale.ROOT);
+        if (normalized.equals("player") || normalized.equals("npc") || normalized.equals("fakeplayer") || normalized.equals("hplayer") || normalized.equals("hnpc")) {
+            sender.sendMessage(net.kyori.adventure.text.Component.text(HunterLanguage.choose(language(), "这不是 /hc 子命令。玩家 Bot 请使用 /player help；NPC 请使用 /npc help。", "This is not an /hc subcommand. Use /player help for player bots and /npc help for NPCs.")));
+            return;
+        }
+        sender.sendMessage(net.kyori.adventure.text.Component.text(HunterLanguage.choose(language(), "未知 /hc 子命令：" + label + "。使用 /hc help 查看帮助。", "Unknown /hc subcommand: " + label + ". Use /hc help for help.")));
     }
 
     private void registerBuiltIn(final HunterCommandExtension extension) {

@@ -30,6 +30,7 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -72,6 +73,7 @@ final class HunterRealFakePlayerManager {
     private final Map<String, PendingRiskApproval> pendingRiskApprovals = new HashMap<>();
     private final Map<String, Long> chatControlCooldowns = new HashMap<>();
     private final Map<String, Long> recentChatTaskFingerprints = new HashMap<>();
+    private final Map<String, List<QuickActionLock>> quickActionLocks = new HashMap<>();
     private final Map<String, List<BuildStep>> buildPlans = new HashMap<>();
     private final Map<String, List<BuildStep>> activeBuildPlacements = new HashMap<>();
     private final Map<String, Deque<List<BuildStep>>> buildHistory = new HashMap<>();
@@ -104,6 +106,7 @@ final class HunterRealFakePlayerManager {
         this.clickCommands.clear();
         this.recentChatTaskFingerprints.clear();
         this.recentFakeAiLines.clear();
+        this.quickActionLocks.clear();
         this.buildPlans.clear();
         this.activeBuildPlacements.clear();
         this.buildHistory.clear();
@@ -503,7 +506,7 @@ final class HunterRealFakePlayerManager {
             }
             case "once" -> {
                 final String goal = profile == null || profile.goal().isBlank() ? defaultFakeAiGoal(fake.name()) : profile.goal();
-                final boolean shortcutApplied = this.applyQuickGoalTask(fake, goal);
+                final boolean shortcutApplied = this.quickResponseEnabled() && this.applyQuickGoalTask(fake, goal);
                 this.aiLastResponseFingerprints.remove(fake.id());
                 this.aiProfiles.put(fake.id(), new FakeAiProfile(
                     fake.id(),
@@ -975,14 +978,14 @@ final class HunterRealFakePlayerManager {
         }
         final Location location = player.getLocation();
         final List<String> quickActions = new ArrayList<>();
-        final boolean shortcutApplied = this.applyQuickChatTask(player, fake, task, quickActions);
+        final boolean shortcutApplied = this.quickResponseEnabled() && this.applyQuickChatTask(player, fake, task, quickActions);
         if (shortcutApplied && quickActions.isEmpty()) {
             quickActions.add("one or more matching local quick actions");
         }
         final String quickLine = quickActions.isEmpty()
             ? "Local quick executor: no local action was applied before model planning.\n"
             : "Local quick executor already applied: " + String.join("; ", quickActions)
-                + ". Do not repeat those exact actions; only add useful higher-level follow-up actions.\n";
+                + ". These action categories are server-locked for this turn; do not repeat them or use build/worldedit/place as a second construction step.\n";
         final String goal = "Player " + player.getName() + " assigned this real fake player a chat task: " + sanitizeGoal(task) + "\n"
             + "Controller location: world=" + player.getWorld().getName()
             + " x=" + format(location.getX())
@@ -994,7 +997,7 @@ final class HunterRealFakePlayerManager {
             + "Recent chat:\n" + this.recentChatContext() + "\n"
             + "Behave like a cooperative Minecraft helper. For follow/come tasks use [follow:player=" + player.getName() + ",ticks=200]. "
             + "For travel tasks use [goto:x y z,ticks=200]. For mining or tool work, look at the target and use [mine:ticks=40] or [use]. "
-            + "For building use one preset action: [build-house], [build-cabin], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-wall], or [build-platform]. Use [clear-build] to dismantle the latest build. "
+            + "For building use exactly one preset action: [build-house], [build-cabin], [build-cottage], [build-barn], [build-greenhouse], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-rope-bridge], [build-wall], [build-platform], [build-dock], [build-well], [build-camp], [build-mine], [build-market], [build-gate], [build-road], or [build-windmill]. Use [clear-build] to dismantle the latest build. Do not combine build/worldedit/place in the same reply. "
             + "For armor use all needed wear actions: [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots]. "
             + "For combat use [attack-player:player=name,ticks=120] or [attack-nearest:ticks=120]. "
             + "Reply only with one short [say:...] after useful actions. Never explain reasoning. Stop if the task says stop.";
@@ -1039,15 +1042,18 @@ final class HunterRealFakePlayerManager {
         }
         if (isRespawnRequest(lower, normalized)) {
             this.service().respawn(fake.name());
+            this.recordQuickAction(fake.id(), "respawn", "respawn", 30_000L);
             applied = true;
         }
         if (isBuildClearRequest(lower, normalized)) {
             this.aiClearBuild(fake.name());
+            this.recordQuickAction(fake.id(), "clear-build", "clear build", 45_000L);
             return true;
         }
         final Player targetPlayer = this.quickTargetPlayer(task, null, fake.uuid());
         if (targetPlayer != null && isComeRequest(lower, normalized)) {
             this.startFollowLoop(fake.name(), targetPlayer.getUniqueId(), 260, 2.4D, true);
+            this.recordQuickAction(fake.id(), "movement", "follow " + targetPlayer.getName(), 30_000L);
             applied = true;
         }
         if (targetPlayer != null && hasAny(lower, normalized, "come", "follow", "go to", "walk to", "move to", "approach", "find", "跟着", "跟随", "过来", "来我", "到我", "靠近", "走向", "走到", "去找", "过去", "接近")) {
@@ -1079,7 +1085,9 @@ final class HunterRealFakePlayerManager {
             applied = true;
         }
         if (isBuildRequest(task)) {
-            this.startBuildPreset(fake.name(), fake.location(), buildKindClean(task));
+            final String kind = buildKindClean(task);
+            this.startBuildPreset(fake.name(), fake.location(), kind);
+            this.recordQuickAction(fake.id(), "construction", "build " + kind, 120_000L);
             applied = true;
         }
         if (isCombatRequest(lower, normalized)) {
@@ -1157,7 +1165,10 @@ final class HunterRealFakePlayerManager {
             applied = true;
         }
         if (isBuildRequest(task)) {
-            this.startBuildPreset(fake.name(), controller.getLocation(), buildKindClean(task));
+            final String kind = buildKindClean(task);
+            this.startBuildPreset(fake.name(), controller.getLocation(), kind);
+            this.recordQuickAction(fake.id(), "construction", "build " + kind, 120_000L);
+            quickActions.add("started local " + kind + " preset build");
             applied = true;
         }
         if (isCombatRequest(lower, normalized) || hasAny(lower, normalized, "attack", "fight", "hit", "kill", "攻击", "打", "揍")) {
@@ -1374,7 +1385,13 @@ final class HunterRealFakePlayerManager {
         }
         final String normalized = HunterToolsPreferences.normalize(configured);
         if (normalized.startsWith("you control a huntercore real fake player")
-            && (!normalized.contains("respawn") || !normalized.contains("attack-player") || !normalized.contains("clear-build") || !normalized.contains("we-fill"))) {
+            && (!normalized.contains("respawn")
+                || !normalized.contains("attack-player")
+                || !normalized.contains("clear-build")
+                || !normalized.contains("we-fill")
+                || !normalized.contains("build-windmill")
+                || !normalized.contains("build-greenhouse")
+                || !normalized.contains("build-rope-bridge"))) {
             return defaultFakeAiPrompt();
         }
         return configured;
@@ -1564,7 +1581,7 @@ final class HunterRealFakePlayerManager {
         context.append('\n');
         context.append("Recent chat visible to you:\n").append(this.recentChatContext()).append('\n');
         context.append("Last action result: ").append(this.aiLastActions.getOrDefault(snapshot.id(), "none")).append('\n');
-        context.append("Return only bracketed action lines. No prose, no reasoning, no analysis. Execute quickly: prefer 1-4 useful actions. If dead, first use [respawn]. Use [goto:x y z,ticks=240,sprint=true] or [follow:player=name,ticks=260,distance=2.4] for movement. Use [move:forward=1,ticks=60,sprint=true], [sneak:on], [sneak:off], [jump]. For combat use [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], or [look-at-player:player=name] then [attack:ticks=60]. For building use one preset: house/home => [build-house], cabin/hut/cottage => [build-cabin], bunker => [build-bunker], farm => [build-farm], stairs => [build-stairs], tower => [build-tower], bridge => [build-bridge], wall => [build-wall], platform/floor => [build-platform]. Use [clear-build] to dismantle your latest preset build. For HunterCore bundled WorldEdit, choose anchors from observed blocks or relative offsets and use [we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], or [we-undo:steps=1]. WorldEdit commands are executed with temporary permission and can be undone. For armor output every needed armor piece: [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots]. For items use [equip:slot=1,material=oak_planks,amount=64]. Use [say:OK.] only once after useful actions, never for thinking. ")
+        context.append("Return only bracketed action lines. No prose, no reasoning, no analysis. Execute quickly: prefer 1-4 useful actions. If dead, first use [respawn]. Use [goto:x y z,ticks=240,sprint=true] or [follow:player=name,ticks=260,distance=2.4] for movement. Use [move:forward=1,ticks=60,sprint=true], [sneak:on], [sneak:off], [jump]. For combat use [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], or [look-at-player:player=name] then [attack:ticks=60]. For building use exactly one refined survival preset: house/home => [build-house], cabin => [build-cabin], cottage => [build-cottage], barn => [build-barn], greenhouse => [build-greenhouse], bunker => [build-bunker], farm => [build-farm], stairs => [build-stairs], tower => [build-tower], bridge => [build-bridge], rope bridge => [build-rope-bridge], wall => [build-wall], platform/floor => [build-platform], dock => [build-dock], well => [build-well], camp => [build-camp], mine entrance => [build-mine], market => [build-market], gate => [build-gate], road => [build-road], windmill => [build-windmill]. Use [clear-build] to dismantle your latest preset build. Never output more than one construction macro in one reply, and do not combine build/worldedit/place for one task. For HunterCore bundled WorldEdit, choose anchors from observed blocks or relative offsets and use [we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], or [we-undo:steps=1]. WorldEdit commands are executed with temporary permission and can be undone. For armor output every needed armor piece: [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots]. For items use [equip:slot=1,material=oak_planks,amount=64]. Use [say:OK.] only once after useful actions, never for thinking. ")
             .append("For temporary world settings use [gamerule:name=value,duration=60s], [weather:clear,duration=120s], [time:day,duration=60s], or [difficulty:peaceful,duration=120s]. ")
             .append("For temporary gameplay logic use reviewed declarative rules, never arbitrary code: ")
             .append("[rule:trigger=sneak,action=give,material=stone,amount=16,cooldown=3,duration=120s], ")
@@ -1575,10 +1592,95 @@ final class HunterRealFakePlayerManager {
         return context.toString();
     }
 
+    private boolean quickResponseEnabled() {
+        return !this.quickResponseMode().equals("off");
+    }
+
+    private boolean quickResponseLocked() {
+        return this.quickResponseMode().equals("locked");
+    }
+
+    private String quickResponseMode() {
+        final String mode = HunterToolsPreferences.normalize(this.preferences.stringValue("modules.ai.fake-players.quick-response.mode", "off"));
+        return switch (mode) {
+            case "locked", "lock", "safe", "on" -> "locked";
+            default -> "off";
+        };
+    }
+
+    private void recordQuickAction(final String id, final String category, final String detail, final long windowMillis) {
+        if (!this.quickResponseLocked()) {
+            return;
+        }
+        final long now = System.currentTimeMillis();
+        final String key = playerId(id);
+        this.quickActionLocks.entrySet().removeIf(entry -> entry.getValue().stream().noneMatch(lock -> lock.expiresAtMillis() > now));
+        final List<QuickActionLock> locks = this.quickActionLocks.computeIfAbsent(key, ignored -> new ArrayList<>());
+        locks.removeIf(lock -> lock.expiresAtMillis() <= now || lock.category().equals(category));
+        locks.add(new QuickActionLock(category, detail, now + Math.max(1_000L, windowMillis)));
+    }
+
+    private String suppressedByQuickAction(final String name, final String action) {
+        if (!this.quickResponseLocked()) {
+            return "";
+        }
+        final String category = quickActionCategory(action);
+        if (category.isBlank()) {
+            return "";
+        }
+        final long now = System.currentTimeMillis();
+        final String key = playerId(name);
+        final List<QuickActionLock> locks = this.quickActionLocks.get(key);
+        if (locks == null || locks.isEmpty()) {
+            return "";
+        }
+        locks.removeIf(lock -> lock.expiresAtMillis() <= now);
+        for (final QuickActionLock lock : locks) {
+            if (lock.category().equals(category)) {
+                return "suppressed duplicate " + category + " after quick response: " + lock.detail();
+            }
+        }
+        return "";
+    }
+
+    private static String quickActionCategory(final String action) {
+        final String normalized = HunterToolsPreferences.normalize(action);
+        if (isConstructionMacroAction(normalized) || isPlaceAction(normalized)) {
+            return "construction";
+        }
+        return switch (normalized) {
+            case "respawn", "revive" -> "respawn";
+            case "move", "walk", "goto", "go-to", "walk-to", "walkto", "follow", "jump", "sneak", "sprint" -> "movement";
+            case "attack", "left-click", "leftclick", "attack-player", "attackplayer", "fight-player", "fightplayer", "attack-nearest", "attacknearest", "fight", "combat" -> "combat";
+            case "wear", "armor", "armour", "put-on" -> "armor";
+            case "equip", "item", "give-item", "material", "slot", "drop", "dropstack", "swap" -> "item";
+            case "clear-build", "clearbuild", "remove-build", "removebuild", "demolish", "dismantle" -> "clear-build";
+            default -> "";
+        };
+    }
+
+    private static boolean isConstructionMacroAction(final String action) {
+        final String normalized = HunterToolsPreferences.normalize(action);
+        return normalized.equals("build")
+            || normalized.startsWith("build-")
+            || Set.of(
+                "house", "home", "cabin", "hut", "cottage", "bunker", "farm", "stairs", "tower", "bridge", "wall", "platform",
+                "barn", "greenhouse", "dock", "well", "camp", "mine", "market", "gate", "road", "rope-bridge", "ropebridge", "windmill",
+                "we-fill", "worldedit-fill", "world-edit-fill", "we-set", "worldedit-set", "we-clear", "worldedit-clear", "world-edit-clear"
+            ).contains(normalized);
+    }
+
+    private static boolean isPlaceAction(final String action) {
+        final String normalized = HunterToolsPreferences.normalize(action);
+        return normalized.equals("place") || normalized.equals("place-block") || normalized.equals("placeblock");
+    }
+
     private void applyAiPlan(final String name, final String response) {
         final int budget = Math.max(1, Math.min(12, this.preferences.intValue("modules.ai.fake-players.max-actions", 5)));
         final List<String> results = new ArrayList<>();
         int applied = 0;
+        boolean constructionMacroApplied = false;
+        int placeActionsApplied = 0;
         for (final String body : extractAiActionBodies(response)) {
             if (applied >= budget) {
                 break;
@@ -1595,6 +1697,27 @@ final class HunterRealFakePlayerManager {
             } else {
                 action = HunterToolsPreferences.normalize(body);
                 args = "";
+            }
+            final String suppressed = this.suppressedByQuickAction(name, action);
+            if (!suppressed.isBlank()) {
+                results.add(suppressed);
+                applied++;
+                continue;
+            }
+            if (isConstructionMacroAction(action)) {
+                if (constructionMacroApplied) {
+                    results.add("suppressed extra construction action " + action);
+                    applied++;
+                    continue;
+                }
+                constructionMacroApplied = true;
+            } else if (isPlaceAction(action)) {
+                placeActionsApplied++;
+                if (placeActionsApplied > 4) {
+                    results.add("suppressed extra place action");
+                    applied++;
+                    continue;
+                }
             }
             final String result = this.applyAiAction(name, action, args);
             if (!result.isBlank()) {
@@ -1705,7 +1828,12 @@ final class HunterRealFakePlayerManager {
             case "attack-nearest", "attacknearest", "fight", "combat" -> this.aiAttackNearest(name, args);
             case "use", "right-click", "rightclick", "interact" -> this.aiTimedAction(name, "use", args, "use", false);
             case "place", "place-block", "placeblock" -> this.aiPlace(name, args);
-            case "build", "build-house", "house", "home", "build-cabin", "cabin", "hut", "cottage", "build-bunker", "bunker", "build-farm", "farm", "build-stairs", "stairs", "build-tower", "tower", "build-bridge", "bridge", "build-wall", "wall", "build-platform", "platform" -> this.aiBuildPreset(name, action, args);
+            case "build", "build-house", "house", "home", "build-cabin", "cabin", "hut", "cottage", "build-cottage",
+                "build-bunker", "bunker", "build-farm", "farm", "build-stairs", "stairs", "build-tower", "tower",
+                "build-bridge", "bridge", "build-rope-bridge", "rope-bridge", "ropebridge", "build-wall", "wall",
+                "build-platform", "platform", "build-barn", "barn", "build-greenhouse", "greenhouse", "build-dock", "dock",
+                "build-well", "well", "build-camp", "camp", "build-mine", "build-market", "market",
+                "build-gate", "gate", "build-road", "road", "build-windmill", "windmill" -> this.aiBuildPreset(name, action, args);
             case "clear-build", "clearbuild", "remove-build", "removebuild", "demolish", "dismantle" -> this.aiClearBuild(name);
             case "equip", "item", "give-item", "material" -> this.aiEquip(name, args);
             case "wear", "armor", "armour", "put-on" -> this.aiWear(name, args);
@@ -2280,10 +2408,22 @@ final class HunterRealFakePlayerManager {
                 case "build-bridge", "bridge" -> "bridge";
                 case "build-wall", "wall" -> "wall";
                 case "build-platform", "platform" -> "platform";
-                case "build-cabin", "cabin", "hut", "cottage" -> "cabin";
+                case "build-cabin", "cabin", "hut" -> "cabin";
+                case "build-cottage", "cottage" -> "cottage";
                 case "build-bunker", "bunker" -> "bunker";
                 case "build-farm", "farm" -> "farm";
                 case "build-stairs", "stairs" -> "stairs";
+                case "build-rope-bridge", "rope-bridge", "ropebridge" -> "rope-bridge";
+                case "build-barn", "barn" -> "barn";
+                case "build-greenhouse", "greenhouse" -> "greenhouse";
+                case "build-dock", "dock" -> "dock";
+                case "build-well", "well" -> "well";
+                case "build-camp", "camp" -> "camp";
+                case "build-mine" -> "mine";
+                case "build-market", "market" -> "market";
+                case "build-gate", "gate" -> "gate";
+                case "build-road", "road" -> "road";
+                case "build-windmill", "windmill" -> "windmill";
                 default -> "house";
             };
         }
@@ -2379,7 +2519,11 @@ final class HunterRealFakePlayerManager {
                 final BuildStep step = steps.get(index[0]++);
                 final Block block = step.location().getBlock();
                 if (block.getType().isAir() || block.isPassable()) {
-                    block.setType(step.material(), false);
+                    if (step.blockData() == null) {
+                        block.setType(step.material(), false);
+                    } else {
+                        block.setBlockData(step.blockData(), false);
+                    }
                     this.activeBuildPlacements.computeIfAbsent(playerId(name), ignored -> new ArrayList<>()).add(step);
                     placed++;
                     final Location fakeLocation = snapshot.get().location();
@@ -3264,6 +3408,16 @@ final class HunterRealFakePlayerManager {
             || lower.contains("bridge")
             || lower.contains("wall")
             || lower.contains("platform")
+            || lower.contains("barn")
+            || lower.contains("greenhouse")
+            || lower.contains("dock")
+            || lower.contains("pier")
+            || lower.contains("well")
+            || lower.contains("camp")
+            || lower.contains("market")
+            || lower.contains("gate")
+            || lower.contains("road")
+            || lower.contains("windmill")
             || lower.contains("\u5efa")
             || lower.contains("\u623f")
             || lower.contains("\u5c4b")
@@ -3274,7 +3428,15 @@ final class HunterRealFakePlayerManager {
             || lower.contains("\u5854")
             || lower.contains("\u6865")
             || lower.contains("\u5899")
-            || lower.contains("\u5e73\u53f0");
+            || lower.contains("\u5e73\u53f0")
+            || lower.contains("\u98ce\u8f66")
+            || lower.contains("\u6e29\u5ba4")
+            || lower.contains("\u7801\u5934")
+            || lower.contains("\u6c34\u4e95")
+            || lower.contains("\u8425\u5730")
+            || lower.contains("\u5e02\u573a")
+            || lower.contains("\u5927\u95e8")
+            || lower.contains("\u9053\u8def");
     }
 
     private static boolean isRespawnRequest(final String lower, final String normalized) {
@@ -3311,6 +3473,42 @@ final class HunterRealFakePlayerManager {
     private static String buildKindClean(final String task) {
         final String lower = task == null ? "" : task.toLowerCase(Locale.ROOT);
         final String normalized = HunterToolsPreferences.normalize(task == null ? "" : task);
+        if (hasAny(lower, normalized, "windmill", "\u98ce\u8f66")) {
+            return "windmill";
+        }
+        if (hasAny(lower, normalized, "greenhouse", "glasshouse", "\u6e29\u5ba4", "\u73bb\u7483\u623f")) {
+            return "greenhouse";
+        }
+        if (hasAny(lower, normalized, "rope bridge", "rope-bridge", "ropebridge", "\u540a\u6865", "\u7ef3\u6865")) {
+            return "rope-bridge";
+        }
+        if (hasAny(lower, normalized, "barn", "stable", "\u8c37\u4ed3", "\u9a6c\u53a9", "\u725b\u68da")) {
+            return "barn";
+        }
+        if (hasAny(lower, normalized, "dock", "pier", "\u7801\u5934", "\u6808\u6865")) {
+            return "dock";
+        }
+        if (hasAny(lower, normalized, "well", "\u4e95", "\u6c34\u4e95")) {
+            return "well";
+        }
+        if (hasAny(lower, normalized, "camp", "campfire", "\u8425\u5730", "\u7bdd\u706b")) {
+            return "camp";
+        }
+        if (hasAny(lower, normalized, "mine entrance", "mine", "mineshaft", "\u77ff\u6d1e", "\u77ff\u9053")) {
+            return "mine";
+        }
+        if (hasAny(lower, normalized, "market", "stall", "\u5e02\u573a", "\u644a\u4f4d")) {
+            return "market";
+        }
+        if (hasAny(lower, normalized, "gate", "archway", "\u5927\u95e8", "\u95e8\u697c")) {
+            return "gate";
+        }
+        if (hasAny(lower, normalized, "road", "path", "\u9053\u8def", "\u5c0f\u8def")) {
+            return "road";
+        }
+        if (hasAny(lower, normalized, "cottage", "\u5c0f\u5c4b", "\u519c\u820d")) {
+            return "cottage";
+        }
         if (hasAny(lower, normalized, "cabin", "hut", "cottage", "\u6728\u5c4b", "\u5c0f\u6728\u5c4b", "\u5c0f\u5c4b")) {
             return "cabin";
         }
@@ -3424,14 +3622,26 @@ final class HunterRealFakePlayerManager {
 
     private static List<BuildStep> buildPresetPlan(final Location origin, final String kind) {
         return switch (HunterToolsPreferences.normalize(kind)) {
-            case "cabin", "hut", "cottage" -> cabinPlan(origin);
+            case "cabin", "hut" -> cabinPlan(origin);
+            case "cottage" -> cottagePlan(origin);
+            case "barn" -> barnPlan(origin);
+            case "greenhouse" -> greenhousePlan(origin);
             case "bunker" -> bunkerPlan(origin);
             case "farm", "field" -> farmPlan(origin);
             case "stairs", "stair", "staircase" -> stairsPlan(origin);
             case "tower" -> towerPlan(origin);
             case "bridge" -> bridgePlan(origin);
+            case "rope-bridge", "ropebridge" -> ropeBridgePlan(origin);
             case "wall" -> wallPlan(origin);
             case "platform" -> platformPlan(origin);
+            case "dock", "pier" -> dockPlan(origin);
+            case "well" -> wellPlan(origin);
+            case "camp" -> campPlan(origin);
+            case "mine", "mineshaft" -> minePlan(origin);
+            case "market", "stall" -> marketPlan(origin);
+            case "gate" -> gatePlan(origin);
+            case "road", "path" -> roadPlan(origin);
+            case "windmill" -> windmillPlan(origin);
             default -> smallHousePlan(origin);
         };
     }
@@ -3507,6 +3717,43 @@ final class HunterRealFakePlayerManager {
             }
         }
         steps.add(new BuildStep(new Location(world, baseX + 3, baseY, baseZ), Material.SPRUCE_DOOR));
+        return steps;
+    }
+
+    private static List<BuildStep> cottagePlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int baseX = origin.getBlockX() + 2;
+        final int baseY = origin.getBlockY();
+        final int baseZ = origin.getBlockZ() + 2;
+        addFloor(steps, world, baseX, baseY - 1, baseZ, 7, 6, Material.MOSSY_COBBLESTONE);
+        addHollowBox(steps, world, baseX, baseY, baseZ, 7, 6, 4, Material.OAK_PLANKS, Material.STRIPPED_OAK_LOG, 3, 0, 2);
+        for (final int[] corner : List.of(new int[]{0, 0}, new int[]{6, 0}, new int[]{0, 5}, new int[]{6, 5})) {
+            for (int y = 0; y < 5; y++) {
+                steps.add(step(world, baseX + corner[0], baseY + y, baseZ + corner[1], Material.STRIPPED_OAK_LOG));
+            }
+        }
+        for (int y = 1; y <= 2; y++) {
+            steps.add(step(world, baseX + 2, baseY + y, baseZ, Material.GLASS_PANE));
+            steps.add(step(world, baseX + 4, baseY + y, baseZ, Material.GLASS_PANE));
+            steps.add(step(world, baseX, baseY + y, baseZ + 3, Material.GLASS_PANE));
+            steps.add(step(world, baseX + 6, baseY + y, baseZ + 3, Material.GLASS_PANE));
+        }
+        for (int x = -1; x <= 7; x++) {
+            for (int z = -1; z <= 6; z++) {
+                final boolean outer = x == -1 || x == 7 || z == -1 || z == 6;
+                final int roofY = baseY + 4 + (outer ? 0 : 1);
+                steps.add(step(world, baseX + x, roofY, baseZ + z, outer ? Material.OAK_STAIRS : Material.OAK_SLAB));
+            }
+        }
+        steps.add(step(world, baseX + 3, baseY, baseZ, Material.OAK_DOOR));
+        steps.add(step(world, baseX + 3, baseY, baseZ - 1, Material.STONE_BRICK_STAIRS));
+        steps.add(step(world, baseX + 1, baseY + 1, baseZ + 1, Material.CRAFTING_TABLE));
+        steps.add(step(world, baseX + 5, baseY + 1, baseZ + 4, Material.BARREL));
+        steps.add(step(world, baseX + 3, baseY + 3, baseZ + 3, Material.LANTERN));
         return steps;
     }
 
@@ -3618,12 +3865,31 @@ final class HunterRealFakePlayerManager {
         final int baseX = origin.getBlockX() + 1;
         final int baseY = origin.getBlockY();
         final int baseZ = origin.getBlockZ() + 2;
-        for (int x = 0; x < 9; x++) {
-            for (int z = 0; z < 3; z++) {
-                steps.add(new BuildStep(new Location(world, baseX + x, baseY, baseZ + z), Material.OAK_PLANKS));
+        for (int x = 0; x < 15; x++) {
+            final int arch = Math.max(0, 2 - Math.abs(7 - x) / 3);
+            for (int z = 0; z < 5; z++) {
+                steps.add(step(world, baseX + x, baseY + arch, baseZ + z, z == 2 ? Material.SPRUCE_PLANKS : Material.OAK_PLANKS));
             }
-            steps.add(new BuildStep(new Location(world, baseX + x, baseY + 1, baseZ - 1), Material.OAK_FENCE));
-            steps.add(new BuildStep(new Location(world, baseX + x, baseY + 1, baseZ + 3), Material.OAK_FENCE));
+            steps.add(step(world, baseX + x, baseY + arch - 1, baseZ + 2, Material.STONE_BRICKS));
+            steps.add(step(world, baseX + x, baseY + arch + 1, baseZ - 1, Material.OAK_FENCE));
+            steps.add(step(world, baseX + x, baseY + arch + 1, baseZ + 5, Material.OAK_FENCE));
+            if (x % 3 == 0 || x == 14) {
+                steps.add(step(world, baseX + x, baseY + arch + 2, baseZ - 1, Material.OAK_FENCE));
+                steps.add(step(world, baseX + x, baseY + arch + 2, baseZ + 5, Material.OAK_FENCE));
+                steps.add(step(world, baseX + x, baseY + arch + 3, baseZ - 1, Material.LANTERN));
+                steps.add(step(world, baseX + x, baseY + arch + 3, baseZ + 5, Material.LANTERN));
+            }
+        }
+        for (final int x : List.of(0, 7, 14)) {
+            for (final int z : List.of(0, 4)) {
+                for (int y = -2; y <= 0; y++) {
+                    steps.add(step(world, baseX + x, baseY + y, baseZ + z, Material.STONE_BRICKS));
+                }
+            }
+        }
+        for (int z = 0; z < 5; z++) {
+            steps.add(dataStep(world, baseX - 1, baseY, baseZ + z, "minecraft:spruce_stairs[facing=east]"));
+            steps.add(dataStep(world, baseX + 15, baseY, baseZ + z, "minecraft:spruce_stairs[facing=west]"));
         }
         return steps;
     }
@@ -3660,6 +3926,336 @@ final class HunterRealFakePlayerManager {
             }
         }
         return steps;
+    }
+
+    private static List<BuildStep> barnPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 2;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 2;
+        addFloor(steps, world, x0, y0 - 1, z0, 11, 8, Material.SPRUCE_PLANKS);
+        addHollowBox(steps, world, x0, y0, z0, 11, 8, 5, Material.RED_TERRACOTTA, Material.SPRUCE_LOG, 5, 0, 2);
+        for (int x = -1; x <= 11; x++) {
+            final int roofY = y0 + 5 + Math.max(0, 3 - Math.abs(5 - x));
+            for (int z = -1; z <= 8; z++) {
+                steps.add(step(world, x0 + x, roofY, z0 + z, Material.DARK_OAK_SLAB));
+            }
+        }
+        for (int z = 2; z <= 5; z++) {
+            steps.add(step(world, x0 + 5, y0, z0 + z, Material.HAY_BLOCK));
+            steps.add(step(world, x0 + 6, y0, z0 + z, Material.HAY_BLOCK));
+        }
+        steps.add(step(world, x0 + 5, y0, z0, Material.SPRUCE_FENCE_GATE));
+        steps.add(step(world, x0 + 5, y0 + 1, z0, Material.SPRUCE_FENCE_GATE));
+        return steps;
+    }
+
+    private static List<BuildStep> greenhousePlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 2;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 2;
+        addFloor(steps, world, x0, y0 - 1, z0, 9, 7, Material.SMOOTH_STONE);
+        for (int x = 1; x < 8; x++) {
+            for (int z = 1; z < 6; z++) {
+                steps.add(step(world, x0 + x, y0, z0 + z, (x == 4 && z == 3) ? Material.WATER : Material.FARMLAND));
+                if (!(x == 4 && z == 3)) {
+                    steps.add(step(world, x0 + x, y0 + 1, z0 + z, Material.WHEAT));
+                }
+            }
+        }
+        addHollowBox(steps, world, x0, y0, z0, 9, 7, 4, Material.GLASS, Material.OAK_LOG, 4, 0, 2);
+        for (int x = -1; x <= 9; x++) {
+            steps.add(step(world, x0 + x, y0 + 4, z0 + 3, Material.OAK_LOG));
+            steps.add(dataStep(world, x0 + x, y0 + 4, z0 + 2, "minecraft:glass_pane[east=true,west=true]"));
+            steps.add(dataStep(world, x0 + x, y0 + 4, z0 + 4, "minecraft:glass_pane[east=true,west=true]"));
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> dockPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 1;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 2;
+        for (int x = 0; x < 13; x++) {
+            for (int z = 0; z < 4; z++) {
+                steps.add(step(world, x0 + x, y0, z0 + z, Material.SPRUCE_PLANKS));
+            }
+            if (x % 3 == 0) {
+                for (final int z : List.of(-1, 4)) {
+                    steps.add(step(world, x0 + x, y0 - 1, z0 + z, Material.SPRUCE_LOG));
+                    steps.add(step(world, x0 + x, y0, z0 + z, Material.SPRUCE_FENCE));
+                    steps.add(step(world, x0 + x, y0 + 1, z0 + z, Material.LANTERN));
+                }
+            }
+        }
+        steps.add(step(world, x0 + 11, y0, z0 + 1, Material.CRAFTING_TABLE));
+        steps.add(step(world, x0 + 11, y0, z0 + 2, Material.BARREL));
+        return steps;
+    }
+
+    private static List<BuildStep> wellPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 3;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 3;
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                final boolean edge = Math.abs(x) == 1 || Math.abs(z) == 1;
+                steps.add(step(world, x0 + x, y0, z0 + z, edge ? Material.COBBLESTONE_WALL : Material.WATER));
+            }
+        }
+        for (final int x : List.of(-1, 1)) {
+            for (final int z : List.of(-1, 1)) {
+                steps.add(step(world, x0 + x, y0 + 1, z0 + z, Material.OAK_FENCE));
+                steps.add(step(world, x0 + x, y0 + 2, z0 + z, Material.OAK_FENCE));
+            }
+        }
+        addFloor(steps, world, x0 - 2, y0 + 3, z0 - 2, 5, 5, Material.DARK_OAK_SLAB);
+        steps.add(step(world, x0, y0 + 1, z0, Material.IRON_BARS));
+        steps.add(step(world, x0, y0, z0, Material.WATER));
+        return steps;
+    }
+
+    private static List<BuildStep> campPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 2;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 2;
+        addFloor(steps, world, x0, y0 - 1, z0, 9, 9, Material.COARSE_DIRT);
+        steps.add(step(world, x0 + 4, y0, z0 + 4, Material.CAMPFIRE));
+        for (final int[] seat : List.of(new int[] {2, 4}, new int[] {6, 4}, new int[] {4, 2}, new int[] {4, 6})) {
+            steps.add(step(world, x0 + seat[0], y0, z0 + seat[1], Material.OAK_LOG));
+        }
+        for (int i = 0; i < 4; i++) {
+            steps.add(step(world, x0 + i, y0, z0, Material.WHITE_WOOL));
+            steps.add(step(world, x0 + i, y0 + 1, z0 + 1, Material.RED_WOOL));
+            steps.add(step(world, x0 + i, y0, z0 + 2, Material.WHITE_WOOL));
+        }
+        steps.add(step(world, x0 + 7, y0, z0 + 7, Material.CHEST));
+        return steps;
+    }
+
+    private static List<BuildStep> minePlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 2;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 2;
+        addFloor(steps, world, x0, y0 - 1, z0, 7, 8, Material.COBBLESTONE);
+        for (int z = 0; z < 8; z++) {
+            if (z % 2 == 0) {
+                steps.add(step(world, x0 + 1, y0, z0 + z, Material.OAK_LOG));
+                steps.add(step(world, x0 + 5, y0, z0 + z, Material.OAK_LOG));
+                steps.add(step(world, x0 + 1, y0 + 2, z0 + z, Material.OAK_LOG));
+                steps.add(step(world, x0 + 5, y0 + 2, z0 + z, Material.OAK_LOG));
+                steps.add(step(world, x0 + 3, y0 + 2, z0 + z, Material.LANTERN));
+            }
+            steps.add(step(world, x0 + 3, y0, z0 + z, Material.RAIL));
+        }
+        for (int x = 0; x < 7; x++) {
+            steps.add(step(world, x0 + x, y0 + 3, z0, Material.STONE_BRICKS));
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> marketPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 2;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 2;
+        addFloor(steps, world, x0, y0 - 1, z0, 11, 8, Material.SMOOTH_STONE);
+        for (int stall = 0; stall < 3; stall++) {
+            final int sx = x0 + stall * 4;
+            for (int x = 0; x < 3; x++) {
+                steps.add(step(world, sx + x, y0, z0 + 1, Material.BARREL));
+                steps.add(step(world, sx + x, y0 + 3, z0 + 1, stall % 2 == 0 ? Material.RED_WOOL : Material.BLUE_WOOL));
+                steps.add(step(world, sx + x, y0 + 3, z0 + 2, Material.WHITE_WOOL));
+            }
+            steps.add(step(world, sx, y0 + 1, z0, Material.OAK_FENCE));
+            steps.add(step(world, sx + 2, y0 + 1, z0, Material.OAK_FENCE));
+            steps.add(step(world, sx + 1, y0, z0 + 3, Material.CHEST));
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> gatePlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 2;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 2;
+        for (int y = 0; y < 6; y++) {
+            for (final int x : List.of(0, 1, 5, 6)) {
+                steps.add(step(world, x0 + x, y0 + y, z0, y % 2 == 0 ? Material.STONE_BRICKS : Material.MOSSY_STONE_BRICKS));
+            }
+        }
+        for (int x = 0; x <= 6; x++) {
+            steps.add(step(world, x0 + x, y0 + 6, z0, Material.STONE_BRICK_SLAB));
+        }
+        steps.add(step(world, x0 + 2, y0 + 3, z0, Material.OAK_FENCE));
+        steps.add(step(world, x0 + 4, y0 + 3, z0, Material.OAK_FENCE));
+        steps.add(step(world, x0 + 3, y0 + 4, z0, Material.LANTERN));
+        return steps;
+    }
+
+    private static List<BuildStep> roadPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 1;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 1;
+        for (int x = 0; x < 15; x++) {
+            for (int z = 0; z < 3; z++) {
+                steps.add(step(world, x0 + x, y0 - 1, z0 + z, z == 1 ? Material.DIRT_PATH : Material.GRAVEL));
+            }
+            if (x % 5 == 0) {
+                steps.add(step(world, x0 + x, y0, z0 - 1, Material.OAK_FENCE));
+                steps.add(step(world, x0 + x, y0 + 1, z0 - 1, Material.LANTERN));
+            }
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> ropeBridgePlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 1;
+        final int y0 = origin.getBlockY() + 1;
+        final int z0 = origin.getBlockZ() + 2;
+        for (int x = 0; x < 17; x++) {
+            final int sag = Math.abs(8 - x) / 4;
+            for (int z = 0; z < 3; z++) {
+                steps.add(step(world, x0 + x, y0 - sag, z0 + z, Material.SPRUCE_SLAB));
+            }
+            steps.add(step(world, x0 + x, y0 + 1 - sag, z0 - 1, Material.OAK_FENCE));
+            steps.add(step(world, x0 + x, y0 + 1 - sag, z0 + 3, Material.OAK_FENCE));
+            if (x % 4 == 0) {
+                steps.add(step(world, x0 + x, y0 - sag, z0 - 1, Material.SPRUCE_FENCE));
+                steps.add(step(world, x0 + x, y0 - sag, z0 + 3, Material.SPRUCE_FENCE));
+            }
+        }
+        return steps;
+    }
+
+    private static List<BuildStep> windmillPlan(final Location origin) {
+        final World world = origin.getWorld();
+        final List<BuildStep> steps = new ArrayList<>();
+        if (world == null) {
+            return steps;
+        }
+        final int x0 = origin.getBlockX() + 3;
+        final int y0 = origin.getBlockY();
+        final int z0 = origin.getBlockZ() + 3;
+        for (int y = 0; y < 8; y++) {
+            final int radius = y < 5 ? 2 : 1;
+            for (int x = -radius; x <= radius; x++) {
+                for (int z = -radius; z <= radius; z++) {
+                    final boolean edge = Math.abs(x) == radius || Math.abs(z) == radius;
+                    if (edge) {
+                        steps.add(step(world, x0 + x, y0 + y, z0 + z, y < 5 ? Material.STRIPPED_OAK_LOG : Material.WHITE_TERRACOTTA));
+                    }
+                }
+            }
+        }
+        for (int x = -3; x <= 3; x++) {
+            steps.add(step(world, x0 + x, y0 + 8, z0, Material.DARK_OAK_SLAB));
+        }
+        for (int z = -3; z <= 3; z++) {
+            steps.add(step(world, x0, y0 + 8, z0 + z, Material.DARK_OAK_SLAB));
+        }
+        steps.add(step(world, x0, y0 + 4, z0 - 3, Material.OAK_FENCE));
+        for (int i = 1; i <= 4; i++) {
+            steps.add(step(world, x0, y0 + 4 + i, z0 - 4, Material.WHITE_WOOL));
+            steps.add(step(world, x0, y0 + 4 - i, z0 - 4, Material.WHITE_WOOL));
+            steps.add(step(world, x0 + i, y0 + 4, z0 - 4, Material.WHITE_WOOL));
+            steps.add(step(world, x0 - i, y0 + 4, z0 - 4, Material.WHITE_WOOL));
+        }
+        return steps;
+    }
+
+    private static void addFloor(final List<BuildStep> steps, final World world, final int x, final int y, final int z, final int width, final int depth, final Material material) {
+        for (int dx = 0; dx < width; dx++) {
+            for (int dz = 0; dz < depth; dz++) {
+                steps.add(step(world, x + dx, y, z + dz, material));
+            }
+        }
+    }
+
+    private static void addHollowBox(
+        final List<BuildStep> steps,
+        final World world,
+        final int x,
+        final int y,
+        final int z,
+        final int width,
+        final int depth,
+        final int height,
+        final Material wall,
+        final Material corner,
+        final int doorX,
+        final int doorZ,
+        final int doorHeight
+    ) {
+        for (int dy = 0; dy < height; dy++) {
+            for (int dx = 0; dx < width; dx++) {
+                for (int dz = 0; dz < depth; dz++) {
+                    final boolean edge = dx == 0 || dx == width - 1 || dz == 0 || dz == depth - 1;
+                    if (!edge || (dx == doorX && dz == doorZ && dy < doorHeight)) {
+                        continue;
+                    }
+                    final boolean isCorner = (dx == 0 || dx == width - 1) && (dz == 0 || dz == depth - 1);
+                    final boolean window = dy == 2 && !isCorner && (dx == width / 2 || dz == depth / 2);
+                    steps.add(step(world, x + dx, y + dy, z + dz, window ? Material.GLASS_PANE : isCorner ? corner : wall));
+                }
+            }
+        }
+    }
+
+    private static BuildStep step(final World world, final int x, final int y, final int z, final Material material) {
+        return new BuildStep(new Location(world, x, y, z), material);
+    }
+
+    private static BuildStep dataStep(final World world, final int x, final int y, final int z, final String data) {
+        final BlockData blockData = Bukkit.createBlockData(data);
+        return new BuildStep(new Location(world, x, y, z), blockData.getMaterial(), blockData);
     }
 
     private static List<String> tokens(final String args) {
@@ -3818,10 +4414,10 @@ final class HunterRealFakePlayerManager {
             + "[move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], "
             + "[follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], "
             + "[equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], "
-            + "[attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [build-house], [build-cabin], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-wall], [build-platform], [clear-build], "
+            + "[attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [build-house], [build-cabin], [build-cottage], [build-barn], [build-greenhouse], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-rope-bridge], [build-wall], [build-platform], [build-dock], [build-well], [build-camp], [build-mine], [build-market], [build-gate], [build-road], [build-windmill], [clear-build], "
             + "[we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], [we-undo:steps=1], "
             + "[slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
-            + "If dead, use [respawn] first. For 'come/follow', use follow. For 'wear armor', output all four wear actions. For building, use one preset and let the running build loop finish. For attack, use attack-player or attack-nearest. If unsure, do a safe movement/look action and at most one short [say:OK.].";
+            + "If dead, use [respawn] first. For 'come/follow', use follow. For 'wear armor', output all four wear actions. For building, use exactly one refined preset and let the running build loop finish; never combine build/worldedit/place in one reply. For attack, use attack-player or attack-nearest. If unsure, do a safe movement/look action and at most one short [say:OK.].";
     }
 
     private static String defaultFakeAiGoal(final String name) {
@@ -3930,7 +4526,10 @@ final class HunterRealFakePlayerManager {
     private record WorldEditRegion(Location first, Location second, int volume) {
     }
 
-    private record BuildStep(Location location, Material material) {
+    private record BuildStep(Location location, Material material, @Nullable BlockData blockData) {
+        private BuildStep(final Location location, final Material material) {
+            this(location, material, null);
+        }
     }
 
     private record MojangSkinTexture(String value, String signature) {
@@ -3946,6 +4545,9 @@ final class HunterRealFakePlayerManager {
     }
 
     private record RecentFakeAiLine(String fingerprint, long createdAtMillis) {
+    }
+
+    private record QuickActionLock(String category, String detail, long expiresAtMillis) {
     }
 
     private record PendingRiskApproval(

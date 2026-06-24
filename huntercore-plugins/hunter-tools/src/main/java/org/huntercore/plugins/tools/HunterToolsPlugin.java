@@ -259,6 +259,46 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 event.setCancelled(true);
                 this.sendCommandOverride(event.getPlayer(), "plugins");
             }
+            case "version", "ver" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "version");
+            }
+            case "rules" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "rules");
+            }
+            case "discord" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "discord");
+            }
+            case "website", "site" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "website");
+            }
+            case "motd" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "motd");
+            }
+            case "info" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "info");
+            }
+            case "server" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "server");
+            }
+            case "links" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "links");
+            }
+            case "qq" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "qq");
+            }
+            case "group" -> {
+                event.setCancelled(true);
+                this.sendCommandOverride(event.getPlayer(), "group");
+            }
             case "op" -> {
                 if (!this.canUseOp(event.getPlayer())) {
                     event.setCancelled(true);

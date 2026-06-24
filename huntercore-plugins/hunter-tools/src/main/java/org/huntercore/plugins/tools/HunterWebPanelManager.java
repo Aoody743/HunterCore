@@ -968,6 +968,46 @@ final class HunterWebPanelManager {
             "modules.command-overrides.messages.plugins",
             HunterToolsPreferences.defaultCommandOverrideLines("plugins")
         ))).append(',');
+        json.append("\"version\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.version",
+            HunterToolsPreferences.defaultCommandOverrideLines("version")
+        ))).append(',');
+        json.append("\"rules\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.rules",
+            HunterToolsPreferences.defaultCommandOverrideLines("rules")
+        ))).append(',');
+        json.append("\"discord\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.discord",
+            HunterToolsPreferences.defaultCommandOverrideLines("discord")
+        ))).append(',');
+        json.append("\"website\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.website",
+            HunterToolsPreferences.defaultCommandOverrideLines("website")
+        ))).append(',');
+        json.append("\"motd\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.motd",
+            HunterToolsPreferences.defaultCommandOverrideLines("motd")
+        ))).append(',');
+        json.append("\"info\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.info",
+            HunterToolsPreferences.defaultCommandOverrideLines("info")
+        ))).append(',');
+        json.append("\"server\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.server",
+            HunterToolsPreferences.defaultCommandOverrideLines("server")
+        ))).append(',');
+        json.append("\"links\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.links",
+            HunterToolsPreferences.defaultCommandOverrideLines("links")
+        ))).append(',');
+        json.append("\"qq\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.qq",
+            HunterToolsPreferences.defaultCommandOverrideLines("qq")
+        ))).append(',');
+        json.append("\"group\":").append(stringArrayJson(this.preferences.stringList(
+            "modules.command-overrides.messages.group",
+            HunterToolsPreferences.defaultCommandOverrideLines("group")
+        ))).append(',');
         json.append("\"opDenied\":").append(stringArrayJson(this.preferences.stringList(
             "modules.command-overrides.messages.op-denied",
             HunterToolsPreferences.defaultCommandOverrideLines("op-denied")
@@ -1014,6 +1054,7 @@ final class HunterWebPanelManager {
         booleanField(json, "fakePlayersAllowPlacing", this.preferences.booleanValue("modules.ai.fake-players.allow-placing", true)).append(',');
         booleanField(json, "fakePlayersAllowInteraction", this.preferences.booleanValue("modules.ai.fake-players.allow-interaction", true)).append(',');
         numberField(json, "fakePlayersMaxPlaceDistanceBlocks", this.preferences.intValue("modules.ai.fake-players.max-place-distance-blocks", 6)).append(',');
+        field(json, "fakePlayersQuickResponseMode", this.preferences.stringValue("modules.ai.fake-players.quick-response.mode", "off")).append(',');
         booleanField(json, "fakePlayersChatControlEnabled", this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true)).append(',');
         field(json, "fakePlayersChatControlPrefix", this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot")).append(',');
         numberField(json, "fakePlayersChatControlCooldownSeconds", this.preferences.intValue("modules.ai.fake-players.chat-control.cooldown-seconds", 3)).append(',');
@@ -1765,16 +1806,37 @@ final class HunterWebPanelManager {
         if (session == null) {
             return;
         }
-        final Map<String, String> body = parseJsonObject(this.body(exchange, 32 * 1024));
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
         final List<String> about = commandMessageLines(body.getOrDefault("about", ""));
         final List<String> plugins = commandMessageLines(body.getOrDefault("plugins", ""));
+        final List<String> version = commandMessageLines(body.getOrDefault("version", ""));
+        final List<String> rules = commandMessageLines(body.getOrDefault("rules", ""));
+        final List<String> discord = commandMessageLines(body.getOrDefault("discord", ""));
+        final List<String> website = commandMessageLines(body.getOrDefault("website", ""));
+        final List<String> motd = commandMessageLines(body.getOrDefault("motd", ""));
+        final List<String> info = commandMessageLines(body.getOrDefault("info", ""));
+        final List<String> server = commandMessageLines(body.getOrDefault("server", ""));
+        final List<String> links = commandMessageLines(body.getOrDefault("links", ""));
+        final List<String> qq = commandMessageLines(body.getOrDefault("qq", ""));
+        final List<String> group = commandMessageLines(body.getOrDefault("group", ""));
         final List<String> opDenied = commandMessageLines(body.getOrDefault("opDenied", ""));
-        if (about == null || plugins == null || opDenied == null) {
+        if (about == null || plugins == null || version == null || rules == null || discord == null || website == null
+            || motd == null || info == null || server == null || links == null || qq == null || group == null || opDenied == null) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_command_messages\"}");
             return;
         }
         this.preferences.setValue("modules.command-overrides.messages.about", about);
         this.preferences.setValue("modules.command-overrides.messages.plugins", plugins);
+        this.preferences.setValue("modules.command-overrides.messages.version", version);
+        this.preferences.setValue("modules.command-overrides.messages.rules", rules);
+        this.preferences.setValue("modules.command-overrides.messages.discord", discord);
+        this.preferences.setValue("modules.command-overrides.messages.website", website);
+        this.preferences.setValue("modules.command-overrides.messages.motd", motd);
+        this.preferences.setValue("modules.command-overrides.messages.info", info);
+        this.preferences.setValue("modules.command-overrides.messages.server", server);
+        this.preferences.setValue("modules.command-overrides.messages.links", links);
+        this.preferences.setValue("modules.command-overrides.messages.qq", qq);
+        this.preferences.setValue("modules.command-overrides.messages.group", group);
         this.preferences.setValue("modules.command-overrides.messages.op-denied", opDenied);
         this.savePreferences();
         this.invalidateStatusCaches();
@@ -1809,6 +1871,10 @@ final class HunterWebPanelManager {
         final String chatPrompt = body.getOrDefault("chatSystemPrompt", this.preferences.stringValue("modules.ai.chat.system-prompt", "")).trim();
         final String npcPrompt = body.getOrDefault("npcSystemPrompt", this.preferences.stringValue("modules.ai.npc.system-prompt", "")).trim();
         final String fakePlayersPrompt = body.getOrDefault("fakePlayersSystemPrompt", this.preferences.stringValue("modules.ai.fake-players.system-prompt", "")).trim();
+        final String fakePlayersQuickResponseMode = HunterToolsPreferences.normalize(body.getOrDefault(
+            "fakePlayersQuickResponseMode",
+            this.preferences.stringValue("modules.ai.fake-players.quick-response.mode", "off")
+        ));
         final String fakePlayersChatControlPrefix = body.getOrDefault("fakePlayersChatControlPrefix", this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot")).trim();
         final String fakePlayersChatControlPermission = body.getOrDefault("fakePlayersChatControlPermission", this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer")).trim();
         final Double temperature = parseDouble(body.getOrDefault("temperature", String.valueOf(this.preferences.doubleValue("modules.ai.temperature", 0.7D))), 0.0D, 2.0D);
@@ -1846,6 +1912,7 @@ final class HunterWebPanelManager {
             || chatProfiles == null || fakeBotAliases == null
             || !validHttpUrl(baseUrl) || model.isBlank() || model.length() > 128 || apiKey.length() > 512
             || apiKeyEnv.length() > 128 || chatPrefix.isBlank() || chatPrefix.length() > 32
+            || !Set.of("off", "locked").contains(fakePlayersQuickResponseMode)
             || fakePlayersChatControlPrefix.isBlank() || fakePlayersChatControlPrefix.length() > 32
             || fakePlayersChatControlPermission.length() > 96
             || chatPrompt.length() > 4096 || npcPrompt.length() > 4096 || fakePlayersPrompt.length() > 4096) {
@@ -1889,6 +1956,7 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.ai.fake-players.allow-placing", fakePlayersAllowPlacing);
         this.preferences.setValue("modules.ai.fake-players.allow-interaction", fakePlayersAllowInteraction);
         this.preferences.setValue("modules.ai.fake-players.max-place-distance-blocks", fakePlayersMaxPlaceDistance);
+        this.preferences.setValue("modules.ai.fake-players.quick-response.mode", fakePlayersQuickResponseMode);
         this.preferences.setValue("modules.ai.fake-players.chat-control.enabled", fakePlayersChatControlEnabled);
         this.preferences.setValue("modules.ai.fake-players.chat-control.trigger-prefix", fakePlayersChatControlPrefix);
         this.preferences.setValue("modules.ai.fake-players.chat-control.cooldown-seconds", fakePlayersChatControlCooldown);

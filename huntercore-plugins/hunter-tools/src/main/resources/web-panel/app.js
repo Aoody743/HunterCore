@@ -85,6 +85,19 @@ const FIELD_HELP = {
   motdLine1: 'First server list MOTD line. Supports & color codes.',
   motdLine2: 'Second server list MOTD line. Supports placeholders.',
   motdMaxPlayers: '-1 keeps the server default max player count.',
+  commandMessageAbout: 'Lines shown when a player runs /about.',
+  commandMessagePlugins: 'Lines shown when a player runs /plugins or /pl.',
+  commandMessageVersion: 'Lines shown when a player runs /version or /ver.',
+  commandMessageRules: 'Lines shown when a player runs /rules.',
+  commandMessageDiscord: 'Lines shown when a player runs /discord.',
+  commandMessageWebsite: 'Lines shown when a player runs /website or /site.',
+  commandMessageMotd: 'Lines shown when a player runs /motd.',
+  commandMessageInfo: 'Lines shown when a player runs /info.',
+  commandMessageServer: 'Lines shown when a player runs /server.',
+  commandMessageLinks: 'Lines shown when a player runs /links.',
+  commandMessageQq: 'Lines shown when a player runs /qq.',
+  commandMessageGroup: 'Lines shown when a player runs /group.',
+  commandMessageOpDenied: 'Lines shown when a non-admin player tries /op.',
   authMinimumPasswordLength: 'Minimum password length for /register and web registration.',
   authRegistrationUrl: 'URL shown to unregistered players when web pre-registration is required.',
   webCorsAllowOrigin: 'Use * for testing, or a specific frontend origin in production.',
@@ -107,6 +120,7 @@ const FIELD_HELP = {
   aiFakePlayersAllowBreaking: 'Allow AI mining and block breaking actions.',
   aiFakePlayersAllowPlacing: 'Allow AI block placement, building presets, and WorldEdit fill/clear actions.',
   aiFakePlayersAllowInteraction: 'Allow AI right-click/use interactions.',
+  aiFakePlayersQuickResponseMode: 'off means the model decides all actions. locked keeps local quick actions but blocks duplicate model actions.',
   aiFakePlayersChatControlEnabled: 'When enabled, player chat mentioning a bot name or alias can assign that bot a task.',
   aiFakePlayersChatControlPrefix: 'Optional command prefix. Bot names also trigger directly.',
   aiFakePlayersChatControlCooldownSeconds: 'Minimum seconds before the same player can assign another chat task.',
@@ -287,9 +301,29 @@ const translations = {
     'commandMessages.title': '命令文案',
     'commandMessages.about': '/about',
     'commandMessages.plugins': '/plugins',
+    'commandMessages.version': '/version',
+    'commandMessages.rules': '/rules',
+    'commandMessages.discord': '/discord',
+    'commandMessages.website': '/website',
+    'commandMessages.motd': '/motd',
+    'commandMessages.info': '/info',
+    'commandMessages.server': '/server',
+    'commandMessages.links': '/links',
+    'commandMessages.qq': '/qq',
+    'commandMessages.group': '/group',
     'commandMessages.opDenied': '/op 无权限',
     'commandMessages.aboutPlaceholder': '&b"HunterCore" Server &8| &fPowered by &6HunterCore',
     'commandMessages.pluginsPlaceholder': '&6插件列表 &8| &f由管理员维护',
+    'commandMessages.versionPlaceholder': '&6版本信息 &8| &fPowered by &bHunterCore',
+    'commandMessages.rulesPlaceholder': '&6服务器规则\\n&71. 尊重其他玩家。',
+    'commandMessages.discordPlaceholder': '&6Discord\\n&7填写你的邀请链接。',
+    'commandMessages.websitePlaceholder': '&6网站\\n&7填写你的官网或公告页。',
+    'commandMessages.motdPlaceholder': '&bHunterCore &8| &f欢迎来到服务器',
+    'commandMessages.infoPlaceholder': '&b%server% &8| &f服务器信息\\n&7在线：&f%online%/%max%',
+    'commandMessages.serverPlaceholder': '&b%server% &8| &f服务器介绍\\n&7填写玩法、版本和入口说明。',
+    'commandMessages.linksPlaceholder': '&6服务器链接\\n&7官网：填写链接\\n&7地图：填写链接',
+    'commandMessages.qqPlaceholder': '&6QQ群\\n&7填写群号或邀请方式。',
+    'commandMessages.groupPlaceholder': '&6社群\\n&7填写玩家社群入口。',
     'commandMessages.opDeniedPlaceholder': '&c你没有权限使用 /op。',
     'commandMessages.save': '保存命令文案',
     'commandMessages.saved': '命令文案已保存。',
@@ -332,6 +366,9 @@ const translations = {
     'ai.fakePlayersMaxActionTicks': '最大挖掘/交互 ticks',
     'ai.fakePlayersRadius': '假人感知半径',
     'ai.fakePlayersMaxPlaceDistance': '最大放置距离',
+    'ai.fakePlayersQuickResponse': '快速响应模式',
+    'ai.quickOff': '关闭快速响应',
+    'ai.quickLocked': '快速响应 + 去重锁',
     'ai.fakePlayersMovement': '允许移动',
     'ai.fakePlayersBreaking': '允许挖掘',
     'ai.fakePlayersPlacing': '允许放置方块',
@@ -603,9 +640,29 @@ const translations = {
     'commandMessages.title': 'Command text',
     'commandMessages.about': '/about',
     'commandMessages.plugins': '/plugins',
+    'commandMessages.version': '/version',
+    'commandMessages.rules': '/rules',
+    'commandMessages.discord': '/discord',
+    'commandMessages.website': '/website',
+    'commandMessages.motd': '/motd',
+    'commandMessages.info': '/info',
+    'commandMessages.server': '/server',
+    'commandMessages.links': '/links',
+    'commandMessages.qq': '/qq',
+    'commandMessages.group': '/group',
     'commandMessages.opDenied': '/op denied',
     'commandMessages.aboutPlaceholder': '&b"HunterCore" Server &8| &fPowered by &6HunterCore',
     'commandMessages.pluginsPlaceholder': '&6Plugin list &8| &fManaged by staff',
+    'commandMessages.versionPlaceholder': '&6Version &8| &fPowered by &bHunterCore',
+    'commandMessages.rulesPlaceholder': '&6Server rules\\n&71. Respect other players.',
+    'commandMessages.discordPlaceholder': '&6Discord\\n&7Set your invite link here.',
+    'commandMessages.websitePlaceholder': '&6Website\\n&7Set your website or announcement link here.',
+    'commandMessages.motdPlaceholder': '&bHunterCore &8| &fWelcome to the server',
+    'commandMessages.infoPlaceholder': '&b%server% &8| &fServer info\\n&7Online: &f%online%/%max%',
+    'commandMessages.serverPlaceholder': '&b%server% &8| &fServer intro\\n&7Set gameplay, version, and entry notes.',
+    'commandMessages.linksPlaceholder': '&6Server links\\n&7Website: set link\\n&7Map: set link',
+    'commandMessages.qqPlaceholder': '&6QQ group\\n&7Set group number or invite instructions.',
+    'commandMessages.groupPlaceholder': '&6Community\\n&7Set player community entry.',
     'commandMessages.opDeniedPlaceholder': '&cYou do not have permission to use /op.',
     'commandMessages.save': 'Save command text',
     'commandMessages.saved': 'Command text saved.',
@@ -648,6 +705,9 @@ const translations = {
     'ai.fakePlayersMaxActionTicks': 'Max mine/use ticks',
     'ai.fakePlayersRadius': 'Fake player sensing radius',
     'ai.fakePlayersMaxPlaceDistance': 'Max place distance',
+    'ai.fakePlayersQuickResponse': 'Quick response mode',
+    'ai.quickOff': 'Quick response off',
+    'ai.quickLocked': 'Quick response + duplicate lock',
     'ai.fakePlayersMovement': 'allow movement',
     'ai.fakePlayersBreaking': 'allow breaking',
     'ai.fakePlayersPlacing': 'allow block placing',
@@ -1380,6 +1440,16 @@ function renderCommandMessages(messages) {
   if (document.activeElement && $('commandMessagesForm').contains(document.activeElement)) return;
   $('commandMessageAbout').value = (messages.about || []).join('\n');
   $('commandMessagePlugins').value = (messages.plugins || []).join('\n');
+  $('commandMessageVersion').value = (messages.version || []).join('\n');
+  $('commandMessageRules').value = (messages.rules || []).join('\n');
+  $('commandMessageDiscord').value = (messages.discord || []).join('\n');
+  $('commandMessageWebsite').value = (messages.website || []).join('\n');
+  $('commandMessageMotd').value = (messages.motd || []).join('\n');
+  $('commandMessageInfo').value = (messages.info || []).join('\n');
+  $('commandMessageServer').value = (messages.server || []).join('\n');
+  $('commandMessageLinks').value = (messages.links || []).join('\n');
+  $('commandMessageQq').value = (messages.qq || []).join('\n');
+  $('commandMessageGroup').value = (messages.group || []).join('\n');
   $('commandMessageOpDenied').value = (messages.opDenied || []).join('\n');
 }
 
@@ -1411,6 +1481,7 @@ function renderAiSettings(settings) {
   $('aiFakePlayersMaxActionTicks').value = settings.fakePlayersMaxActionTicks ?? '';
   $('aiFakePlayersNearbyRadiusBlocks').value = settings.fakePlayersNearbyRadiusBlocks ?? '';
   $('aiFakePlayersMaxPlaceDistanceBlocks').value = settings.fakePlayersMaxPlaceDistanceBlocks ?? '';
+  $('aiFakePlayersQuickResponseMode').value = settings.fakePlayersQuickResponseMode || 'off';
   $('aiFakePlayersAllowMovement').checked = Boolean(settings.fakePlayersAllowMovement);
   $('aiFakePlayersAllowBreaking').checked = Boolean(settings.fakePlayersAllowBreaking);
   $('aiFakePlayersAllowPlacing').checked = Boolean(settings.fakePlayersAllowPlacing);
@@ -1915,6 +1986,16 @@ function bindEvents() {
     const payload = {
       about: $('commandMessageAbout').value,
       plugins: $('commandMessagePlugins').value,
+      version: $('commandMessageVersion').value,
+      rules: $('commandMessageRules').value,
+      discord: $('commandMessageDiscord').value,
+      website: $('commandMessageWebsite').value,
+      motd: $('commandMessageMotd').value,
+      info: $('commandMessageInfo').value,
+      server: $('commandMessageServer').value,
+      links: $('commandMessageLinks').value,
+      qq: $('commandMessageQq').value,
+      group: $('commandMessageGroup').value,
       opDenied: $('commandMessageOpDenied').value
     };
     try {
@@ -1995,6 +2076,7 @@ function bindEvents() {
       fakePlayersMaxActionTicks: $('aiFakePlayersMaxActionTicks').value,
       fakePlayersNearbyRadiusBlocks: $('aiFakePlayersNearbyRadiusBlocks').value,
       fakePlayersMaxPlaceDistanceBlocks: $('aiFakePlayersMaxPlaceDistanceBlocks').value,
+      fakePlayersQuickResponseMode: $('aiFakePlayersQuickResponseMode').value,
       fakePlayersAllowMovement: String($('aiFakePlayersAllowMovement').checked),
       fakePlayersAllowBreaking: String($('aiFakePlayersAllowBreaking').checked),
       fakePlayersAllowPlacing: String($('aiFakePlayersAllowPlacing').checked),
