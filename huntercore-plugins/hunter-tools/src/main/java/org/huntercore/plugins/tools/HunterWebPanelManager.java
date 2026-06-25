@@ -882,6 +882,7 @@ final class HunterWebPanelManager {
             booleanField(json, "aiEnabled", actor.aiEnabled()).append(',');
             field(json, "aiPersona", actor.aiPersona()).append(',');
             field(json, "aiStatus", actor.aiStatus()).append(',');
+            booleanField(json, "aiFree", actor.aiFree()).append(',');
             booleanField(json, "live", true).append(',');
             field(json, "entityUuid", actor.entityUuid());
             json.append('}');

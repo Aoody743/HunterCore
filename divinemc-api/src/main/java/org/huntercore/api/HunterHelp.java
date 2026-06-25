@@ -57,7 +57,7 @@ public final class HunterHelp {
         entry(AUTH, "changepassword", "/changepassword <old> <new>", "修改 HunterAuth 密码。", "Changes the HunterAuth password.", "hunterauth.command.changepassword"),
 
         entry(PLAYER, "player", "/player <help|spawn|remove|list|inv|skin|move|use|attack|ai|info>", "管理真实玩家 Bot。", "Manages real player bots.", "huntertools.command.hplayer"),
-        entry(PLAYER, "player spawn", "/player spawn <name> [world x y z [yaw pitch]]", "生成真实玩家 Bot。", "Spawns a real player bot.", "huntertools.command.hplayer"),
+        entry(PLAYER, "player spawn", "/player spawn <name> [-aifree] [world x y z [yaw pitch]]", "生成真实玩家 Bot；-aifree 为 OP 专用危险自由 AI 模式。", "Spawns a real player bot; -aifree is an OP-only dangerous autonomous AI mode.", "huntertools.command.hplayer"),
         entry(PLAYER, "player remove", "/player remove <name>", "移除真实玩家 Bot。", "Removes a real player bot.", "huntertools.command.hplayer"),
         entry(PLAYER, "player list", "/player list", "列出真实玩家 Bot。", "Lists real player bots.", "huntertools.command.hplayer"),
         entry(PLAYER, "player inv", "/player inv <name>", "打开真实玩家 Bot 的背包并直接编辑。", "Opens a real player bot inventory for editing.", "huntertools.command.hplayer"),
@@ -174,7 +174,7 @@ public final class HunterHelp {
         entry(AUTH, "changepassword", "/changepassword <old> <new> | /changepw <old> <new>", "修改 HunterAuth 密码。", "Changes the HunterAuth password.", "hunterauth.command.changepassword"),
 
         entry(PLAYER, "player", "/player <help|spawn|respawn|remove|list|inv|skin|tp|tphere|look|move|sneak|sprint|jump|use|attack|stop|drop|dropstack|swap|gm|slot|ai|info|clear>", "管理真实 ServerPlayer 假人。", "Manages real ServerPlayer bots.", "huntertools.command.hplayer"),
-        entry(PLAYER, "player spawn", "/player spawn <name> [world x y z [yaw pitch]]", "生成真实玩家 Bot。", "Spawns a real player bot.", "huntertools.command.hplayer"),
+        entry(PLAYER, "player spawn", "/player spawn <name> [-aifree] [world x y z [yaw pitch]]", "生成真实玩家 Bot；-aifree 为 OP 专用危险自由 AI 模式。", "Spawns a real player bot; -aifree is an OP-only dangerous autonomous AI mode.", "huntertools.command.hplayer"),
         entry(PLAYER, "player respawn", "/player respawn <name>", "让死亡的真实玩家 Bot 复活。", "Respawns a dead real player bot.", "huntertools.command.hplayer"),
         entry(PLAYER, "player remove", "/player remove <name>", "移除真实玩家 Bot。", "Removes a real player bot.", "huntertools.command.hplayer"),
         entry(PLAYER, "player list", "/player list", "列出真实玩家 Bot。", "Lists real player bots.", "huntertools.command.hplayer"),

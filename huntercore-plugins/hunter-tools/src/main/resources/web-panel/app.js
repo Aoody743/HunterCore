@@ -230,6 +230,7 @@ const translations = {
     'actors.saveAi': '保存 AI',
     'actors.aiSaved': 'AI 设置已保存。',
     'actors.aiStatus': '最近动作',
+    'actors.aiFree': 'AI-Free 自由模式',
     'actors.notConfigured': '未配置',
     'actors.live': '在线',
     'actors.configured': '已配置',
@@ -369,6 +370,7 @@ const translations = {
     'ai.fakePlayersQuickResponse': '快速响应模式',
     'ai.quickOff': '关闭快速响应',
     'ai.quickLocked': '快速响应 + 去重锁',
+    'ai.fakePlayersFreeWarning': '危险自由模式：只有 OP 可以用 /player spawn <name> -aifree 创建。该假人会像自主玩家一样自己观察、移动、操作、建造、聊天，并且可以执行服务器指令，不只是等待玩家命令。',
     'ai.fakePlayersMovement': '允许移动',
     'ai.fakePlayersBreaking': '允许挖掘',
     'ai.fakePlayersPlacing': '允许放置方块',
@@ -569,6 +571,7 @@ const translations = {
     'actors.saveAi': 'Save AI',
     'actors.aiSaved': 'AI settings saved.',
     'actors.aiStatus': 'last action',
+    'actors.aiFree': 'AI-Free autonomous mode',
     'actors.notConfigured': 'not configured',
     'actors.live': 'live',
     'actors.configured': 'configured',
@@ -708,6 +711,7 @@ const translations = {
     'ai.fakePlayersQuickResponse': 'Quick response mode',
     'ai.quickOff': 'Quick response off',
     'ai.quickLocked': 'Quick response + duplicate lock',
+    'ai.fakePlayersFreeWarning': 'Dangerous autonomous mode: OPs can create it with /player spawn <name> -aifree. The bot observes, moves, acts, builds, chats, and may run server commands by itself; it is not merely waiting for player instructions.',
     'ai.fakePlayersMovement': 'allow movement',
     'ai.fakePlayersBreaking': 'allow breaking',
     'ai.fakePlayersPlacing': 'allow block placing',
@@ -1046,8 +1050,11 @@ function actorLine(actor) {
   const aiStatusMeta = actor.module === 'real-fake-players' && actor.aiStatus
     ? ` · ${esc(t('actors.aiStatus'))}: ${esc(actor.aiStatus)}`
     : '';
+  const aiFreeMeta = actor.module === 'real-fake-players' && actor.aiFree
+    ? ` · ${esc(t('actors.aiFree'))}`
+    : '';
   const metaLine = actor.module === 'real-fake-players'
-    ? `${stateLabel} · ${moduleLabel} · ${esc(actor.pose || 'survival')} · ${esc(t('actors.loops'))}: ${esc(actor.loops || 'none')} · ${esc(location)} · ${esc(t('actors.clickCommand'))}: ${esc(clickLine)}${aiMeta}${aiStatusMeta}`
+    ? `${stateLabel} · ${moduleLabel} · ${esc(actor.pose || 'survival')} · ${esc(t('actors.loops'))}: ${esc(actor.loops || 'none')} · ${esc(location)} · ${esc(t('actors.clickCommand'))}: ${esc(clickLine)}${aiMeta}${aiStatusMeta}${aiFreeMeta}`
     : `${stateLabel} · ${moduleLabel} · ${esc(actor.kind)} · ${esc(t('actors.pose'))}: ${esc(actor.pose || 'standing')} · ${esc(location)} · ${esc(t('actors.clickCommand'))}: ${esc(clickLine)}${aiMeta}`;
   const aiLabel = actor.module === 'real-fake-players' ? t('actors.aiGoal') : t('actors.aiPersona');
   const aiPlaceholder = actor.module === 'real-fake-players' ? t('actors.aiGoalPlaceholder') : t('actors.aiPersonaPlaceholder');

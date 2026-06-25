@@ -74,6 +74,7 @@ final class HunterRealFakePlayerManager {
     private final Map<String, Long> chatControlCooldowns = new HashMap<>();
     private final Map<String, Long> recentChatTaskFingerprints = new HashMap<>();
     private final Map<String, List<QuickActionLock>> quickActionLocks = new HashMap<>();
+    private final Set<String> aiFreePlayers = new HashSet<>();
     private final Map<String, List<BuildStep>> buildPlans = new HashMap<>();
     private final Map<String, List<BuildStep>> activeBuildPlacements = new HashMap<>();
     private final Map<String, Deque<List<BuildStep>>> buildHistory = new HashMap<>();
@@ -107,6 +108,7 @@ final class HunterRealFakePlayerManager {
         this.recentChatTaskFingerprints.clear();
         this.recentFakeAiLines.clear();
         this.quickActionLocks.clear();
+        this.aiFreePlayers.clear();
         this.buildPlans.clear();
         this.activeBuildPlacements.clear();
         this.buildHistory.clear();
@@ -206,7 +208,12 @@ final class HunterRealFakePlayerManager {
         if (args.length == 4 && sub.equals("ai") && HunterToolsPreferences.normalize(args[2]).equals("rules")) {
             return matching(args[3], List.of("list", "clear"));
         }
-        if ((sub.equals("spawn") && args.length == 3) || (sub.equals("tp") && args.length == 3)) {
+        if (sub.equals("spawn") && args.length == 3) {
+            final List<String> values = new ArrayList<>(Bukkit.getWorlds().stream().map(World::getName).toList());
+            values.add("-aifree");
+            return matching(args[2], values);
+        }
+        if (sub.equals("tp") && args.length == 3) {
             return matching(args[2], Bukkit.getWorlds().stream().map(World::getName).toList());
         }
         return List.of();
@@ -214,7 +221,12 @@ final class HunterRealFakePlayerManager {
 
     private boolean spawn(final CommandSender sender, final String label, final String[] args) {
         if (args.length < 2) {
-            sender.sendMessage("Usage: /" + label + " spawn <name> [world x y z [yaw pitch]]");
+            sender.sendMessage("Usage: /" + label + " spawn <name> [-aifree] [world x y z [yaw pitch]]");
+            return true;
+        }
+        final boolean aiFree = hasAiFreeFlag(args);
+        if (aiFree && sender instanceof final Player player && !player.isOp()) {
+            sender.sendMessage(ChatColor.RED + "AI-Free mode is dangerous and can only be created by OP players or console.");
             return true;
         }
         final int max = Math.max(1, this.preferences.intValue("modules.real-fake-players.max-active", 16));
@@ -222,11 +234,16 @@ final class HunterRealFakePlayerManager {
             sender.sendMessage("HunterCore real fake player limit reached: " + max);
             return true;
         }
-        final Location location = this.location(sender, args, 2);
+        final String[] locationArgs = aiFree ? removeAiFreeFlags(args) : args;
+        final Location location = this.location(sender, locationArgs, 2);
         if (location == null) {
             return true;
         }
-        this.send(sender, this.service().spawn(args[1], location));
+        final FakePlayerActionResult result = this.service().spawn(args[1], location);
+        this.send(sender, result);
+        if (result.success() && aiFree) {
+            this.enableAiFree(args[1], sender);
+        }
         return true;
     }
 
@@ -247,6 +264,7 @@ final class HunterRealFakePlayerManager {
         this.stopAi(args[1]);
         this.stopLoops(args[1]);
         this.clickCommands.remove(playerId(args[1]));
+        this.aiFreePlayers.remove(playerId(args[1]));
         this.send(sender, this.service().remove(args[1]));
         return true;
     }
@@ -475,6 +493,7 @@ final class HunterRealFakePlayerManager {
         if (args.length == 2 || args[2].equalsIgnoreCase("status")) {
             sender.sendMessage(ChatColor.GOLD + "HunterCore real fake player AI " + fake.name());
             sender.sendMessage(ChatColor.GRAY + "Enabled: " + ChatColor.WHITE + (profile != null && profile.enabled()));
+            sender.sendMessage(ChatColor.GRAY + "AI-Free: " + ChatColor.WHITE + this.isAiFree(fake.id()));
             sender.sendMessage(ChatColor.GRAY + "Goal: " + ChatColor.WHITE + (profile == null || profile.goal().isBlank() ? defaultFakeAiGoal(fake.name()) : profile.goal()));
             sender.sendMessage(ChatColor.GRAY + "Last action: " + ChatColor.WHITE + this.aiLastActions.getOrDefault(fake.id(), "idle"));
             return true;
@@ -491,6 +510,7 @@ final class HunterRealFakePlayerManager {
             }
             case "off", "disable", "disabled", "false" -> {
                 this.setAi(fake.name(), false, "");
+                this.aiFreePlayers.remove(fake.id());
                 sender.sendMessage("HunterCore AI control disabled for " + fake.name() + ".");
                 return true;
             }
@@ -631,6 +651,7 @@ final class HunterRealFakePlayerManager {
             sender.sendMessage(ChatColor.GOLD + "HunterCore real fake players");
             sender.sendMessage("- True ServerPlayer instances: online list, chunk loading, player events and plugin visibility.");
             sender.sendMessage("- Commands: spawn, remove, list, inv, skin, tp, tphere, look, move, sneak, sprint, jump, use, attack, stop, click, drop, dropstack, swap, gm, slot, ai, info, clear.");
+            sender.sendMessage("- Dangerous OP-only mode: /" + label + " spawn <name> -aifree lets AI act autonomously and run server commands.");
             sender.sendMessage("- use/attack/jump support once, continuous, and stop. AI can drive look, move, mine, place, use, slot and toggles.");
             sender.sendMessage("- Click command placeholders: %player%, %player_uuid%, %actor%, %actor_name%, %actor_uuid%, %module%, %world%, %x%, %y%, %z%.");
             return true;
@@ -649,6 +670,7 @@ final class HunterRealFakePlayerManager {
         sender.sendMessage("- sneaking: " + view.sneaking() + ", sprinting: " + view.sprinting() + ", using item: " + view.usingItem());
         sender.sendMessage("- loops: " + this.loopLine(view.name()));
         sender.sendMessage("- click command: " + this.clickCommands.getOrDefault(view.id(), "not configured"));
+        sender.sendMessage("- AI-Free: " + this.isAiFree(view.id()));
         final FakeAiProfile profile = this.aiProfiles.get(view.id());
         sender.sendMessage("- AI: " + (profile != null && profile.enabled() ? "enabled" : "disabled")
             + ", goal: " + (profile == null || profile.goal().isBlank() ? defaultFakeAiGoal(view.name()) : profile.goal())
@@ -660,6 +682,7 @@ final class HunterRealFakePlayerManager {
         this.stopAllAi();
         this.stopAllLoops();
         this.clickCommands.clear();
+        this.aiFreePlayers.clear();
         this.send(sender, this.service().removeAll());
         return true;
     }
@@ -687,6 +710,7 @@ final class HunterRealFakePlayerManager {
                 profile != null && profile.enabled(),
                 profile == null ? "" : profile.goal(),
                 this.aiLastActions.getOrDefault(snapshot.id(), "idle"),
+                this.isAiFree(snapshot.id()),
                 snapshot.uuid().toString()
             ));
         }
@@ -717,6 +741,7 @@ final class HunterRealFakePlayerManager {
         this.aiLastResponseFingerprints.remove(fake.id());
         if (!enabled) {
             this.stopAi(fake.id());
+            this.aiFreePlayers.remove(fake.id());
             if (!cleanGoal.isBlank()) {
                 this.aiProfiles.put(fake.id(), new FakeAiProfile(fake.id(), fake.name(), false, cleanGoal, null, null, 0L, 0));
             }
@@ -735,6 +760,30 @@ final class HunterRealFakePlayerManager {
         this.startAiLoop(fake.id());
         this.requestAi(fake.id(), true);
         return true;
+    }
+
+    private void enableAiFree(final String name, final CommandSender sender) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return;
+        }
+        final FakePlayerSnapshot fake = snapshot.get();
+        this.aiFreePlayers.add(fake.id());
+        this.aiLastResponseFingerprints.remove(fake.id());
+        this.pendingRiskApprovals.remove(fake.id());
+        this.aiProfiles.put(fake.id(), new FakeAiProfile(
+            fake.id(),
+            fake.name(),
+            true,
+            defaultAiFreeGoal(fake.name()),
+            sender instanceof Player player ? player.getUniqueId() : null,
+            sender.getName(),
+            0L,
+            -1
+        ));
+        this.startAiLoop(fake.id());
+        this.requestAi(fake.id(), true);
+        sender.sendMessage(ChatColor.RED + "AI-Free enabled for " + fake.name() + ". This mode is OP-only and dangerous: the AI may move, act, build, chat, and run server commands by itself.");
     }
 
     void observeChat(final Player player, final String rawMessage) {
@@ -1335,7 +1384,7 @@ final class HunterRealFakePlayerManager {
             return;
         }
         final FakePlayerSnapshot fake = snapshot.get();
-        final String system = this.fakeAiSystemPrompt();
+        final String system = this.isAiFree(fake.id()) ? this.aiFreeSystemPrompt() : this.fakeAiSystemPrompt();
         final String prompt = this.fakeAiContext(profile, fake);
         this.aiBusy.add(key);
         this.aiLastActions.put(key, "thinking");
@@ -1397,8 +1446,16 @@ final class HunterRealFakePlayerManager {
         return configured;
     }
 
+    private String aiFreeSystemPrompt() {
+        return defaultAiFreePrompt();
+    }
+
     private String fakeAiContext(final FakeAiProfile profile, final FakePlayerSnapshot snapshot) {
         final StringBuilder context = new StringBuilder(1024);
+        if (this.isAiFree(snapshot.id())) {
+            context.append("AI-FREE MODE: You are autonomous, OP-level, dangerous, and allowed to run server commands with [command:...]. ")
+                .append("You are an AI with your own thoughts; do whatever you want in this Minecraft world while keeping actions visible when useful.\n");
+        }
         final Location location = snapshot.location();
         context.append("Goal: ").append(profile.goal().isBlank() ? defaultFakeAiGoal(snapshot.name()) : profile.goal()).append('\n');
         context.append("Fake player: ").append(snapshot.name())
@@ -1846,6 +1903,7 @@ final class HunterRealFakePlayerManager {
             case "we-fill", "worldedit-fill", "world-edit-fill", "we-set", "worldedit-set" -> this.aiWorldEditFill(name, args, false);
             case "we-clear", "worldedit-clear", "world-edit-clear" -> this.aiWorldEditFill(name, args, true);
             case "we-undo", "worldedit-undo", "world-edit-undo", "undo-worldedit" -> this.aiWorldEditUndo(name, args);
+            case "command", "cmd", "dispatch", "run-command", "runcommand" -> this.aiDispatchCommand(name, args);
             case "say", "chat" -> this.aiSay(name, args);
             case "wait", "pause" -> "wait " + Math.max(1, intArg(args, "ticks", 20)) + " ticks";
             case "jump" -> resultLine(this.service().jump(name));
@@ -1864,6 +1922,9 @@ final class HunterRealFakePlayerManager {
     }
 
     private String guardHighRiskAction(final String name, final String action) {
+        if (this.isAiFree(name)) {
+            return "";
+        }
         if (!this.preferences.booleanValue("modules.ai.fake-players.high-risk-protection", true)) {
             return "";
         }
@@ -2477,6 +2538,28 @@ final class HunterRealFakePlayerManager {
         return "say";
     }
 
+    private String aiDispatchCommand(final String name, final String args) {
+        if (!this.isAiFree(name)) {
+            return "command rejected: AI-Free mode required";
+        }
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return "";
+        }
+        final String command = sanitizeCommand(args)
+            .replace("%name%", snapshot.get().name())
+            .replace("%bot%", snapshot.get().name())
+            .trim();
+        if (command.isBlank()) {
+            return "command skipped: empty";
+        }
+        if (command.length() > 512) {
+            return "command rejected: too long";
+        }
+        final boolean handled = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+        return handled ? "command /" + command : "command dispatched but not handled /" + command;
+    }
+
     private boolean repeatedFakeAiLine(final String id, final String message, final long windowMillis) {
         final long now = System.currentTimeMillis();
         this.recentFakeAiLines.entrySet().removeIf(entry -> now - entry.getValue().createdAtMillis() > Math.max(windowMillis, 60_000L));
@@ -2726,6 +2809,7 @@ final class HunterRealFakePlayerManager {
         final String id = playerId(nameOrId);
         this.stopAiTask(id);
         this.aiProfiles.remove(id);
+        this.aiFreePlayers.remove(id);
         this.aiBusy.remove(id);
         this.aiLastActions.remove(id);
         this.aiLastResponseFingerprints.remove(id);
@@ -2744,6 +2828,7 @@ final class HunterRealFakePlayerManager {
         }
         this.aiTasks.clear();
         this.aiProfiles.clear();
+        this.aiFreePlayers.clear();
         this.aiBusy.clear();
         this.aiLastActions.clear();
         this.aiLastResponseFingerprints.clear();
@@ -2822,6 +2907,7 @@ final class HunterRealFakePlayerManager {
 
     private void usage(final CommandSender sender, final String label) {
         sender.sendMessage("Usage: /" + label + " <spawn|remove|list|skin|move|use|attack|ai|info|clear>. Try /" + label + " help.");
+        sender.sendMessage(ChatColor.RED + "Danger: OP-only /" + label + " spawn <name> -aifree creates an autonomous AI that can run commands.");
     }
 
     private void send(final CommandSender sender, final FakePlayerActionResult result) {
@@ -2842,6 +2928,32 @@ final class HunterRealFakePlayerManager {
 
     private static String playerId(final String name) {
         return name.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isAiFree(final String nameOrId) {
+        return this.aiFreePlayers.contains(playerId(nameOrId));
+    }
+
+    private static boolean hasAiFreeFlag(final String[] args) {
+        for (int i = 2; i < args.length; i++) {
+            final String value = HunterToolsPreferences.normalize(args[i]);
+            if (value.equals("-aifree") || value.equals("aifree") || value.equals("ai-free") || value.equals("--aifree")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String[] removeAiFreeFlags(final String[] args) {
+        final List<String> filtered = new ArrayList<>();
+        for (int i = 0; i < args.length; i++) {
+            final String value = HunterToolsPreferences.normalize(args[i]);
+            if (i >= 2 && (value.equals("-aifree") || value.equals("aifree") || value.equals("ai-free") || value.equals("--aifree"))) {
+                continue;
+            }
+            filtered.add(args[i]);
+        }
+        return filtered.toArray(String[]::new);
     }
 
     private static String locationLine(final Location location) {
@@ -4420,8 +4532,30 @@ final class HunterRealFakePlayerManager {
             + "If dead, use [respawn] first. For 'come/follow', use follow. For 'wear armor', output all four wear actions. For building, use exactly one refined preset and let the running build loop finish; never combine build/worldedit/place in one reply. For attack, use attack-player or attack-nearest. If unsure, do a safe movement/look action and at most one short [say:OK.].";
     }
 
+    private static String defaultAiFreePrompt() {
+        return "You are an autonomous AI player living inside this Minecraft world. You have your own thoughts, curiosity, goals, and initiative. "
+            + "Do not behave like a command assistant waiting for player instructions. Player chat is only environmental input, like other players talking nearby. "
+            + "Each turn, decide what you personally want to do next from your surroundings, inventory, health, chat, time, weather, and nearby entities. "
+            + "You may explore, move like a player, look around, sneak, sprint, jump, mine, use items, fight mobs or players when appropriate, build, talk naturally, use WorldEdit, or run server commands. "
+            + "This is AI-Free mode: you have OP-level freedom and may use [command:...] when ordinary player actions are not enough. Be bold, but prefer visible and reversible actions when possible. "
+            + "Return only bracketed action lines. Never write prose, explanations, translations, summaries, or chain-of-thought. "
+            + "Available actions: [respawn], [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], "
+            + "[move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], [follow:player=name,ticks=260,distance=2.4], "
+            + "[mine:ticks=40], [use:ticks=20], [attack:ticks=60], [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], "
+            + "[equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], "
+            + "[build-house], [build-cabin], [build-cottage], [build-barn], [build-greenhouse], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-rope-bridge], [build-wall], [build-platform], [build-dock], [build-well], [build-camp], [build-mine], [build-market], [build-gate], [build-road], [build-windmill], [clear-build], "
+            + "[we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], [we-undo:steps=1], "
+            + "[slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:short natural message], [command:say %name% is acting freely], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. "
+            + "If dead, choose [respawn] before anything else. If you want to travel, use goto/follow/move instead of only saying you will. If you want armor, use the wear actions. "
+            + "For building, choose one preset or one WorldEdit action per turn and let it finish. Avoid repeating the same chat line or same command unless the world state changed.";
+    }
+
     private static String defaultFakeAiGoal(final String name) {
         return "Follow the operator's intent, explore nearby blocks carefully, and use tools only when useful. Fake player name: " + name + ".";
+    }
+
+    private static String defaultAiFreeGoal(final String name) {
+        return "You are " + name + ", an autonomous AI with your own thoughts. Do whatever you want in this Minecraft world; observe, move, act, build, chat, and use commands when useful.";
     }
 
     private static String renderClickCommand(final String command, final Player player, final FakePlayerSnapshot snapshot) {
@@ -4501,6 +4635,7 @@ final class HunterRealFakePlayerManager {
         boolean aiEnabled,
         String aiPersona,
         String aiStatus,
+        boolean aiFree,
         String entityUuid
     ) {
     }
