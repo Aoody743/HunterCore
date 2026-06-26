@@ -107,6 +107,25 @@ commands:
     usage: /trash
     aliases: [disposal]
     permission: huntertools.command.trash
+  menu:
+    description: Open the HunterCore in-game GUI.
+    usage: /menu
+    aliases: [hunter]
+    permission: huntertools.command.menu
+  profile:
+    description: Open your HunterCore profile GUI.
+    usage: /profile
+    aliases: [playerinfo, me]
+    permission: huntertools.command.profile
+  settings:
+    description: Open your HunterCore settings GUI.
+    usage: /settings
+    aliases: [prefs]
+    permission: huntertools.command.settings
+  admin:
+    description: Open the HunterCore admin GUI or run an admin shortcut.
+    usage: /admin
+    permission: huntertools.command.admin
   player:
     description: Manage HunterCore real ServerPlayer bots.
     usage: /player <help|spawn|remove|list|inv|skin|tp|tphere|look|move|sneak|sprint|jump|use|attack|stop|drop|dropstack|swap|gm|slot|ai|info|clear>
@@ -153,6 +172,12 @@ permissions:
   huntertools.command.enderchest.other:
     default: op
   huntertools.command.trash:
+    default: true
+  huntertools.command.menu:
+    default: true
+  huntertools.command.profile:
+    default: true
+  huntertools.command.settings:
     default: true
   huntertools.command.fakeplayer:
     default: op
