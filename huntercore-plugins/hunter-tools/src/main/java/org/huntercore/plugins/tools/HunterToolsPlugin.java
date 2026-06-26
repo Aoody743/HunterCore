@@ -25,6 +25,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Statistic;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
@@ -44,8 +45,10 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.server.ServerListPingEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -79,6 +82,11 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
         "hat", "craft", "enderchest", "trash"
     );
+    private static final String MAIN_MENU_TITLE = ChatColor.DARK_AQUA + "HunterCore · 服务器菜单";
+    private static final String PROFILE_MENU_TITLE = ChatColor.DARK_AQUA + "HunterCore · 我的资料";
+    private static final String INVENTORY_PREVIEW_TITLE = ChatColor.DARK_AQUA + "HunterCore · 背包预览";
+    private static final String SETTINGS_MENU_TITLE = ChatColor.DARK_AQUA + "HunterCore · 设置";
+    private static final String ADMIN_MENU_TITLE = ChatColor.DARK_RED + "HunterCore · 管理员中心";
     private static final String[] SIDEBAR_KEYS = {
         "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a", "§b", "§c", "§d", "§e", "§f"
     };
@@ -175,6 +183,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft" -> this.craft(sender);
             case "enderchest" -> this.enderChest(sender, args);
             case "trash" -> this.trash(sender);
+            case "menu" -> this.openMainMenu(sender);
+            case "profile", "playerinfo", "me" -> this.openProfileMenu(sender);
+            case "settings" -> this.openSettingsMenu(sender);
+            case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminMenu(sender) : this.admin(sender, args);
             case "player" -> this.realFakePlayer(sender, "player", args);
             case "npc" -> this.npc(sender, "npc", args);
             default -> false;
@@ -194,6 +206,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (name.equals("npc")) {
             return this.actorManager == null ? List.of() : this.actorManager.completions(NPCS, args);
+        }
+        if (name.equals("admin")) {
+            return this.adminCompletions(args);
         }
         return this.shortcutCompletions(sender, name, args);
     }
@@ -225,6 +240,64 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onMainMenuClick(final InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof final Player player) || !event.getView().getTitle().equals(MAIN_MENU_TITLE)) {
+            return;
+        }
+        event.setCancelled(true);
+        final ItemStack clicked = event.getCurrentItem();
+        if (clicked == null || clicked.getType().isAir() || !clicked.hasItemMeta()) {
+            return;
+        }
+        switch (clicked.getType()) {
+            case ENDER_PEARL -> player.performCommand("tpgui");
+            case RED_BED -> player.performCommand("homes");
+            case GRASS_BLOCK -> player.performCommand("rtp");
+            case COMPASS -> player.performCommand("spawn");
+            case CLOCK -> player.performCommand("back");
+            case CRAFTING_TABLE -> player.performCommand("craft");
+            case ENDER_CHEST -> player.performCommand("enderchest");
+            case CHEST -> player.performCommand("trash");
+            case LEVER -> player.performCommand("settings");
+            case PLAYER_HEAD -> this.openProfileMenu(player);
+            case BOOK -> player.performCommand("info");
+            case DIAMOND -> player.sendMessage(ChatColor.AQUA + "Shop/Donate: " + ChatColor.WHITE + this.preferences.stringValue("modules.menu.shop-url", "Not configured"));
+            case FILLED_MAP -> player.sendMessage(ChatColor.AQUA + "BlueMap: " + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.map-url", "Not configured"));
+            case COMMAND_BLOCK -> this.openAdminMenu(player);
+            case BARRIER -> player.closeInventory();
+            default -> {
+            }
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onUtilityMenuClick(final InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof final Player player)) {
+            return;
+        }
+        final String title = event.getView().getTitle();
+        if (!title.equals(PROFILE_MENU_TITLE) && !title.equals(INVENTORY_PREVIEW_TITLE) && !title.equals(SETTINGS_MENU_TITLE) && !title.equals(ADMIN_MENU_TITLE)) {
+            return;
+        }
+        event.setCancelled(true);
+        final ItemStack clicked = event.getCurrentItem();
+        if (clicked == null || clicked.getType().isAir() || !clicked.hasItemMeta()) {
+            return;
+        }
+        if (title.equals(PROFILE_MENU_TITLE)) {
+            this.handleProfileClick(player, clicked);
+        } else if (title.equals(INVENTORY_PREVIEW_TITLE)) {
+            if (clicked.getType() == Material.BARRIER) {
+                this.openProfileMenu(player);
+            }
+        } else if (title.equals(SETTINGS_MENU_TITLE)) {
+            this.handleSettingsClick(player, clicked);
+        } else {
+            this.handleAdminClick(player, clicked);
+        }
+    }
+
     @EventHandler(priority = EventPriority.NORMAL)
     public void onServerListPing(final ServerListPingEvent event) {
         if (!this.preferences.moduleEnabled(MOTD)) {
@@ -237,6 +310,183 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (maxPlayers > 0) {
             event.setMaxPlayers(maxPlayers);
         }
+    }
+
+    private boolean openMainMenu(final CommandSender sender) {
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage(ChatColor.RED + "Only players can open the GUI.");
+            return true;
+        }
+        final Inventory inventory = Bukkit.createInventory(player, 54, MAIN_MENU_TITLE);
+        inventory.setItem(10, this.menuItem(Material.ENDER_PEARL, "传送中心", List.of("/tpgui", "在线玩家、TPA、TPHere")));
+        inventory.setItem(11, this.menuItem(Material.RED_BED, "我的家", List.of("/homes", "多个家、传送、删除")));
+        inventory.setItem(12, this.menuItem(Material.COMPASS, "Spawn / Back", List.of("左键按钮执行 /spawn", "另有返回按钮 /back")));
+        inventory.setItem(13, this.menuItem(Material.CLOCK, "返回 Back", List.of("/back")));
+        inventory.setItem(14, this.menuItem(Material.CRAFTING_TABLE, "随身工作台", List.of("/craft")));
+        inventory.setItem(15, this.menuItem(Material.ENDER_CHEST, "末影箱", List.of("/enderchest")));
+        inventory.setItem(16, this.menuItem(Material.CHEST, "垃圾桶", List.of("/trash")));
+        inventory.setItem(28, this.menuItem(Material.PLAYER_HEAD, "个人资料", List.of("等级、状态、统计、背包预览")));
+        inventory.setItem(29, this.menuItem(Material.BOOK, "服务器信息", List.of("/info")));
+        inventory.setItem(30, this.menuItem(Material.DIAMOND, "赞助/商店", List.of(this.preferences.stringValue("modules.menu.shop-url", "未配置链接"))));
+        inventory.setItem(31, this.menuItem(Material.FILLED_MAP, "BlueMap 地图", List.of(this.preferences.stringValue("modules.web-panel.map-url", "未配置链接"))));
+        inventory.setItem(32, this.menuItem(Material.LEVER, "玩家设置", List.of("TPA 开关、隐私、提示偏好")));
+        if (player.hasPermission("huntertools.command.admin")) {
+            inventory.setItem(34, this.menuItem(Material.COMMAND_BLOCK, "管理员中心", List.of("服务器状态、插件、世界、玩家管理")));
+        }
+        inventory.setItem(49, this.menuItem(Material.BARRIER, "关闭", List.of()));
+        player.openInventory(inventory);
+        return true;
+    }
+
+
+    private boolean openProfileMenu(final CommandSender sender) {
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage(ChatColor.RED + "Only players can open the profile GUI.");
+            return true;
+        }
+        final Inventory inventory = Bukkit.createInventory(player, 54, PROFILE_MENU_TITLE);
+        final Location location = player.getLocation();
+        final int playTicks = player.getStatistic(Statistic.PLAY_ONE_MINUTE);
+        final long playMinutes = Math.max(0L, playTicks / 20L / 60L);
+        inventory.setItem(4, this.menuItem(Material.PLAYER_HEAD, player.getName(), List.of(
+            "等级: " + player.getLevel() + " 经验: " + Math.round(player.getExp() * 100.0F) + "%",
+            "血量: " + Math.round(player.getHealth()) + "/" + Math.round(this.maxHealth(player)),
+            "饥饿: " + player.getFoodLevel() + "/20",
+            "世界: " + player.getWorld().getName(),
+            "坐标: " + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ(),
+            "模式: " + player.getGameMode().name().toLowerCase(Locale.ROOT),
+            "Ping: " + player.getPing() + "ms",
+            "在线时长: " + playMinutes + " 分钟"
+        )));
+        inventory.setItem(20, this.menuItem(Material.EXPERIENCE_BOTTLE, "等级与经验", List.of("Level " + player.getLevel(), "Progress " + Math.round(player.getExp() * 100.0F) + "%")));
+        inventory.setItem(21, this.menuItem(Material.TOTEM_OF_UNDYING, "生存状态", List.of("Health " + Math.round(player.getHealth()) + "/" + Math.round(this.maxHealth(player)), "Food " + player.getFoodLevel() + "/20")));
+        inventory.setItem(22, this.menuItem(Material.MAP, "位置", List.of(player.getWorld().getName(), location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ())));
+        inventory.setItem(23, this.menuItem(Material.DIAMOND_SWORD, "战斗统计", List.of("击杀: " + player.getStatistic(Statistic.PLAYER_KILLS), "死亡: " + player.getStatistic(Statistic.DEATHS))));
+        inventory.setItem(24, this.menuItem(Material.CLOCK, "在线统计", List.of("在线时长: " + playMinutes + " 分钟", "跳跃: " + player.getStatistic(Statistic.JUMP))));
+        inventory.setItem(37, this.menuItem(Material.CHEST, "查看背包", List.of("只读预览：主背包、装备、副手")));
+        inventory.setItem(38, this.menuItem(Material.ENDER_CHEST, "打开末影箱", List.of("/enderchest")));
+        inventory.setItem(39, this.menuItem(Material.RED_BED, "打开 Home GUI", List.of("/homes")));
+        inventory.setItem(40, this.menuItem(Material.ENDER_PEARL, "打开传送 GUI", List.of("/tpgui")));
+        inventory.setItem(41, this.menuItem(Material.LEVER, "隐私/设置", List.of("接收 TPA、位置展示等偏好")));
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回主菜单", List.of("/menu")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private void openInventoryPreview(final Player player) {
+        final Inventory inventory = Bukkit.createInventory(player, 54, INVENTORY_PREVIEW_TITLE);
+        inventory.setItem(4, this.menuItem(Material.CHEST, "背包预览", List.of("只读展示，不会移动物品。")));
+        final ItemStack[] storage = player.getInventory().getStorageContents();
+        for (int index = 0; index < Math.min(storage.length, 36); index++) {
+            inventory.setItem(9 + index, cloneOrEmpty(storage[index]));
+        }
+        inventory.setItem(45, cloneOrEmpty(player.getInventory().getHelmet()));
+        inventory.setItem(46, cloneOrEmpty(player.getInventory().getChestplate()));
+        inventory.setItem(47, cloneOrEmpty(player.getInventory().getLeggings()));
+        inventory.setItem(48, cloneOrEmpty(player.getInventory().getBoots()));
+        inventory.setItem(50, cloneOrEmpty(player.getInventory().getItemInMainHand()));
+        inventory.setItem(51, cloneOrEmpty(player.getInventory().getItemInOffHand()));
+        inventory.setItem(53, this.menuItem(Material.BARRIER, "返回资料", List.of()));
+        player.openInventory(inventory);
+    }
+
+    private boolean openSettingsMenu(final CommandSender sender) {
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage(ChatColor.RED + "Only players can open the settings GUI.");
+            return true;
+        }
+        final Inventory inventory = Bukkit.createInventory(player, 27, SETTINGS_MENU_TITLE);
+        inventory.setItem(10, this.menuItem(Material.ENDER_PEARL, "接收 TPA 请求", List.of("点击执行 /tptoggle", "当前状态由 HunterTPA 保存")));
+        inventory.setItem(12, this.menuItem(Material.NAME_TAG, "语言", List.of("当前使用 HunterCore 语言自动选择", "后续可接入个人语言偏好")));
+        inventory.setItem(14, this.menuItem(Material.SPYGLASS, "隐私", List.of("后续：位置展示、在线状态、资料可见性")));
+        inventory.setItem(16, this.menuItem(Material.ARROW, "返回主菜单", List.of("/menu")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private boolean openAdminMenu(final CommandSender sender) {
+        if (!(sender instanceof final Player player)) {
+            return this.admin(sender, new String[0]);
+        }
+        if (!this.require(player, "huntertools.command.admin")) {
+            return true;
+        }
+        final Runtime runtime = Runtime.getRuntime();
+        final long usedMb = (runtime.totalMemory() - runtime.freeMemory()) / 1024L / 1024L;
+        final long maxMb = runtime.maxMemory() / 1024L / 1024L;
+        final Inventory inventory = Bukkit.createInventory(player, 54, ADMIN_MENU_TITLE);
+        inventory.setItem(4, this.menuItem(Material.COMMAND_BLOCK, "服务器状态", List.of(
+            "在线: " + Bukkit.getOnlinePlayers().size() + "/" + Bukkit.getMaxPlayers(),
+            "TPS: " + String.format(Locale.ROOT, "%.2f", this.snapshot.tps1()),
+            "MSPT: " + String.format(Locale.ROOT, "%.2f", this.snapshot.mspt()),
+            "内存: " + usedMb + " / " + maxMb + " MB"
+        )));
+        inventory.setItem(20, this.menuItem(Material.PLAYER_HEAD, "在线玩家", List.of("当前在线 " + Bukkit.getOnlinePlayers().size() + " 人", "后续进入玩家管理列表")));
+        inventory.setItem(21, this.menuItem(Material.PAPER, "插件状态", List.of("/hc admin plugins")));
+        inventory.setItem(22, this.menuItem(Material.GRASS_BLOCK, "世界状态", Bukkit.getWorlds().stream().map(world -> world.getName() + " · " + world.getPlayers().size() + " players").limit(5).toList()));
+        inventory.setItem(23, this.menuItem(Material.ARMOR_STAND, "假人/NPC", List.of("/player list", "/npc list")));
+        inventory.setItem(24, this.menuItem(Material.BEACON, "AI 设置", List.of("/hc admin ai status")));
+        inventory.setItem(30, this.menuItem(Material.BELL, "广播", List.of("/broadcast <message>")));
+        inventory.setItem(31, this.menuItem(Material.CLOCK, "时间/天气", List.of("/day /night /sun /rain")));
+        inventory.setItem(32, this.menuItem(Material.REDSTONE, "TPS / 内存", List.of("/htps", "/hc admin memory")));
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回主菜单", List.of("/menu")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private void handleProfileClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case CHEST -> this.openInventoryPreview(player);
+            case ENDER_CHEST -> player.performCommand("enderchest");
+            case RED_BED -> player.performCommand("homes");
+            case ENDER_PEARL -> player.performCommand("tpgui");
+            case LEVER -> this.openSettingsMenu(player);
+            case ARROW -> this.openMainMenu(player);
+            default -> {
+            }
+        }
+    }
+
+    private void handleSettingsClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case ENDER_PEARL -> player.performCommand("tptoggle");
+            case ARROW -> this.openMainMenu(player);
+            default -> player.sendMessage(ChatColor.GRAY + "这个设置入口已预留，后续会接入个人偏好保存。");
+        }
+    }
+
+    private void handleAdminClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case PAPER -> player.performCommand("hc admin plugins");
+            case ARMOR_STAND -> player.performCommand("player list");
+            case BEACON -> player.performCommand("hc admin ai status");
+            case BELL -> player.sendMessage(ChatColor.YELLOW + "使用 /broadcast <message> 发送广播。");
+            case CLOCK -> player.sendMessage(ChatColor.YELLOW + "快捷命令：/day /night /sun /rain");
+            case REDSTONE -> player.performCommand("htps");
+            case ARROW -> this.openMainMenu(player);
+            default -> {
+            }
+        }
+    }
+
+    private static ItemStack cloneOrEmpty(final ItemStack stack) {
+        return stack == null || stack.getType().isAir() ? new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE) : stack.clone();
+    }
+
+    private double maxHealth(final Player player) {
+        final AttributeInstance attribute = player.getAttribute(Attribute.MAX_HEALTH);
+        return attribute == null ? 20.0D : attribute.getValue();
+    }
+
+    private ItemStack menuItem(final Material material, final String name, final List<String> lore) {
+        final ItemStack stack = new ItemStack(material);
+        final ItemMeta meta = stack.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.AQUA + name);
+            meta.setLore(lore.stream().map(line -> ChatColor.GRAY + line).toList());
+            stack.setItemMeta(meta);
+        }
+        return stack;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -352,7 +602,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             "htps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
             "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
             "hat", "craft", "enderchest", "trash",
-            "player", "npc"
+            "menu", "profile", "playerinfo", "me", "settings", "admin", "player", "npc"
         )) {
             final org.bukkit.command.PluginCommand pluginCommand = this.getCommand(command);
             if (pluginCommand != null) {
@@ -363,7 +613,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     }
 
     private void registerHunterCoreCommands() {
-        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("admin", List.of(), "huntertools.command.admin", "manage HunterCore modules, web, MOTD, AI and runtime"));
+        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("admin", List.of(), "huntertools.command.admin", "open the admin GUI or manage HunterCore modules"));
+        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("menu", List.of("gui"), "huntertools.command.menu", "open the HunterCore player GUI"));
+        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("profile", List.of("me", "playerinfo"), "huntertools.command.profile", "open your HunterCore profile GUI"));
+        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("settings", List.of("prefs"), "huntertools.command.settings", "open your HunterCore settings GUI"));
         for (final String command : HUNTERCORE_SHORTCUTS) {
             HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand(command, this.hunterCoreShortcutAliases(command), this.hunterCoreShortcutPermission(command), this.hunterCoreShortcutDescription(command)));
         }
@@ -371,7 +624,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean executeHunterCoreCommand(final CommandSender sender, final String label, final String[] args) {
         return switch (label) {
-            case "admin" -> this.admin(sender, args);
+            case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminMenu(sender) : this.admin(sender, args);
             case "tps", "htps" -> this.showTps(sender);
             case "heal" -> this.heal(sender, args);
             case "feed" -> this.feed(sender, args);
@@ -389,6 +642,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft", "workbench", "wb" -> this.craft(sender);
             case "enderchest", "ec" -> this.enderChest(sender, args);
             case "trash", "disposal" -> this.trash(sender);
+            case "menu", "gui" -> this.openMainMenu(sender);
+            case "profile", "me", "playerinfo" -> this.openProfileMenu(sender);
+            case "settings", "prefs" -> this.openSettingsMenu(sender);
             default -> false;
         };
     }

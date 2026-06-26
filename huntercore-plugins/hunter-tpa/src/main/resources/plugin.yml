@@ -25,6 +25,14 @@ commands:
     description: Cancel your outgoing teleport request.
     usage: /tpcancel
     permission: huntertpa.command.tpcancel
+  tptoggle:
+    description: Toggle whether other players may send you teleport requests.
+    usage: /tptoggle
+    permission: huntertpa.command.tptoggle
+  tpgui:
+    description: Open the teleport GUI.
+    usage: /tpgui
+    permission: huntertpa.command.tpgui
   sethome:
     description: Set a named home.
     usage: /sethome [name]
@@ -38,9 +46,18 @@ commands:
     usage: /delhome [name]
     permission: huntertpa.command.delhome
   homes:
-    description: List your homes.
-    usage: /homes
+    description: Open your homes GUI or list homes with /homes list.
+    usage: /homes [list|text]
     permission: huntertpa.command.homes
+  homegui:
+    description: Open your homes GUI.
+    usage: /homegui
+    aliases: [homesgui]
+    permission: huntertpa.command.homes
+  rtp:
+    description: Randomly teleport to a safe location in your current world.
+    usage: /rtp
+    permission: huntertpa.command.rtp
 permissions:
   huntertpa.command.tpa:
     default: true
@@ -52,6 +69,10 @@ permissions:
     default: true
   huntertpa.command.tpcancel:
     default: true
+  huntertpa.command.tptoggle:
+    default: true
+  huntertpa.command.tpgui:
+    default: true
   huntertpa.command.sethome:
     default: true
   huntertpa.command.home:
@@ -59,4 +80,6 @@ permissions:
   huntertpa.command.delhome:
     default: true
   huntertpa.command.homes:
+    default: true
+  huntertpa.command.rtp:
     default: true

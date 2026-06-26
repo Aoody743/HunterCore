@@ -12,6 +12,7 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -64,6 +65,9 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.conversations.Conversation;
 import org.bukkit.conversations.ConversationAbandonedEvent;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
@@ -77,7 +81,7 @@ final class HunterWebPanelManager {
     private static final String API_KEY_HEADER = "X-HunterCore-Api-Key";
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
-        .followRedirects(HttpClient.Redirect.NORMAL)
+        .followRedirects(HttpClient.Redirect.NEVER)
         .connectTimeout(Duration.ofSeconds(15L))
         .build();
     private static final int HASH_ITERATIONS = 120_000;
@@ -320,6 +324,31 @@ final class HunterWebPanelManager {
                 this.send(exchange, 200, "application/json; charset=utf-8", this.statusJson(exchange));
                 return;
             }
+            if (path.equals("/api/player/self")) {
+                this.requireMethod(exchange, "GET");
+                this.playerSelf(exchange);
+                return;
+            }
+            if (path.equals("/api/player/self/inventory")) {
+                this.requireMethod(exchange, "GET");
+                this.playerInventory(exchange, false, null);
+                return;
+            }
+            if (path.equals("/api/player/self/enderchest")) {
+                this.requireMethod(exchange, "GET");
+                this.playerEnderChest(exchange, false, null);
+                return;
+            }
+            if (path.equals("/api/admin/dashboard")) {
+                this.requireMethod(exchange, "GET");
+                this.adminDashboard(exchange);
+                return;
+            }
+            if (path.startsWith("/api/admin/player/")) {
+                this.requireMethod(exchange, "GET");
+                this.adminPlayerData(exchange, path.substring("/api/admin/player/".length()));
+                return;
+            }
             if (path.equals("/api/map")) {
                 this.requireMethod(exchange, "GET");
                 this.send(exchange, 200, "application/json; charset=utf-8", this.mapJson(exchange));
@@ -469,6 +498,113 @@ final class HunterWebPanelManager {
         return json;
     }
 
+    private void playerSelf(final HttpExchange exchange) throws InterruptedException, ExecutionException, TimeoutException {
+        final WebSession session = this.requireLogin(exchange);
+        if (session == null) {
+            return;
+        }
+        final int timeout = Math.max(1, this.preferences.intValue("modules.web-panel.command-timeout-seconds", 10));
+        final String json = Bukkit.getScheduler()
+            .callSyncMethod(this.plugin, () -> {
+                final Player player = this.sessionPlayer(session);
+                return player == null
+                    ? "{\"ok\":false,\"error\":\"player_offline\"}"
+                    : "{\"ok\":true,\"player\":" + this.playerProfileJson(player, session.admin()) + "}";
+            })
+            .get(timeout, TimeUnit.SECONDS);
+        this.send(exchange, json.contains("\"ok\":false") ? 404 : 200, "application/json; charset=utf-8", json);
+    }
+
+    private void playerInventory(final HttpExchange exchange, final boolean admin, final String playerName)
+        throws InterruptedException, ExecutionException, TimeoutException {
+        final WebSession session = admin ? this.adminOperator(exchange) : this.requireLogin(exchange);
+        if (session == null) {
+            return;
+        }
+        if (admin) {
+            this.audit(session, "view-inventory", playerName);
+        }
+        final int timeout = Math.max(1, this.preferences.intValue("modules.web-panel.command-timeout-seconds", 10));
+        final String json = Bukkit.getScheduler()
+            .callSyncMethod(this.plugin, () -> {
+                final Player player = admin ? Bukkit.getPlayerExact(playerName) : this.sessionPlayer(session);
+                if (player == null) {
+                    return "{\"ok\":false,\"error\":\"player_offline\"}";
+                }
+                return "{\"ok\":true,\"player\":" + this.playerProfileJson(player, true)
+                    + ",\"inventory\":" + this.playerInventoryJson(player) + "}";
+            })
+            .get(timeout, TimeUnit.SECONDS);
+        this.send(exchange, json.contains("\"ok\":false") ? 404 : 200, "application/json; charset=utf-8", json);
+    }
+
+    private void playerEnderChest(final HttpExchange exchange, final boolean admin, final String playerName)
+        throws InterruptedException, ExecutionException, TimeoutException {
+        final WebSession session = admin ? this.adminOperator(exchange) : this.requireLogin(exchange);
+        if (session == null) {
+            return;
+        }
+        if (admin) {
+            this.audit(session, "view-enderchest", playerName);
+        }
+        final int timeout = Math.max(1, this.preferences.intValue("modules.web-panel.command-timeout-seconds", 10));
+        final String json = Bukkit.getScheduler()
+            .callSyncMethod(this.plugin, () -> {
+                final Player player = admin ? Bukkit.getPlayerExact(playerName) : this.sessionPlayer(session);
+                if (player == null) {
+                    return "{\"ok\":false,\"error\":\"player_offline\"}";
+                }
+                return "{\"ok\":true,\"player\":" + this.playerProfileJson(player, true)
+                    + ",\"enderChest\":" + this.inventoryContentsJson(player.getEnderChest()) + "}";
+            })
+            .get(timeout, TimeUnit.SECONDS);
+        this.send(exchange, json.contains("\"ok\":false") ? 404 : 200, "application/json; charset=utf-8", json);
+    }
+
+    private void adminDashboard(final HttpExchange exchange) throws InterruptedException, ExecutionException, TimeoutException {
+        final WebSession session = this.adminOperator(exchange);
+        if (session == null) {
+            return;
+        }
+        this.audit(session, "view-dashboard", "server");
+        final int timeout = Math.max(1, this.preferences.intValue("modules.web-panel.command-timeout-seconds", 10));
+        final String json = Bukkit.getScheduler().callSyncMethod(this.plugin, () -> this.buildStatusJson(session, true)).get(timeout, TimeUnit.SECONDS);
+        this.send(exchange, 200, "application/json; charset=utf-8", json);
+    }
+
+    private void adminPlayerData(final HttpExchange exchange, final String suffix)
+        throws InterruptedException, ExecutionException, TimeoutException {
+        final String[] parts = suffix.split("/", 2);
+        final String playerName = commandToken(parts[0], 64);
+        if (playerName.isBlank()) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_player\"}");
+            return;
+        }
+        if (parts.length == 2 && parts[1].equals("inventory")) {
+            this.playerInventory(exchange, true, playerName);
+            return;
+        }
+        if (parts.length == 2 && parts[1].equals("enderchest")) {
+            this.playerEnderChest(exchange, true, playerName);
+            return;
+        }
+        final WebSession session = this.adminOperator(exchange);
+        if (session == null) {
+            return;
+        }
+        this.audit(session, "view-player", playerName);
+        final int timeout = Math.max(1, this.preferences.intValue("modules.web-panel.command-timeout-seconds", 10));
+        final String json = Bukkit.getScheduler()
+            .callSyncMethod(this.plugin, () -> {
+                final Player player = Bukkit.getPlayerExact(playerName);
+                return player == null
+                    ? "{\"ok\":false,\"error\":\"player_offline\"}"
+                    : "{\"ok\":true,\"player\":" + this.playerProfileJson(player, true) + "}";
+            })
+            .get(timeout, TimeUnit.SECONDS);
+        this.send(exchange, json.contains("\"ok\":false") ? 404 : 200, "application/json; charset=utf-8", json);
+    }
+
     private String buildStatusJson(final WebSession session, final boolean detailed) {
         final MetricsSnapshot snapshot = this.plugin.metricsSnapshot();
         final List<WorldPanelStats> worlds = new ArrayList<>();
@@ -592,6 +728,9 @@ final class HunterWebPanelManager {
                 json.append('{');
                 field(json, "name", player.getName()).append(',');
                 field(json, "world", player.getWorld().getName()).append(',');
+                numberField(json, "level", player.getLevel()).append(',');
+                numberField(json, "health", player.getHealth()).append(',');
+                numberField(json, "food", player.getFoodLevel()).append(',');
                 numberField(json, "ping", player.getPing());
                 json.append('}');
             }
@@ -610,6 +749,142 @@ final class HunterWebPanelManager {
         }
         json.append('}');
         return json.toString();
+    }
+
+    private WebSession requireLogin(final HttpExchange exchange) {
+        final WebSession session = this.session(exchange);
+        if (session == null) {
+            this.send(exchange, 401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"login_required\"}");
+        }
+        return session;
+    }
+
+    private void audit(final WebSession session, final String action, final String target) {
+        if (session == null) {
+            return;
+        }
+        this.plugin.getLogger().info("[WebAudit] user=" + session.displayName()
+            + " role=" + session.role()
+            + " action=" + action
+            + " target=" + target);
+    }
+
+    private Player sessionPlayer(final WebSession session) {
+        Player player = Bukkit.getPlayerExact(session.displayName());
+        if (player != null) {
+            return player;
+        }
+        player = Bukkit.getPlayerExact(session.username());
+        if (player != null) {
+            return player;
+        }
+        for (final Player online : Bukkit.getOnlinePlayers()) {
+            if (HunterToolsPreferences.webUserId(online.getName()).equals(session.username())) {
+                return online;
+            }
+        }
+        return null;
+    }
+
+    private String playerProfileJson(final Player player, final boolean detailed) {
+        final StringBuilder json = new StringBuilder(512);
+        json.append('{');
+        field(json, "name", player.getName()).append(',');
+        field(json, "uuid", player.getUniqueId().toString()).append(',');
+        booleanField(json, "online", player.isOnline()).append(',');
+        field(json, "world", player.getWorld().getName()).append(',');
+        numberField(json, "x", player.getLocation().getX()).append(',');
+        numberField(json, "y", player.getLocation().getY()).append(',');
+        numberField(json, "z", player.getLocation().getZ()).append(',');
+        field(json, "gameMode", player.getGameMode().name()).append(',');
+        numberField(json, "health", player.getHealth()).append(',');
+        numberField(json, "maxHealth", player.getMaxHealth()).append(',');
+        numberField(json, "food", player.getFoodLevel()).append(',');
+        numberField(json, "saturation", player.getSaturation()).append(',');
+        numberField(json, "level", player.getLevel()).append(',');
+        numberField(json, "expProgress", player.getExp()).append(',');
+        numberField(json, "totalExperience", player.getTotalExperience()).append(',');
+        numberField(json, "ping", player.getPing()).append(',');
+        booleanField(json, "op", detailed && player.isOp()).append(',');
+        field(json, "skinAvatarUrl", "https://crafatar.com/avatars/" + player.getUniqueId() + "?overlay");
+        json.append('}');
+        return json.toString();
+    }
+
+    private String playerInventoryJson(final Player player) {
+        final StringBuilder json = new StringBuilder(2048);
+        json.append('{');
+        json.append("\"storage\":").append(itemArrayJson(player.getInventory().getStorageContents())).append(',');
+        json.append("\"armor\":").append(itemArrayJson(player.getInventory().getArmorContents())).append(',');
+        json.append("\"extra\":").append(itemArrayJson(player.getInventory().getExtraContents()));
+        json.append('}');
+        return json.toString();
+    }
+
+    private String inventoryContentsJson(final Inventory inventory) {
+        return itemArrayJson(inventory.getContents());
+    }
+
+    private static String itemArrayJson(final ItemStack[] items) {
+        final StringBuilder json = new StringBuilder(items.length * 96);
+        json.append('[');
+        for (int i = 0; i < items.length; i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            appendItemJson(json, i, items[i]);
+        }
+        json.append(']');
+        return json.toString();
+    }
+
+    private static void appendItemJson(final StringBuilder json, final int slot, final ItemStack item) {
+        json.append('{');
+        numberField(json, "slot", slot).append(',');
+        if (item == null || item.getType().isAir()) {
+            booleanField(json, "empty", true);
+            json.append('}');
+            return;
+        }
+        booleanField(json, "empty", false).append(',');
+        field(json, "material", item.getType().name()).append(',');
+        field(json, "type", humanItemName(item.getType().name())).append(',');
+        numberField(json, "amount", item.getAmount()).append(',');
+        numberField(json, "maxStackSize", item.getMaxStackSize()).append(',');
+        numberField(json, "durability", item.getDurability()).append(',');
+        numberField(json, "maxDurability", item.getType().getMaxDurability()).append(',');
+        final ItemMeta meta = item.getItemMeta();
+        field(json, "displayName", meta != null && meta.hasDisplayName() ? meta.getDisplayName() : "").append(',');
+        booleanField(json, "enchanted", meta != null && meta.hasEnchants()).append(',');
+        json.append("\"enchants\":{");
+        if (meta != null && meta.hasEnchants()) {
+            boolean first = true;
+            for (final Map.Entry<org.bukkit.enchantments.Enchantment, Integer> enchantment : meta.getEnchants().entrySet()) {
+                if (!first) {
+                    json.append(',');
+                }
+                first = false;
+                numberField(json, enchantment.getKey().getKey().getKey(), enchantment.getValue());
+            }
+        }
+        json.append("},\"lore\":");
+        json.append(stringArrayJson(meta != null && meta.hasLore() ? meta.getLore() : List.of()));
+        json.append('}');
+    }
+
+    private static String humanItemName(final String material) {
+        final String[] parts = material.toLowerCase(Locale.ROOT).split("_");
+        final StringBuilder name = new StringBuilder(material.length());
+        for (final String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            if (!name.isEmpty()) {
+                name.append(' ');
+            }
+            name.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+        }
+        return name.toString();
     }
 
     private String healthJson(final MetricsSnapshot snapshot, final List<WorldPanelStats> worlds, final boolean detailed) {
@@ -2115,6 +2390,13 @@ final class HunterWebPanelManager {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_update_url\"}");
             return;
         }
+        try {
+            this.validatePluginUpdateUri(uri);
+        } catch (final IOException ex) {
+            this.send(exchange, 400, "application/json; charset=utf-8",
+                "{\"ok\":false,\"error\":\"blocked_update_url\",\"message\":\"" + escapeJson(ex.getMessage()) + "\"}");
+            return;
+        }
 
         final Path pluginsDir = Bukkit.getPluginsFolder().toPath();
         Files.createDirectories(pluginsDir);
@@ -2208,7 +2490,31 @@ final class HunterWebPanelManager {
         }
     }
 
+    private void validatePluginUpdateUri(final URI uri) throws IOException {
+        final String host = uri.getHost();
+        if (host == null) {
+            throw new IOException("Update URL must include a host.");
+        }
+        if (this.preferences.booleanValue("modules.web-panel.allow-private-plugin-update-hosts", false)) {
+            return;
+        }
+        final InetAddress[] addresses = InetAddress.getAllByName(host);
+        if (addresses.length == 0) {
+            throw new IOException("Update host did not resolve.");
+        }
+        for (final InetAddress address : addresses) {
+            if (address.isAnyLocalAddress()
+                || address.isLoopbackAddress()
+                || address.isLinkLocalAddress()
+                || address.isSiteLocalAddress()
+                || address.isMulticastAddress()) {
+                throw new IOException("Update host resolves to a private or local network address.");
+            }
+        }
+    }
+
     private PluginJarMetadata downloadPluginJar(final URI uri, final Path target) throws IOException {
+        this.validatePluginUpdateUri(uri);
         final int maxMegabytes = Math.max(1, Math.min(512, this.preferences.intValue("modules.web-panel.plugin-update-max-mb", 64)));
         final long maxBytes = maxMegabytes * 1024L * 1024L;
         final HttpRequest request = HttpRequest.newBuilder(uri)
@@ -2579,18 +2885,24 @@ final class HunterWebPanelManager {
     }
 
     private boolean commandAllowed(final WebSession session, final String command) {
-        if (!session.commandExecution()) {
-            return false;
-        }
-
         final String root = commandRoot(command);
         if (session.admin()) {
             if (!this.preferences.booleanValue("modules.web-panel.admin-command-execution", true)) {
                 return false;
             }
+            if (this.preferences.booleanValue("modules.web-panel.admin-bypass.enabled", true)
+                && this.preferences.booleanValue("modules.web-panel.admin-bypass.command-allowlist", true)) {
+                return true;
+            }
+            if (!session.commandExecution()) {
+                return false;
+            }
             return !session.allowedCommandsConfigured() || allowedCommand(session.allowedCommands(), root);
         }
 
+        if (!session.commandExecution()) {
+            return false;
+        }
         if (!this.preferences.booleanValue("modules.web-panel.player-command-execution", true)) {
             return false;
         }
@@ -3611,6 +3923,22 @@ final class HunterWebPanelManager {
               <div><span>Memory</span><strong id="memory">--</strong></div>
             </section>
             <section class="grid">
+              <article id="profilePanel" class="widePanel">
+                <div class="sectionTitle">
+                  <h2>Hunter Profile</h2>
+                  <strong class="healthBadge">player</strong>
+                </div>
+                <div id="profileCard" class="profileCard muted">Login to view your character, inventory, ender chest, and level.</div>
+              </article>
+              <article id="adminDashboardPanel" class="widePanel" hidden>
+                <div class="sectionTitle">
+                  <h2>Admin Command Center</h2>
+                  <strong class="healthBadge">admin</strong>
+                </div>
+                <div id="adminDashboard" class="list muted">Login as admin to view server operations.</div>
+              </article>
+            </section>
+            <section class="grid">
               <article>
                 <div class="sectionTitle">
                   <h2>Health</h2>
@@ -3744,6 +4072,17 @@ final class HunterWebPanelManager {
         .metrics span { display:block; color:var(--muted); font-size:12px; }
         .metrics strong { display:block; margin-top:4px; font-size:22px; }
         .grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+        .widePanel { grid-column:1 / -1; }
+        .profileCard { display:grid; gap:14px; }
+        .profileHero { display:flex; gap:14px; align-items:center; padding:12px; border:1px solid var(--line); border-radius:10px; background:linear-gradient(135deg, rgba(47,129,247,.18), rgba(63,185,80,.08)); }
+        .profileHero img { width:72px; height:72px; border-radius:12px; image-rendering:pixelated; background:#0d1117; }
+        .bars { display:grid; gap:8px; }
+        .bar { height:10px; overflow:hidden; border:1px solid var(--line); border-radius:999px; background:#0d1117; }
+        .bar span { display:block; height:100%; background:linear-gradient(90deg, var(--accent), var(--good)); }
+        .inventoryGrid { display:grid; grid-template-columns:repeat(9, 42px); gap:5px; align-items:center; overflow:auto; padding-bottom:4px; }
+        .slot { width:42px; height:42px; display:grid; place-items:center; border:1px solid var(--line); border-radius:6px; background:#0d1117; color:var(--muted); font-size:10px; position:relative; }
+        .slot.filled { color:var(--text); border-color:color-mix(in srgb, var(--accent) 45%, var(--line)); }
+        .slot small { position:absolute; right:4px; bottom:2px; margin:0; color:var(--good); }
         .sectionTitle { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
         .sectionTitle h2 { margin-bottom:0; }
         .list { display:grid; gap:8px; }
@@ -3795,6 +4134,14 @@ final class HunterWebPanelManager {
           `<label class="item toggle"><span>${esc(left)}</span><input type="checkbox" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} ${attrs}></label>`;
         const severityClass = (value) => ['ok', 'warning', 'critical', 'disabled'].includes(value) ? value : 'ok';
         const alertItem = (alert) => `<div class="item alert ${severityClass(alert.severity)}"><span>${esc(alert.label)}</span><strong>${esc(alert.detail)}</strong></div>`;
+        const pct = (value, max) => Math.max(0, Math.min(100, max > 0 ? (Number(value || 0) / Number(max)) * 100 : 0));
+        const bar = (label, value, max) => `<div><div class="item"><span>${esc(label)}</span><strong>${esc(value)}/${esc(max)}</strong></div><div class="bar"><span style="width:${pct(value, max).toFixed(1)}%"></span></div></div>`;
+        const slot = (item) => {
+          if (!item || item.empty) return '<div class="slot">·</div>';
+          const title = `${item.displayName || item.type || item.material} x${item.amount}`;
+          return `<div class="slot filled" title="${esc(title)}">${esc((item.material || '?').split('_').map(p => p[0]).join('').slice(0, 3))}<small>${item.amount > 1 ? esc(item.amount) : ''}</small></div>`;
+        };
+        const grid = (items) => `<div class="inventoryGrid">${(items || []).map(slot).join('')}</div>`;
         const actorLine = (actor) => {
           const location = actor.world ? `${actor.world} ${Number(actor.x).toFixed(1)} ${Number(actor.y).toFixed(1)} ${Number(actor.z).toFixed(1)}` : 'not configured';
           return `<div class="item"><span>${esc(actor.displayName)} <small>${actor.live ? 'live' : 'configured'} · ${esc(actor.module)} · ${esc(actor.kind)} · pose: ${esc(actor.pose || 'standing')} · ${esc(location)}</small></span><button type="button" data-actor-remove="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">Remove</button></div>`;
@@ -3874,10 +4221,63 @@ final class HunterWebPanelManager {
           updateAuthControls();
           if (data.players) $('playerList').innerHTML = data.players.map(p => item(p.name, `${p.world} · ${p.ping}ms`)).join('') || '<p class="muted">No players online.</p>';
           if (data.plugins) $('pluginList').innerHTML = data.plugins.map(p => item(p.name, p.enabled ? p.version : 'disabled')).join('');
+          renderPlayerProfile();
+          renderAdminDashboard(data);
           renderActorWorlds(data.worlds || []);
           renderActors(data.actorDetails || []);
           renderOperations(data.modules || []);
           renderWebUsers(data.webUsers || []);
+        }
+
+        async function renderPlayerProfile() {
+          if (!state.session) {
+            $('profileCard').innerHTML = 'Login to view your character, inventory, ender chest, and level.';
+            return;
+          }
+          const [profile, inventory, ender] = await Promise.all([
+            json('/api/player/self'),
+            json('/api/player/self/inventory'),
+            json('/api/player/self/enderchest')
+          ]);
+          if (!profile.ok) {
+            $('profileCard').innerHTML = '<p class="muted">Your web account is not linked to an online player right now.</p>';
+            return;
+          }
+          const p = profile.player;
+          $('profileCard').innerHTML = `
+            <div class="profileHero">
+              <img src="${esc(p.skinAvatarUrl)}" alt="">
+              <div>
+                <h2>${esc(p.name)}</h2>
+                <p>${esc(p.world)} · ${Number(p.x).toFixed(1)}, ${Number(p.y).toFixed(1)}, ${Number(p.z).toFixed(1)} · ${esc(p.gameMode)} · ${p.ping}ms</p>
+                <strong>Level ${esc(p.level)} · XP ${(Number(p.expProgress || 0) * 100).toFixed(0)}%</strong>
+              </div>
+            </div>
+            <div class="bars">
+              ${bar('Health', Number(p.health).toFixed(0), Number(p.maxHealth).toFixed(0))}
+              ${bar('Food', p.food, 20)}
+              ${bar('XP', Math.round(Number(p.expProgress || 0) * 100), 100)}
+            </div>
+            <h3>Inventory</h3>${grid(inventory.inventory?.storage || [])}
+            <h3>Armor / Offhand</h3>${grid([...(inventory.inventory?.armor || []), ...(inventory.inventory?.extra || [])])}
+            <h3>Ender Chest</h3>${grid(ender.enderChest || [])}
+          `;
+        }
+
+        function renderAdminDashboard(data) {
+          const admin = Boolean(state.session?.admin);
+          $('adminDashboardPanel').hidden = !admin;
+          if (!admin) return;
+          const disabled = (data.plugins || []).filter(p => !p.enabled).length;
+          $('adminDashboard').innerHTML = [
+            item('Server', `${data.server.name} · ${data.server.version}`),
+            item('Performance', `${Number(data.server.tps1).toFixed(2)} TPS · ${Number(data.server.mspt).toFixed(1)} MSPT`),
+            item('Memory', data.server.memory),
+            item('Worlds', (data.worlds || []).length),
+            item('Plugins', `${(data.plugins || []).length} installed · ${disabled} disabled`),
+            item('Actors', `${data.actors.fakePlayers} fake · ${data.actors.realFakePlayers} real fake · ${data.actors.npcs} NPC`),
+            item('Health', data.health?.status || 'unknown')
+          ].join('');
         }
 
         function renderActorWorlds(worlds) {

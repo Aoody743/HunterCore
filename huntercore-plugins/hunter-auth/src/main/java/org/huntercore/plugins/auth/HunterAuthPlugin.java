@@ -2,6 +2,8 @@ package org.huntercore.plugins.auth;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
@@ -86,7 +88,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.getConfig().addDefault("web-registration-required", false);
         this.getConfig().addDefault("gui-enabled", true);
         this.getConfig().addDefault("open-gui-on-join", true);
-        this.getConfig().addDefault("minimum-password-length", 4);
+        this.getConfig().addDefault("minimum-password-length", 6);
         this.getConfig().addDefault("login-timeout-seconds", 90);
         this.getConfig().addDefault("max-login-attempts", 5);
         this.getConfig().addDefault("lockout-seconds", 60);
@@ -660,11 +662,18 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private boolean passwordLongEnough(final String password, final Player player) {
-        if (password.length() >= this.intSetting("minimum-password-length", 4)) {
-            return true;
+        final int minimumLength = this.intSetting("minimum-password-length", 6);
+        if (password.length() < minimumLength) {
+            player.sendMessage(this.text("密码太短，至少需要 ", "Password is too short. Minimum length: ") + minimumLength + ".");
+            return false;
         }
-        player.sendMessage(this.text("密码太短。", "Password is too short."));
-        return false;
+        final Set<String> commonPasswords = Set.of("password", "qwerty", "minecraft", "admin", "letmein");
+        final String lowerPassword = password.toLowerCase(Locale.ROOT);
+        if (commonPasswords.contains(lowerPassword)) {
+            player.sendMessage(this.text("这个密码过于常见，请更换。", "That password is too common; choose another one."));
+            return false;
+        }
+        return true;
     }
 
     private boolean isAuthGui(final Component title) {
@@ -684,10 +693,33 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private synchronized void saveUsers() {
         try {
-            this.users.save(this.usersFile);
+            this.users.set("schema-version", 1);
+            atomicSave(this.users, this.usersFile);
             this.usersModified = this.usersFile.exists() ? this.usersFile.lastModified() : 0L;
         } catch (final IOException ex) {
             this.getLogger().severe("Failed to save users.yml: " + ex.getMessage());
+        }
+    }
+
+    private static void atomicSave(final YamlConfiguration configuration, final File file) throws IOException {
+        final File parent = file.getParentFile();
+        if (parent != null) {
+            parent.mkdirs();
+        }
+        final File tempFile = File.createTempFile(file.getName(), ".tmp", parent);
+        try {
+            configuration.save(tempFile);
+            if (file.exists()) {
+                Files.copy(file.toPath(), file.toPath().resolveSibling(file.getName() + ".bak"), StandardCopyOption.REPLACE_EXISTING);
+            }
+            try {
+                Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (final IOException ex) {
+                Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (final IOException ex) {
+            Files.deleteIfExists(tempFile.toPath());
+            throw ex;
         }
     }
 

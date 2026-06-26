@@ -53,6 +53,10 @@ public final class HunterCoreCommand extends Command {
         }
 
         if (args.length == 0) {
+            final HunterCommandExtension menu = this.resolve("menu");
+            if (menu != null && this.canUse(sender, menu)) {
+                return menu.execute(sender, "menu", new String[0]);
+            }
             this.sendHelp(sender, new String[0]);
             return true;
         }
