@@ -349,7 +349,7 @@ divinemc-server/build/libs/
 可直接发布的 HunterCore jar 会生成在：
 
 ```text
-divinemc-server/build/libs/HunterCore-1.0-MinecraftServer-26.1.2-release.jar
+divinemc-server/build/libs/HunterCore-1.5.0-build.1-MinecraftServer-26.1.2-release.jar
 ```
 
 如果你需要未瘦身的通用 paperclip jar，也可以单独运行 `./gradlew :divinemc-server:createPaperclipJar`，产物是 `divinemc-server/build/libs/divinemc-paperclip-<mcVersion>.local-SNAPSHOT.jar`。
