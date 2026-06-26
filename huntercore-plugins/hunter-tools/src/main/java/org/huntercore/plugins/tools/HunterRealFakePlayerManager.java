@@ -244,6 +244,12 @@ final class HunterRealFakePlayerManager {
         }
         final FakePlayerActionResult result = this.service().spawn(args[1], location);
         this.send(sender, result);
+        if (result.success()) {
+            final HunterToolsPreferences.FakeAiPersonaProfile persona = this.fakeAiPersona(args[1]);
+            if (persona != null) {
+                sender.sendMessage(ChatColor.AQUA + "Matched AI persona " + persona.displayName() + " for fake player " + args[1] + ".");
+            }
+        }
         if (result.success() && aiFree) {
             this.enableAiFree(args[1], sender);
         }
@@ -497,7 +503,11 @@ final class HunterRealFakePlayerManager {
             sender.sendMessage(ChatColor.GOLD + "HunterCore real fake player AI " + fake.name());
             sender.sendMessage(ChatColor.GRAY + "Enabled: " + ChatColor.WHITE + (profile != null && profile.enabled()));
             sender.sendMessage(ChatColor.GRAY + "AI-Free: " + ChatColor.WHITE + this.isAiFree(fake.id()));
-            sender.sendMessage(ChatColor.GRAY + "Goal: " + ChatColor.WHITE + (profile == null || profile.goal().isBlank() ? defaultFakeAiGoal(fake.name()) : profile.goal()));
+            final HunterToolsPreferences.FakeAiPersonaProfile persona = this.fakeAiPersona(fake.name());
+            if (persona != null) {
+                sender.sendMessage(ChatColor.GRAY + "Persona: " + ChatColor.WHITE + persona.displayName());
+            }
+            sender.sendMessage(ChatColor.GRAY + "Goal: " + ChatColor.WHITE + this.defaultGoal(fake.name(), this.isAiFree(fake.id()), profile == null ? "" : profile.goal()));
             sender.sendMessage(ChatColor.GRAY + "Last action: " + ChatColor.WHITE + this.aiLastActions.getOrDefault(fake.id(), "idle"));
             return true;
         }
@@ -506,7 +516,7 @@ final class HunterRealFakePlayerManager {
             case "on", "enable", "enabled", "true" -> {
                 final String goal = args.length >= 4
                     ? String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length)).trim()
-                    : profile == null || profile.goal().isBlank() ? defaultFakeAiGoal(fake.name()) : profile.goal();
+                    : this.defaultGoal(fake.name(), false, profile == null ? "" : profile.goal());
                 this.setAi(fake.name(), true, goal);
                 sender.sendMessage("HunterCore AI control enabled for " + fake.name() + ".");
                 return true;
@@ -528,7 +538,7 @@ final class HunterRealFakePlayerManager {
                 return true;
             }
             case "once" -> {
-                final String goal = profile == null || profile.goal().isBlank() ? defaultFakeAiGoal(fake.name()) : profile.goal();
+                final String goal = this.defaultGoal(fake.name(), this.isAiFree(fake.id()), profile == null ? "" : profile.goal());
                 final boolean shortcutApplied = this.quickResponseEnabled() && this.applyQuickGoalTask(fake, goal);
                 this.aiLastResponseFingerprints.remove(fake.id());
                 this.aiProfiles.put(fake.id(), new FakeAiProfile(
@@ -711,7 +721,7 @@ final class HunterRealFakePlayerManager {
                 this.loopLine(snapshot.name()),
                 this.clickCommands.getOrDefault(snapshot.id(), ""),
                 profile != null && profile.enabled(),
-                profile == null ? "" : profile.goal(),
+                this.defaultGoal(snapshot.name(), this.isAiFree(snapshot.id()), profile == null ? "" : profile.goal()),
                 this.aiLastActions.getOrDefault(snapshot.id(), "idle"),
                 this.isAiFree(snapshot.id()),
                 snapshot.uuid().toString()
@@ -754,7 +764,7 @@ final class HunterRealFakePlayerManager {
             fake.id(),
             fake.name(),
             true,
-            cleanGoal.isBlank() ? defaultFakeAiGoal(fake.name()) : cleanGoal,
+            this.defaultGoal(fake.name(), false, cleanGoal),
             null,
             null,
             0L,
@@ -778,7 +788,7 @@ final class HunterRealFakePlayerManager {
             fake.id(),
             fake.name(),
             true,
-            defaultAiFreeGoal(fake.name()),
+            this.defaultGoal(fake.name(), true, ""),
             sender instanceof Player player ? player.getUniqueId() : null,
             sender.getName(),
             0L,
@@ -1520,7 +1530,7 @@ final class HunterRealFakePlayerManager {
             return;
         }
         final FakePlayerSnapshot fake = snapshot.get();
-        final String system = this.isAiFree(fake.id()) ? this.aiFreeSystemPrompt() : this.fakeAiSystemPrompt();
+        final String system = this.isAiFree(fake.id()) ? this.aiFreeSystemPrompt(fake.name()) : this.fakeAiSystemPrompt(fake.name());
         final String prompt = this.fakeAiContext(profile, fake);
         this.aiBusy.add(key);
         this.aiLastActions.put(key, "thinking");
@@ -1563,27 +1573,31 @@ final class HunterRealFakePlayerManager {
         return Math.max(base, this.plugin.metricsSnapshot().adaptiveBudget().fakePlayerIntervalSeconds());
     }
 
-    private String fakeAiSystemPrompt() {
+    private String fakeAiSystemPrompt(final String fakeName) {
         final String configured = this.preferences.stringValue("modules.ai.fake-players.system-prompt", "").trim();
+        final String base;
         if (configured.isBlank()) {
-            return defaultFakeAiPrompt();
+            base = defaultFakeAiPrompt();
+        } else {
+            final String normalized = HunterToolsPreferences.normalize(configured);
+            if (normalized.startsWith("you control a huntercore real fake player")
+                && (!normalized.contains("respawn")
+                    || !normalized.contains("attack-player")
+                    || !normalized.contains("clear-build")
+                    || !normalized.contains("we-fill")
+                    || !normalized.contains("build-windmill")
+                    || !normalized.contains("build-greenhouse")
+                    || !normalized.contains("build-rope-bridge"))) {
+                base = defaultFakeAiPrompt();
+            } else {
+                base = configured;
+            }
         }
-        final String normalized = HunterToolsPreferences.normalize(configured);
-        if (normalized.startsWith("you control a huntercore real fake player")
-            && (!normalized.contains("respawn")
-                || !normalized.contains("attack-player")
-                || !normalized.contains("clear-build")
-                || !normalized.contains("we-fill")
-                || !normalized.contains("build-windmill")
-                || !normalized.contains("build-greenhouse")
-                || !normalized.contains("build-rope-bridge"))) {
-            return defaultFakeAiPrompt();
-        }
-        return configured;
+        return this.decorateSystemPrompt(base, fakeName, false);
     }
 
-    private String aiFreeSystemPrompt() {
-        return defaultAiFreePrompt();
+    private String aiFreeSystemPrompt(final String fakeName) {
+        return this.decorateSystemPrompt(defaultAiFreePrompt(), fakeName, true);
     }
 
     private String fakeAiContext(final FakeAiProfile profile, final FakePlayerSnapshot snapshot) {
@@ -1593,7 +1607,7 @@ final class HunterRealFakePlayerManager {
                 .append("You are an AI with your own thoughts; do whatever you want in this Minecraft world while keeping actions visible when useful.\n");
         }
         final Location location = snapshot.location();
-        context.append("Goal: ").append(profile.goal().isBlank() ? defaultFakeAiGoal(snapshot.name()) : profile.goal()).append('\n');
+        context.append("Goal: ").append(this.defaultGoal(snapshot.name(), this.isAiFree(snapshot.id()), profile.goal())).append('\n');
         context.append("Fake player: ").append(snapshot.name())
             .append(" mode=").append(snapshot.gameMode().name().toLowerCase(Locale.ROOT))
             .append(" sneaking=").append(snapshot.sneaking())
@@ -4693,6 +4707,61 @@ final class HunterRealFakePlayerManager {
 
     private static String defaultAiFreeGoal(final String name) {
         return "You are " + name + ", an autonomous AI with your own thoughts. Do whatever you want in this Minecraft world; observe, move, act, build, chat, and use commands when useful.";
+    }
+
+    private String defaultGoal(final String fakeName, final boolean aiFree, final String requestedGoal) {
+        final String cleanGoal = sanitizeGoal(requestedGoal);
+        if (!cleanGoal.isBlank()) {
+            return cleanGoal;
+        }
+        final HunterToolsPreferences.FakeAiPersonaProfile persona = this.fakeAiPersona(fakeName);
+        if (persona != null && !persona.defaultGoal().isBlank()) {
+            return sanitizeGoal(persona.defaultGoal());
+        }
+        return aiFree ? defaultAiFreeGoal(fakeName) : defaultFakeAiGoal(fakeName);
+    }
+
+    private String decorateSystemPrompt(final String basePrompt, final String fakeName, final boolean aiFree) {
+        final HunterToolsPreferences.FakeAiPersonaProfile persona = this.fakeAiPersona(fakeName);
+        if (persona == null) {
+            return basePrompt;
+        }
+        final StringBuilder prompt = new StringBuilder(basePrompt.length() + persona.systemPrompt().length() + 256);
+        prompt.append(basePrompt)
+            .append("\n\nRoleplay persona overlay for this exact fake player:\n")
+            .append("Fake player name: ").append(fakeName).append('\n')
+            .append("Persona name: ").append(persona.displayName()).append('\n');
+        if (!persona.aliases().isEmpty()) {
+            prompt.append("Known aliases: ").append(String.join(", ", persona.aliases())).append('\n');
+        }
+        prompt.append("Stay in character whenever you talk or choose actions, but keep obeying every HunterCore action-format rule above.\n")
+            .append("Do not stop using valid bracketed actions just because you are roleplaying.\n");
+        if (aiFree) {
+            prompt.append("In AI-Free mode, keep your autonomous initiative while expressing this persona's style, motives, and behavior.\n");
+        } else {
+            prompt.append("In normal AI mode, carry out the assigned goal while expressing this persona's style, motives, and behavior.\n");
+        }
+        prompt.append("Persona prompt:\n").append(persona.systemPrompt().trim());
+        return prompt.toString();
+    }
+
+    private @Nullable HunterToolsPreferences.FakeAiPersonaProfile fakeAiPersona(final String fakeName) {
+        final String target = HunterToolsPreferences.normalize(fakeName);
+        for (final HunterToolsPreferences.FakeAiPersonaProfile profile : this.preferences.fakeAiPersonaProfiles()) {
+            if (!profile.enabled()) {
+                continue;
+            }
+            if (HunterToolsPreferences.normalize(profile.displayName()).equals(target)
+                || HunterToolsPreferences.normalize(profile.id()).equals(target)) {
+                return profile;
+            }
+            for (final String alias : profile.aliases()) {
+                if (HunterToolsPreferences.normalize(alias).equals(target)) {
+                    return profile;
+                }
+            }
+        }
+        return null;
     }
 
     private static String renderClickCommand(final String command, final Player player, final FakePlayerSnapshot snapshot) {

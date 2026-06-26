@@ -62,6 +62,7 @@ const state = {
   mode: panelMode(),
   aiChatProfiles: [],
   aiBotAliases: [],
+  aiFakePersonas: [],
   chatLines: []
 };
 
@@ -405,6 +406,12 @@ const translations = {
     'ai.fakePlayersChatCooldown': '聊天控制冷却秒',
     'ai.fakePlayersChatPermissionRequired': '需要权限',
     'ai.fakePlayersChatPermission': '聊天控制权限节点',
+    'ai.fakePlayerPersonas': 'Fake player roleplay personas',
+    'ai.addFakePlayerPersona': 'Add persona',
+    'ai.personaName': 'AI name',
+    'ai.personaAliases': 'Aliases',
+    'ai.personaPrompt': 'Persona prompt',
+    'ai.personaGoal': 'Default behavior / goal',
     'ai.chatPrompt': '聊天系统 Prompt',
     'ai.npcPrompt': 'NPC 系统 Prompt',
     'ai.fakePlayersPrompt': '真实假人系统 Prompt',
@@ -778,12 +785,18 @@ const translations = {
     'ai.addProfile': 'Add profile',
     'ai.botAliases': 'AI Bot aliases',
     'ai.addBotAlias': 'Add bot',
+    'ai.fakePlayerPersonas': 'Fake player roleplay personas',
+    'ai.addFakePlayerPersona': 'Add persona',
     'ai.profileName': 'Profile name',
     'ai.profileAliases': 'Trigger names / aliases, comma separated',
     'ai.profileFormat': 'Response format, e.g. &b%name% &8> &f%response%',
     'ai.profilePrompt': 'Profile prompt',
     'ai.botTarget': 'Fake player name',
     'ai.botAliasNames': 'Trigger names / aliases, comma separated',
+    'ai.personaName': 'AI name',
+    'ai.personaAliases': 'Aliases',
+    'ai.personaPrompt': 'Persona prompt',
+    'ai.personaGoal': 'Default behavior / goal',
     'ai.remove': 'Remove',
     'ai.chatPrompt': 'Chat system prompt',
     'ai.npcPrompt': 'NPC system prompt',
@@ -1628,6 +1641,22 @@ function renderAiBotAliasList() {
   `).join('') : `<p class="mutedState">${esc(t('actors.none'))}</p>`;
 }
 
+function renderAiFakePersonaList() {
+  const profiles = state.aiFakePersonas || [];
+  $('aiFakePersonaList').innerHTML = profiles.length ? profiles.map((profile, index) => `
+    <div class="aiConfigItem" data-ai-fake-persona-index="${index}">
+      <label class="checkLine"><input type="checkbox" data-ai-fake-persona-field="enabled" ${profile.enabled === false ? '' : 'checked'}> <span>${esc(profile.displayName || t('ai.personaName'))}</span></label>
+      <div class="formGrid">
+        <input data-ai-fake-persona-field="displayName" value="${esc(profile.displayName || '')}" placeholder="${esc(t('ai.personaName'))}">
+        <input data-ai-fake-persona-field="aliases" value="${esc((profile.aliases || []).join(', '))}" placeholder="${esc(t('ai.personaAliases'))}">
+        <input data-ai-fake-persona-field="defaultGoal" value="${esc(profile.defaultGoal || '')}" placeholder="${esc(t('ai.personaGoal'))}">
+        <button type="button" class="secondaryButton" data-ai-fake-persona-remove="${index}">${esc(t('ai.remove'))}</button>
+      </div>
+      <textarea data-ai-fake-persona-field="systemPrompt" rows="4" spellcheck="false" placeholder="${esc(t('ai.personaPrompt'))}">${esc(profile.systemPrompt || '')}</textarea>
+    </div>
+  `).join('') : `<p class="mutedState">${esc(t('actors.none'))}</p>`;
+}
+
 function syncAiConfigListsFromDom() {
   state.aiChatProfiles = Array.from(document.querySelectorAll('[data-ai-profile-index]')).map((row, index) => ({
     id: state.aiChatProfiles[index]?.id || '',
@@ -1643,6 +1672,14 @@ function syncAiConfigListsFromDom() {
     target: row.querySelector('[data-ai-bot-field="target"]')?.value.trim() || '',
     aliases: splitAliases(row.querySelector('[data-ai-bot-field="aliases"]')?.value)
   })).filter((alias) => alias.target);
+  state.aiFakePersonas = Array.from(document.querySelectorAll('[data-ai-fake-persona-index]')).map((row, index) => ({
+    id: state.aiFakePersonas[index]?.id || '',
+    enabled: row.querySelector('[data-ai-fake-persona-field="enabled"]')?.checked ?? true,
+    displayName: row.querySelector('[data-ai-fake-persona-field="displayName"]')?.value.trim() || '',
+    aliases: splitAliases(row.querySelector('[data-ai-fake-persona-field="aliases"]')?.value),
+    defaultGoal: row.querySelector('[data-ai-fake-persona-field="defaultGoal"]')?.value.trim() || '',
+    systemPrompt: row.querySelector('[data-ai-fake-persona-field="systemPrompt"]')?.value.trim() || ''
+  })).filter((profile) => profile.displayName && profile.systemPrompt);
 }
 
 function renderCommandMessages(messages) {
@@ -1707,8 +1744,10 @@ function renderAiSettings(settings) {
   $('aiFakePlayersSystemPrompt').value = settings.fakePlayersSystemPrompt || '';
   state.aiChatProfiles = Array.isArray(settings.chatProfiles) ? settings.chatProfiles : [];
   state.aiBotAliases = Array.isArray(settings.fakeBotAliases) ? settings.fakeBotAliases : [];
+  state.aiFakePersonas = Array.isArray(settings.fakePlayerPersonas) ? settings.fakePlayerPersonas : [];
   renderAiProfileList();
   renderAiBotAliasList();
+  renderAiFakePersonaList();
   $('aiKeyStatus').textContent = settings.apiKeyConfigured ? t('ai.keyConfigured') : t('ai.keyMissing');
 }
 
@@ -2241,6 +2280,19 @@ function bindEvents() {
     renderAiBotAliasList();
   });
 
+  $('aiAddFakePersona').addEventListener('click', () => {
+    syncAiConfigListsFromDom();
+    state.aiFakePersonas.push({
+      id: '',
+      enabled: true,
+      displayName: 'ActorAI',
+      aliases: [],
+      defaultGoal: '',
+      systemPrompt: ''
+    });
+    renderAiFakePersonaList();
+  });
+
   $('aiChatProfileList').addEventListener('click', (event) => {
     const button = event.target.closest('[data-ai-profile-remove]');
     if (!button) return;
@@ -2255,6 +2307,14 @@ function bindEvents() {
     syncAiConfigListsFromDom();
     state.aiBotAliases.splice(Number(button.dataset.aiBotRemove), 1);
     renderAiBotAliasList();
+  });
+
+  $('aiFakePersonaList').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-ai-fake-persona-remove]');
+    if (!button) return;
+    syncAiConfigListsFromDom();
+    state.aiFakePersonas.splice(Number(button.dataset.aiFakePersonaRemove), 1);
+    renderAiFakePersonaList();
   });
 
   $('aiSettingsForm').addEventListener('submit', async (event) => {
@@ -2302,6 +2362,7 @@ function bindEvents() {
       fakePlayersChatControlRequirePermission: String($('aiFakePlayersChatControlRequirePermission').checked),
       fakePlayersChatControlPermission: $('aiFakePlayersChatControlPermission').value,
       fakeBotAliases: JSON.stringify(state.aiBotAliases),
+      fakePlayerPersonas: JSON.stringify(state.aiFakePersonas),
       fakePlayersSystemPrompt: $('aiFakePlayersSystemPrompt').value
     };
     try {

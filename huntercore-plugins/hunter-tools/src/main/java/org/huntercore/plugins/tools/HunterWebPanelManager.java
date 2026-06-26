@@ -1370,7 +1370,8 @@ final class HunterWebPanelManager {
         booleanField(json, "fakePlayersChatControlRequirePermission", this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false)).append(',');
         field(json, "fakePlayersChatControlPermission", this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer")).append(',');
         field(json, "fakePlayersSystemPrompt", this.preferences.stringValue("modules.ai.fake-players.system-prompt", "")).append(',');
-        json.append("\"fakeBotAliases\":").append(fakeBotAliasesJson());
+        json.append("\"fakeBotAliases\":").append(fakeBotAliasesJson()).append(',');
+        json.append("\"fakePlayerPersonas\":").append(fakeAiPersonaProfilesJson());
         json.append('}');
         return json.toString();
     }
@@ -1411,6 +1412,28 @@ final class HunterWebPanelManager {
             booleanField(json, "enabled", alias.enabled()).append(',');
             field(json, "target", alias.target()).append(',');
             json.append("\"aliases\":").append(stringArrayJson(alias.aliases()));
+            json.append('}');
+        }
+        json.append(']');
+        return json.toString();
+    }
+
+    private String fakeAiPersonaProfilesJson() {
+        final StringBuilder json = new StringBuilder(768);
+        json.append('[');
+        boolean first = true;
+        for (final HunterToolsPreferences.FakeAiPersonaProfile profile : this.preferences.fakeAiPersonaProfiles()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('{');
+            field(json, "id", profile.id()).append(',');
+            booleanField(json, "enabled", profile.enabled()).append(',');
+            field(json, "displayName", profile.displayName()).append(',');
+            json.append("\"aliases\":").append(stringArrayJson(profile.aliases())).append(',');
+            field(json, "systemPrompt", profile.systemPrompt()).append(',');
+            field(json, "defaultGoal", profile.defaultGoal());
             json.append('}');
         }
         json.append(']');
@@ -2218,6 +2241,9 @@ final class HunterWebPanelManager {
         final List<HunterToolsPreferences.FakeBotAlias> fakeBotAliases = parseFakeBotAliases(
             body.getOrDefault("fakeBotAliases", "[]")
         );
+        final List<HunterToolsPreferences.FakeAiPersonaProfile> fakePlayerPersonas = parseFakeAiPersonaProfiles(
+            body.getOrDefault("fakePlayerPersonas", "[]")
+        );
 
         if (enabled == null || chatEnabled == null || chatBroadcast == null || npcEnabled == null || npcAllowActions == null
             || fakePlayersEnabled == null || fakePlayersAllowMovement == null || fakePlayersAllowBreaking == null || fakePlayersAllowPlacing == null || fakePlayersAllowInteraction == null
@@ -2226,7 +2252,7 @@ final class HunterWebPanelManager {
             || npcCooldown == null || npcRadius == null || fakePlayersInterval == null || fakePlayersMaxActions == null
             || fakePlayersMaxMoveTicks == null || fakePlayersMaxActionTicks == null || fakePlayersNearbyRadius == null || fakePlayersMaxPlaceDistance == null
             || fakePlayersChatControlCooldown == null || whitelist == null || provider.isBlank() || provider.length() > 64
-            || chatProfiles == null || fakeBotAliases == null
+            || chatProfiles == null || fakeBotAliases == null || fakePlayerPersonas == null
             || !validHttpUrl(baseUrl) || model.isBlank() || model.length() > 128 || apiKey.length() > 512
             || apiKeyEnv.length() > 128 || chatPrefix.isBlank() || chatPrefix.length() > 32
             || !Set.of("off", "locked").contains(fakePlayersQuickResponseMode)
@@ -2281,6 +2307,7 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.ai.fake-players.chat-control.require-permission", fakePlayersChatControlRequirePermission);
         this.preferences.setValue("modules.ai.fake-players.chat-control.permission", fakePlayersChatControlPermission);
         this.preferences.setFakeBotAliases(fakeBotAliases);
+        this.preferences.setFakeAiPersonaProfiles(fakePlayerPersonas);
         this.preferences.setValue("modules.ai.fake-players.system-prompt", fakePlayersPrompt);
         this.savePreferences();
         this.invalidateStatusCaches();
@@ -3426,6 +3453,47 @@ final class HunterWebPanelManager {
                 }
             }
             return aliases;
+        } catch (final JsonSyntaxException | IllegalStateException ex) {
+            return null;
+        }
+    }
+
+    private static List<HunterToolsPreferences.FakeAiPersonaProfile> parseFakeAiPersonaProfiles(final String raw) {
+        try {
+            final JsonElement root = JsonParser.parseString(raw == null || raw.isBlank() ? "[]" : raw);
+            if (!root.isJsonArray()) {
+                return null;
+            }
+            final List<HunterToolsPreferences.FakeAiPersonaProfile> profiles = new ArrayList<>();
+            int index = 1;
+            for (final JsonElement element : root.getAsJsonArray()) {
+                if (!element.isJsonObject()) {
+                    return null;
+                }
+                final JsonObject object = element.getAsJsonObject();
+                final String displayName = jsonString(object, "displayName").trim();
+                final String id = jsonString(object, "id").trim();
+                final String prompt = jsonString(object, "systemPrompt").trim();
+                final String defaultGoal = jsonString(object, "defaultGoal").trim();
+                final List<String> aliases = jsonStringList(object.get("aliases"), 12, 48);
+                if (aliases == null || displayName.isBlank() || displayName.length() > 48
+                    || prompt.isBlank() || prompt.length() > 4096 || defaultGoal.length() > 512) {
+                    return null;
+                }
+                profiles.add(new HunterToolsPreferences.FakeAiPersonaProfile(
+                    id.isBlank() ? "persona-" + index : id,
+                    displayName,
+                    aliases,
+                    prompt,
+                    defaultGoal,
+                    jsonBoolean(object, "enabled", true)
+                ));
+                index++;
+                if (profiles.size() > 32) {
+                    return null;
+                }
+            }
+            return profiles;
         } catch (final JsonSyntaxException | IllegalStateException ex) {
             return null;
         }

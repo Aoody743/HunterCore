@@ -181,6 +181,32 @@ final class HunterToolsPreferences {
         }
     }
 
+    List<FakeAiPersonaProfile> fakeAiPersonaProfiles() {
+        synchronized (this.lock) {
+            final List<FakeAiPersonaProfile> profiles = new ArrayList<>();
+            final ConfigurationSection section = this.config.getConfigurationSection("modules.ai.fake-players.personas");
+            if (section != null) {
+                for (final String rawId : new TreeSet<>(section.getKeys(false))) {
+                    final String id = normalize(rawId);
+                    final String path = "modules.ai.fake-players.personas." + id;
+                    final String displayName = this.config.getString(path + ".display-name", id);
+                    if (displayName == null || displayName.isBlank()) {
+                        continue;
+                    }
+                    profiles.add(new FakeAiPersonaProfile(
+                        id,
+                        displayName,
+                        this.config.getStringList(path + ".aliases"),
+                        this.config.getString(path + ".system-prompt", ""),
+                        this.config.getString(path + ".default-goal", ""),
+                        this.config.getBoolean(path + ".enabled", true)
+                    ));
+                }
+            }
+            return profiles;
+        }
+    }
+
     void setFakeBotAliases(final List<FakeBotAlias> aliases) {
         synchronized (this.lock) {
             this.config.set("modules.ai.fake-players.chat-control.bots", null);
@@ -193,6 +219,25 @@ final class HunterToolsPreferences {
                 this.config.set(path + ".enabled", alias.enabled());
                 this.config.set(path + ".target", alias.target());
                 this.config.set(path + ".aliases", alias.aliases());
+                index++;
+            }
+        }
+    }
+
+    void setFakeAiPersonaProfiles(final List<FakeAiPersonaProfile> profiles) {
+        synchronized (this.lock) {
+            this.config.set("modules.ai.fake-players.personas", null);
+            int index = 1;
+            for (final FakeAiPersonaProfile profile : profiles) {
+                final String seed = profile.id() == null || profile.id().isBlank() ? profile.displayName() : profile.id();
+                final String normalized = normalize(seed).replaceAll("[^a-z0-9-]", "");
+                final String id = normalized.isBlank() ? "persona-" + index : normalized;
+                final String path = "modules.ai.fake-players.personas." + id;
+                this.config.set(path + ".enabled", profile.enabled());
+                this.config.set(path + ".display-name", profile.displayName());
+                this.config.set(path + ".aliases", profile.aliases());
+                this.config.set(path + ".system-prompt", profile.systemPrompt());
+                this.config.set(path + ".default-goal", profile.defaultGoal());
                 index++;
             }
         }
@@ -887,6 +932,16 @@ final class HunterToolsPreferences {
         String id,
         String target,
         List<String> aliases,
+        boolean enabled
+    ) {
+    }
+
+    record FakeAiPersonaProfile(
+        String id,
+        String displayName,
+        List<String> aliases,
+        String systemPrompt,
+        String defaultGoal,
         boolean enabled
     ) {
     }
