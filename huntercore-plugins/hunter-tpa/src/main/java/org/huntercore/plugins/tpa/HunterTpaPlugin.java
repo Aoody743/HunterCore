@@ -22,23 +22,38 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.huntercore.api.HunterCoreProvider;
 import org.huntercore.api.HunterLanguage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor, TabCompleter {
+public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor, TabCompleter, Listener {
     private static final long REQUEST_TTL_MILLIS = 60_000L;
     private static final String DEFAULT_HOME = "home";
 
     private final Map<UUID, TeleportRequest> incoming = new HashMap<>();
     private final Map<UUID, UUID> outgoing = new HashMap<>();
+    private final Map<UUID, PendingTeleport> pendingTeleports = new HashMap<>();
+    private final Map<UUID, Long> cooldowns = new HashMap<>();
     private File homesFile;
     private YamlConfiguration homes;
 
     @Override
     public void onEnable() {
+        this.getConfig().addDefault("cooldown-seconds", 5);
+        this.getConfig().addDefault("warmup-seconds", 3);
+        this.getConfig().addDefault("cancel-on-damage", true);
+        this.getConfig().addDefault("safe-landing", true);
+        this.getConfig().options().copyDefaults(true);
+        this.saveConfig();
+
         this.getDataFolder().mkdirs();
         this.homesFile = new File(this.getDataFolder(), "homes.yml");
         this.homes = YamlConfiguration.loadConfiguration(this.homesFile);
@@ -49,6 +64,7 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
                 pluginCommand.setTabCompleter(this);
             }
         }
+        this.getServer().getPluginManager().registerEvents(this, this);
         this.getServer().getScheduler().runTaskTimer(this, this::expireRequests, 20L * 10L, 20L * 10L);
     }
 
@@ -83,6 +99,9 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             requester.sendMessage(type == TeleportType.TO_TARGET ? "/tpa <player>" : "/tpahere <player>");
             return true;
         }
+        if (!this.checkCooldown(requester)) {
+            return true;
+        }
 
         final Player target = Bukkit.getPlayerExact(args[0]);
         if (target == null || !target.isOnline()) {
@@ -103,6 +122,7 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         final TeleportRequest request = new TeleportRequest(requester.getUniqueId(), target.getUniqueId(), type, System.currentTimeMillis() + REQUEST_TTL_MILLIS);
         this.incoming.put(target.getUniqueId(), request);
         this.outgoing.put(requester.getUniqueId(), target.getUniqueId());
+        this.markCooldown(requester);
 
         requester.sendMessage(this.text("传送请求已发送给 ", "Teleport request sent to ") + target.getName() + ".");
         target.sendMessage(Component.text(requester.getName(), NamedTextColor.YELLOW)
@@ -161,14 +181,12 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
 
         final Player teleporting = request.type() == TeleportType.TO_TARGET ? requester : target;
         final Player destination = request.type() == TeleportType.TO_TARGET ? target : requester;
-        teleporting.teleportAsync(destination.getLocation()).thenAccept(success -> {
-            if (success) {
-                teleporting.sendMessage(this.text("已传送到 ", "Teleported to ") + destination.getName() + ".");
-                destination.sendMessage(this.text("已同意来自 ", "Accepted teleport request from ") + requester.getName() + ".");
-            } else {
-                teleporting.sendMessage(this.text("传送失败。", "Teleport failed."));
-            }
-        });
+        this.startWarmup(
+            teleporting,
+            destination.getLocation(),
+            this.text("已传送到 ", "Teleported to ") + destination.getName() + ".",
+            () -> destination.sendMessage(this.text("已同意来自 ", "Accepted teleport request from ") + requester.getName() + ".")
+        );
         return true;
     }
 
@@ -203,18 +221,53 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             player.sendMessage("/home [name]");
             return true;
         }
+        if (!this.checkCooldown(player)) {
+            return true;
+        }
         final String name = homeName(args.length == 0 ? DEFAULT_HOME : args[0]);
         final Location location = this.loadHome(player, name);
         if (location == null) {
             player.sendMessage(this.text("没有找到家：", "Home not found: ") + name + ".");
             return true;
         }
-        player.teleportAsync(location).thenAccept(success -> {
-            if (success) {
-                player.sendMessage(this.text("已传送到家：", "Teleported home: ") + name + ".");
-            }
+        this.markCooldown(player);
+        this.startWarmup(player, location, this.text("已传送到家：", "Teleported home: ") + name + ".", () -> {
         });
         return true;
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onMove(final PlayerMoveEvent event) {
+        final PendingTeleport pending = this.pendingTeleports.get(event.getPlayer().getUniqueId());
+        if (pending == null || event.getTo() == null) {
+            return;
+        }
+        if (event.getFrom().getBlockX() != event.getTo().getBlockX()
+            || event.getFrom().getBlockY() != event.getTo().getBlockY()
+            || event.getFrom().getBlockZ() != event.getTo().getBlockZ()) {
+            this.cancelWarmup(event.getPlayer(), this.text("移动后传送已取消。", "Teleport cancelled because you moved."));
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onDamage(final EntityDamageEvent event) {
+        if (this.getConfig().getBoolean("cancel-on-damage", true)
+            && event.getEntity() instanceof final Player player
+            && this.pendingTeleports.containsKey(player.getUniqueId())) {
+            this.cancelWarmup(player, this.text("受到伤害后传送已取消。", "Teleport cancelled because you took damage."));
+        }
+    }
+
+    @EventHandler
+    public void onQuit(final PlayerQuitEvent event) {
+        final UUID uuid = event.getPlayer().getUniqueId();
+        this.pendingTeleports.remove(uuid);
+        this.cooldowns.remove(uuid);
+        this.removeOutgoing(uuid);
+        final TeleportRequest incomingRequest = this.incoming.remove(uuid);
+        if (incomingRequest != null) {
+            this.outgoing.remove(incomingRequest.requester());
+        }
     }
 
     private boolean deleteHome(final Player player, final String[] args) {
@@ -271,6 +324,95 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
     private List<String> homeNames(final Player player) {
         final ConfigurationSection section = this.homes.getConfigurationSection("homes." + player.getUniqueId());
         return section == null ? List.of() : section.getKeys(false).stream().sorted().toList();
+    }
+
+    private boolean checkCooldown(final Player player) {
+        final long until = this.cooldowns.getOrDefault(player.getUniqueId(), 0L);
+        final long remaining = until - System.currentTimeMillis();
+        if (remaining <= 0L) {
+            this.cooldowns.remove(player.getUniqueId());
+            return true;
+        }
+        player.sendMessage(this.text("传送冷却中，请等待 ", "Teleport is on cooldown. Wait ") + Math.max(1L, (remaining + 999L) / 1000L) + "s.");
+        return false;
+    }
+
+    private void markCooldown(final Player player) {
+        final int cooldownSeconds = Math.max(0, this.getConfig().getInt("cooldown-seconds", 5));
+        if (cooldownSeconds > 0) {
+            this.cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldownSeconds * 1000L);
+        }
+    }
+
+    private void startWarmup(final Player player, final Location destination, final String successMessage, final Runnable afterSuccess) {
+        final int warmupSeconds = Math.max(0, this.getConfig().getInt("warmup-seconds", 3));
+        if (warmupSeconds <= 0) {
+            this.finishTeleport(player, destination, successMessage, afterSuccess);
+            return;
+        }
+        final PendingTeleport pending = new PendingTeleport(player.getLocation(), destination.clone(), successMessage, afterSuccess);
+        this.pendingTeleports.put(player.getUniqueId(), pending);
+        player.sendMessage(this.text("传送准备中，请不要移动或受伤：", "Teleport warmup started. Do not move or take damage: ") + warmupSeconds + "s.");
+        this.getServer().getScheduler().runTaskLater(this, () -> {
+            if (!player.isOnline() || this.pendingTeleports.get(player.getUniqueId()) != pending) {
+                return;
+            }
+            this.pendingTeleports.remove(player.getUniqueId());
+            this.finishTeleport(player, pending.destination(), pending.successMessage(), pending.afterSuccess());
+        }, warmupSeconds * 20L);
+    }
+
+    private void finishTeleport(final Player player, final Location destination, final String successMessage, final Runnable afterSuccess) {
+        final Location target = this.getConfig().getBoolean("safe-landing", true) ? this.safeDestination(destination) : destination;
+        if (target == null) {
+            player.sendMessage(this.text("目标位置不安全，传送已取消。", "Destination is unsafe; teleport cancelled."));
+            return;
+        }
+        player.teleportAsync(target).thenAccept(success -> this.getServer().getScheduler().runTask(this, () -> {
+            if (success) {
+                player.sendMessage(successMessage);
+                afterSuccess.run();
+            } else {
+                player.sendMessage(this.text("传送失败。", "Teleport failed."));
+            }
+        }));
+    }
+
+    private void cancelWarmup(final Player player, final String message) {
+        if (this.pendingTeleports.remove(player.getUniqueId()) != null) {
+            player.sendMessage(message);
+        }
+    }
+
+    private Location safeDestination(final Location destination) {
+        if (this.isSafeDestination(destination)) {
+            return destination;
+        }
+        for (int radius = 1; radius <= 2; radius++) {
+            for (int x = -radius; x <= radius; x++) {
+                for (int z = -radius; z <= radius; z++) {
+                    final Location candidate = destination.clone().add(x, 0, z);
+                    if (this.isSafeDestination(candidate)) {
+                        return candidate;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isSafeDestination(final Location location) {
+        final World world = location.getWorld();
+        if (world == null) {
+            return false;
+        }
+        final int y = location.getBlockY();
+        if (y <= world.getMinHeight() || y + 1 >= world.getMaxHeight()) {
+            return false;
+        }
+        return !location.getBlock().getType().isSolid()
+            && !location.clone().add(0, 1, 0).getBlock().getType().isSolid()
+            && location.clone().add(0, -1, 0).getBlock().getType().isSolid();
     }
 
     private void saveHomes() {
@@ -353,5 +495,8 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         boolean isExpired() {
             return System.currentTimeMillis() >= this.expiresAt;
         }
+    }
+
+    private record PendingTeleport(Location origin, Location destination, String successMessage, Runnable afterSuccess) {
     }
 }

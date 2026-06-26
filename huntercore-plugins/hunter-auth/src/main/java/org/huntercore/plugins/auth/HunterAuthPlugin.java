@@ -31,6 +31,13 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
@@ -51,11 +58,19 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private static final int KEY_BITS = 256;
     private static final String GUI_TITLE = "HunterAuth Workbench";
     private static final Set<String> ALLOWED_COMMANDS = Set.of("/login", "/l", "/register", "/reg");
+    private static final Map<Integer, Integer> PIN_DIGIT_SLOTS = Map.of(
+        10, 1, 11, 2, 12, 3,
+        19, 4, 20, 5, 21, 6,
+        28, 7, 29, 8, 30, 9,
+        38, 0
+    );
 
     private final SecureRandom random = new SecureRandom();
     private final Set<UUID> authenticated = new HashSet<>();
     private final Map<UUID, PendingInput> pendingInputs = new HashMap<>();
     private final Map<UUID, GuiSession> guiSessions = new HashMap<>();
+    private final Map<UUID, Integer> loginFailures = new HashMap<>();
+    private final Map<UUID, Long> lockedUntil = new HashMap<>();
     private File usersFile;
     private YamlConfiguration users;
     private long usersModified;
@@ -72,6 +87,9 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.getConfig().addDefault("gui-enabled", true);
         this.getConfig().addDefault("open-gui-on-join", true);
         this.getConfig().addDefault("minimum-password-length", 4);
+        this.getConfig().addDefault("login-timeout-seconds", 90);
+        this.getConfig().addDefault("max-login-attempts", 5);
+        this.getConfig().addDefault("lockout-seconds", 60);
         this.getConfig().options().copyDefaults(true);
         this.saveConfig();
 
@@ -148,6 +166,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
                 }
             }, 10L);
         }
+        this.scheduleLoginTimeout(player);
     }
 
     @EventHandler
@@ -155,6 +174,8 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.authenticated.remove(event.getPlayer().getUniqueId());
         this.pendingInputs.remove(event.getPlayer().getUniqueId());
         this.guiSessions.remove(event.getPlayer().getUniqueId());
+        this.loginFailures.remove(event.getPlayer().getUniqueId());
+        this.lockedUntil.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
@@ -201,7 +222,17 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     @EventHandler(ignoreCancelled = true)
     public void onInventoryClick(final InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof final Player player) || !this.isAuthGui(event.getView().title())) {
+        if (!(event.getWhoClicked() instanceof final Player player)) {
+            return;
+        }
+        final boolean authGui = this.isAuthGui(event.getView().title());
+        if (!this.isAuthenticated(player) && !authGui) {
+            event.setCancelled(true);
+            player.sendMessage(this.text("请先登录再操作背包。", "Please log in before using inventories."));
+            this.openAuthGuiSoon(player);
+            return;
+        }
+        if (!authGui) {
             return;
         }
         event.setCancelled(true);
@@ -213,7 +244,8 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.getUniqueId(),
             ignored -> new GuiSession(this.isRegistered(player) ? InputMode.LOGIN : InputMode.REGISTER)
         );
-        final int digit = this.digitForSlot(event.getRawSlot());
+        final int slot = event.getRawSlot();
+        final int digit = this.digitForSlot(slot);
         if (digit >= 0) {
             if (session.current().length() < 64) {
                 session.append(digit);
@@ -221,8 +253,8 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             this.renderAuthGui(player, event.getView().getTopInventory(), session);
             return;
         }
-        switch (event.getRawSlot()) {
-            case 11 -> {
+        switch (slot) {
+            case 14 -> {
                 session.mode(InputMode.LOGIN);
                 session.reset();
                 this.renderAuthGui(player, event.getView().getTopInventory(), session);
@@ -232,18 +264,75 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
                 session.reset();
                 this.renderAuthGui(player, event.getView().getTopInventory(), session);
             }
-            case 18 -> {
+            case 16 -> this.startGuiInput(player, session.mode());
+            case 37 -> {
                 session.backspace();
                 this.renderAuthGui(player, event.getView().getTopInventory(), session);
             }
-            case 20 -> {
+            case 39 -> {
                 session.reset();
                 this.renderAuthGui(player, event.getView().getTopInventory(), session);
             }
-            case 22 -> this.submitGuiPassword(player, session, event.getView().getTopInventory());
-            case 26 -> this.sendLoginPrompt(player);
+            case 32 -> this.submitGuiPassword(player, session, event.getView().getTopInventory());
+            case 41 -> player.sendMessage(this.text("网页注册地址：", "Web registration URL: ") + this.registrationUrl());
+            case 43 -> this.sendLoginPrompt(player);
             default -> {
             }
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onInteract(final PlayerInteractEvent event) {
+        if (!this.isAuthenticated(event.getPlayer())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(this.text("请先登录再交互。", "Please log in before interacting."));
+            this.openAuthGuiSoon(event.getPlayer());
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onDropItem(final PlayerDropItemEvent event) {
+        if (!this.isAuthenticated(event.getPlayer())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(this.text("请先登录再丢弃物品。", "Please log in before dropping items."));
+            this.openAuthGuiSoon(event.getPlayer());
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onPickupItem(final EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof final Player player && !this.isAuthenticated(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onDamageByEntity(final EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof final Player player && !this.isAuthenticated(player)) {
+            event.setCancelled(true);
+            player.sendMessage(this.text("请先登录再攻击。", "Please log in before attacking."));
+            this.openAuthGuiSoon(player);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onDamage(final EntityDamageEvent event) {
+        if (event.getEntity() instanceof final Player player && !this.isAuthenticated(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onTeleport(final PlayerTeleportEvent event) {
+        if (!this.isAuthenticated(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onSwapHands(final PlayerSwapHandItemsEvent event) {
+        if (!this.isAuthenticated(event.getPlayer())) {
+            event.setCancelled(true);
         }
     }
 
@@ -310,11 +399,19 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.sendMessage("/login <password>");
             return true;
         }
+        final long remainingLock = this.lockRemainingMillis(player);
+        if (remainingLock > 0L) {
+            player.sendMessage(this.text("登录失败次数过多，请等待 ", "Too many failed login attempts. Wait ") + Math.max(1L, (remainingLock + 999L) / 1000L) + "s.");
+            return true;
+        }
         if (!this.verifyPassword(player, args[0])) {
+            this.recordLoginFailure(player);
             player.sendMessage(this.text("密码错误。", "Incorrect password."));
             return true;
         }
         this.authenticated.add(player.getUniqueId());
+        this.loginFailures.remove(player.getUniqueId());
+        this.lockedUntil.remove(player.getUniqueId());
         this.pendingInputs.remove(player.getUniqueId());
         this.guiSessions.remove(player.getUniqueId());
         player.closeInventory();
@@ -365,10 +462,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         }
         final GuiSession session = new GuiSession(this.isRegistered(player) ? InputMode.LOGIN : InputMode.REGISTER);
         this.guiSessions.put(player.getUniqueId(), session);
-        final Inventory inventory = Bukkit.createInventory(player, 27, ComponentTitle.HUNTER_AUTH);
-        inventory.setItem(11, item(Material.EMERALD, this.text("登录", "Login"), List.of("/login <password>", this.text("点击后在聊天栏输入密码。", "Click, then type your password in chat."))));
-        inventory.setItem(15, item(Material.WRITABLE_BOOK, this.text("注册", "Register"), List.of("/register <password> <password>", this.text("点击后输入两次密码，用空格分开。", "Click, then type password twice separated by a space."))));
-        inventory.setItem(22, item(Material.PAPER, this.text("命令也可用", "Commands still work"), List.of("/login <password>", "/register <password> <password>", "/changepassword <old> <new>")));
+        final Inventory inventory = Bukkit.createInventory(player, 54, ComponentTitle.HUNTER_AUTH);
         this.renderAuthGui(player, inventory, session);
         player.openInventory(inventory);
     }
@@ -386,33 +480,52 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private void renderAuthGui(final Player player, final Inventory inventory, final GuiSession session) {
         inventory.clear();
-        for (int digit = 1; digit <= 9; digit++) {
-            inventory.setItem(digit - 1, digitItem(digit));
+        for (int i = 0; i < inventory.getSize(); i++) {
+            inventory.setItem(i, item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of()));
         }
-        inventory.setItem(9, digitItem(0));
-        inventory.setItem(11, item(
+        for (final Map.Entry<Integer, Integer> entry : PIN_DIGIT_SLOTS.entrySet()) {
+            inventory.setItem(entry.getKey(), this.digitItem(entry.getValue()));
+        }
+        inventory.setItem(4, item(
+            Material.NETHER_STAR,
+            this.text("HunterAuth 登录中心", "HunterAuth Login Center"),
+            List.of(
+                this.isRegistered(player) ? this.text("账号状态：已注册", "Account: registered") : this.text("账号状态：未注册", "Account: not registered"),
+                this.text("点击数字输入 PIN，也可以用聊天输入普通密码。", "Click digits for a PIN, or use chat input for a normal password.")
+            )
+        ));
+        inventory.setItem(14, item(
             session.mode() == InputMode.LOGIN ? Material.LIME_DYE : Material.EMERALD,
             this.text("登录模式", "Login mode"),
-            List.of("/login <password>", this.text("点击切换到登录。", "Click to switch to login."))
-        ));
-        inventory.setItem(13, item(
-            Material.CRAFTING_TABLE,
-            session.mode() == InputMode.LOGIN ? this.text("输入登录密码", "Enter login password") : this.text("输入注册密码", "Enter register password"),
-            List.of(
-                this.text("已输入：", "Entered: ") + "*".repeat(session.current().length()),
-                session.firstPassword() == null ? this.text("点击数字玻璃输入密码。", "Click glass panes to enter the password.") : this.text("请再次输入同样的密码。", "Enter the same password again."),
-                this.text("可以随时关闭窗口并使用命令。", "You can close this GUI and use commands anytime.")
-            )
+            List.of(this.text("点击切换到登录。", "Click to switch to login."))
         ));
         inventory.setItem(15, item(
             session.mode() == InputMode.REGISTER ? Material.LIME_DYE : Material.WRITABLE_BOOK,
             this.text("注册模式", "Register mode"),
-            List.of("/register <password> <password>", this.text("点击切换到注册。", "Click to switch to register."))
+            List.of(this.text("点击切换到注册。", "Click to switch to register."))
         ));
-        inventory.setItem(18, item(Material.RED_STAINED_GLASS_PANE, this.text("退格", "Backspace"), List.of(this.text("删除最后一位。", "Delete the last digit."))));
-        inventory.setItem(20, item(Material.GRAY_STAINED_GLASS_PANE, this.text("清空", "Clear"), List.of(this.text("清空当前输入。", "Clear current input."))));
-        inventory.setItem(22, item(Material.GREEN_STAINED_GLASS_PANE, this.text("确认", "Confirm"), List.of(this.text("提交当前密码。", "Submit the current password."))));
-        inventory.setItem(26, item(Material.PAPER, this.text("命令登录", "Commands"), List.of("/login <password>", "/register <password> <password>", "/changepassword <old> <new>")));
+        inventory.setItem(16, item(
+            Material.OAK_SIGN,
+            this.text("聊天栏安全输入", "Secure chat input"),
+            List.of(
+                session.mode() == InputMode.LOGIN ? "/login <password>" : "/register <password> <password>",
+                this.text("点击后关闭 GUI，在聊天栏输入密码，不会广播。", "Click to close the GUI and type your password in chat; it will not be broadcast.")
+            )
+        ));
+        inventory.setItem(23, item(
+            Material.CRAFTING_TABLE,
+            session.mode() == InputMode.LOGIN ? this.text("输入登录 PIN", "Enter login PIN") : this.text("输入注册 PIN", "Enter register PIN"),
+            List.of(
+                this.text("已输入：", "Entered: ") + "*".repeat(session.current().length()),
+                session.firstPassword() == null ? this.text("点击左侧数字键输入。", "Click the left keypad digits.") : this.text("请再次输入同样的 PIN。", "Enter the same PIN again."),
+                this.text("最短长度：", "Minimum length: ") + this.intSetting("minimum-password-length", 4)
+            )
+        ));
+        inventory.setItem(32, item(Material.EMERALD_BLOCK, this.text("确认", "Confirm"), List.of(this.text("提交当前输入。", "Submit the current input."))));
+        inventory.setItem(37, item(Material.ARROW, this.text("退格", "Backspace"), List.of(this.text("删除最后一位。", "Delete the last digit."))));
+        inventory.setItem(39, item(Material.BARRIER, this.text("清空", "Clear"), List.of(this.text("清空当前输入。", "Clear current input."))));
+        inventory.setItem(41, item(Material.MAP, this.text("网页注册", "Web registration"), List.of(this.registrationUrl())));
+        inventory.setItem(43, item(Material.PAPER, this.text("命令帮助", "Command help"), List.of("/login <password>", "/register <password> <password>", "/changepassword <old> <new>")));
     }
 
     private void submitGuiPassword(final Player player, final GuiSession session, final Inventory inventory) {
@@ -436,10 +549,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private int digitForSlot(final int slot) {
-        if (slot >= 0 && slot <= 8) {
-            return slot + 1;
-        }
-        return slot == 9 ? 0 : -1;
+        return PIN_DIGIT_SLOTS.getOrDefault(slot, -1);
     }
 
     private void startGuiInput(final Player player, final InputMode mode) {
@@ -473,6 +583,39 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.sendMessage(this.text("请使用 /register <password> <password> 注册。", "Please register with /register <password> <password>."));
         } else {
             player.sendMessage(this.text("此服务器未强制注册账号密码。", "This server does not require account registration."));
+        }
+    }
+
+    private void scheduleLoginTimeout(final Player player) {
+        final int timeoutSeconds = this.intSetting("login-timeout-seconds", 90);
+        if (timeoutSeconds <= 0) {
+            return;
+        }
+        this.getServer().getScheduler().runTaskLater(this, () -> {
+            if (player.isOnline() && !this.isAuthenticated(player)) {
+                player.kick(Component.text(this.text("登录超时，请重新进入服务器。", "Login timed out. Please rejoin the server.")));
+            }
+        }, Math.max(20L, timeoutSeconds * 20L));
+    }
+
+    private long lockRemainingMillis(final Player player) {
+        final long until = this.lockedUntil.getOrDefault(player.getUniqueId(), 0L);
+        final long remaining = until - System.currentTimeMillis();
+        if (remaining <= 0L) {
+            this.lockedUntil.remove(player.getUniqueId());
+            return 0L;
+        }
+        return remaining;
+    }
+
+    private void recordLoginFailure(final Player player) {
+        final int attempts = this.loginFailures.merge(player.getUniqueId(), 1, Integer::sum);
+        final int maxAttempts = Math.max(1, this.intSetting("max-login-attempts", 5));
+        if (attempts >= maxAttempts) {
+            final int lockoutSeconds = Math.max(1, this.intSetting("lockout-seconds", 60));
+            this.lockedUntil.put(player.getUniqueId(), System.currentTimeMillis() + lockoutSeconds * 1000L);
+            this.loginFailures.put(player.getUniqueId(), 0);
+            player.sendMessage(this.text("登录失败次数过多，已临时锁定。", "Too many failed login attempts; login is temporarily locked."));
         }
     }
 
@@ -623,13 +766,13 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         return HunterLanguage.choose(HunterCoreProvider.get().language(), zhCn, enUs);
     }
 
-    private static ItemStack digitItem(final int digit) {
+    private ItemStack digitItem(final int digit) {
         final int amount = digit == 0 ? 10 : digit;
         final Material material = digit == 0 ? Material.BLACK_STAINED_GLASS_PANE : Material.LIGHT_BLUE_STAINED_GLASS_PANE;
         final ItemStack item = new ItemStack(material, amount);
         final ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.AQUA + "Digit " + digit);
-        meta.setLore(List.of(ChatColor.GRAY + "Click to input " + digit + "."));
+        meta.setDisplayName(ChatColor.AQUA + this.text("数字 ", "Digit ") + digit);
+        meta.setLore(List.of(ChatColor.GRAY + this.text("点击输入 ", "Click to input ") + digit + "."));
         item.setItemMeta(meta);
         return item;
     }

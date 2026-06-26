@@ -99,6 +99,9 @@ const FIELD_HELP = {
   commandMessageGroup: 'Lines shown when a player runs /group.',
   commandMessageOpDenied: 'Lines shown when a non-admin player tries /op.',
   authMinimumPasswordLength: 'Minimum password length for /register and web registration.',
+  authLoginTimeoutSeconds: 'Seconds before unauthenticated players are kicked; set 0 to disable the timeout.',
+  authMaxLoginAttempts: 'Wrong password attempts before a temporary login lock is applied.',
+  authLockoutSeconds: 'Seconds a player must wait after too many wrong passwords.',
   authRegistrationUrl: 'URL shown to unregistered players when web pre-registration is required.',
   webCorsAllowOrigin: 'Use * for testing, or a specific frontend origin in production.',
   webApiKey: 'Optional API key for standalone frontend/backend separation.',
@@ -186,6 +189,24 @@ const translations = {
     'players.loginRequired': '登录后查看玩家详情。',
     'plugins.loginRequired': '登录后查看插件详情。',
     'plugins.count': '{count} 个',
+    'plugins.search': '搜索插件、Jar、描述或作者',
+    'plugins.empty': '没有匹配的插件。',
+    'plugins.summary': '全部 {total} · 已启用 {enabled} · 已停用 {disabled} · 仅安装 {installed} · 受保护 {protected}',
+    'plugins.releaseReady': '发行检查',
+    'plugins.releaseReadyOk': '插件发行状态良好',
+    'plugins.releaseReadyWarn': '{count} 个插件项需要关注',
+    'plugins.issue.missingDependency': '缺少依赖',
+    'plugins.issue.installedOnly': '仅安装未加载',
+    'plugins.issue.disabled': '已停用',
+    'plugins.issue.legacyApi': '旧 API',
+    'plugins.issue.noDescriptor': '描述文件缺失',
+    'plugins.detail': '详情',
+    'plugins.filter.all': '全部',
+    'plugins.filter.enabled': '已启用',
+    'plugins.filter.disabled': '已停用',
+    'plugins.filter.installed': '仅安装',
+    'plugins.filter.protected': '受保护',
+    'plugins.filter.actionable': '可操作',
     'worlds.none': '暂无已加载世界。',
     'players.none': '当前没有玩家在线。',
     'tools.eyebrow': 'Minecraft 操作',
@@ -275,6 +296,9 @@ const translations = {
     'auth.guiEnabled': '登录 GUI',
     'auth.openGuiOnJoin': '进服打开登录 GUI',
     'auth.minimumPasswordLength': '最小密码长度',
+    'auth.loginTimeoutSeconds': '登录超时秒数（0 为关闭）',
+    'auth.maxLoginAttempts': '最大输错次数',
+    'auth.lockoutSeconds': '锁定秒数',
     'auth.registrationUrl': '网页登录地址（踢出提示使用）',
     'webSettings.save': '保存网页设置',
     'webSettings.saved': '网页设置已保存。',
@@ -376,6 +400,7 @@ const translations = {
     'ai.fakePlayersPlacing': '允许放置方块',
     'ai.fakePlayersInteraction': '允许交互/使用工具',
     'ai.fakePlayersChatControl': '聊天控制假人',
+    'ai.fakePlayersAmbientChat': '无需点名也响应游戏/网页聊天',
     'ai.fakePlayersChatPrefix': '聊天控制前缀，如 @bot',
     'ai.fakePlayersChatCooldown': '聊天控制冷却秒',
     'ai.fakePlayersChatPermissionRequired': '需要权限',
@@ -437,6 +462,12 @@ const translations = {
     'plugin.descriptorUnknown': '描述文件未知',
     'plugin.webControls': '网页可控',
     'plugin.protected': '受保护',
+    'plugin.risk.protected': '核心/面板插件，禁止热操作',
+    'plugin.risk.restart': '已安装未加载，通常需要加载或重启',
+    'plugin.risk.runtime': '支持网页热操作，生产环境建议低峰操作',
+    'plugin.dependencies': '依赖',
+    'plugin.authors': '作者',
+    'plugin.size': '大小',
     'plugin.updatePlaceholder': 'https://example.com/{name}.jar',
     'plugin.actionCompleted': '插件操作已完成。',
     'plugin.updateCompleted': '插件更新已完成。',
@@ -527,6 +558,24 @@ const translations = {
     'players.loginRequired': 'Login to view player detail.',
     'plugins.loginRequired': 'Login to view plugin detail.',
     'plugins.count': '{count}',
+    'plugins.search': 'Search plugins, jars, descriptions or authors',
+    'plugins.empty': 'No matching plugins.',
+    'plugins.summary': 'Total {total} · Enabled {enabled} · Disabled {disabled} · Installed {installed} · Protected {protected}',
+    'plugins.releaseReady': 'Release readiness',
+    'plugins.releaseReadyOk': 'Plugin release status looks good',
+    'plugins.releaseReadyWarn': '{count} plugin items need attention',
+    'plugins.issue.missingDependency': 'Missing dependencies',
+    'plugins.issue.installedOnly': 'Installed only',
+    'plugins.issue.disabled': 'Disabled',
+    'plugins.issue.legacyApi': 'Legacy API',
+    'plugins.issue.noDescriptor': 'Descriptor missing',
+    'plugins.detail': 'Details',
+    'plugins.filter.all': 'All',
+    'plugins.filter.enabled': 'Enabled',
+    'plugins.filter.disabled': 'Disabled',
+    'plugins.filter.installed': 'Installed only',
+    'plugins.filter.protected': 'Protected',
+    'plugins.filter.actionable': 'Actionable',
     'worlds.none': 'No worlds loaded.',
     'players.none': 'No players online.',
     'tools.eyebrow': 'Minecraft actions',
@@ -616,6 +665,9 @@ const translations = {
     'auth.guiEnabled': 'Login GUI',
     'auth.openGuiOnJoin': 'Open GUI on join',
     'auth.minimumPasswordLength': 'Minimum password length',
+    'auth.loginTimeoutSeconds': 'Login timeout seconds (0 disables)',
+    'auth.maxLoginAttempts': 'Maximum wrong attempts',
+    'auth.lockoutSeconds': 'Lockout seconds',
     'auth.registrationUrl': 'Web registration URL for kick message',
     'webSettings.save': 'Save web settings',
     'webSettings.saved': 'Web settings saved.',
@@ -717,6 +769,7 @@ const translations = {
     'ai.fakePlayersPlacing': 'allow block placing',
     'ai.fakePlayersInteraction': 'allow interaction/tools',
     'ai.fakePlayersChatControl': 'chat control',
+    'ai.fakePlayersAmbientChat': 'respond to ambient game/web chat',
     'ai.fakePlayersChatPrefix': 'Chat control prefix, e.g. @bot',
     'ai.fakePlayersChatCooldown': 'Chat control cooldown seconds',
     'ai.fakePlayersChatPermissionRequired': 'require permission',
@@ -789,6 +842,12 @@ const translations = {
     'plugin.descriptorUnknown': 'descriptor unknown',
     'plugin.webControls': 'web controls',
     'plugin.protected': 'protected',
+    'plugin.risk.protected': 'Core/panel plugin; hot operations are blocked',
+    'plugin.risk.restart': 'Installed but not loaded; load or restart may be required',
+    'plugin.risk.runtime': 'Web hot operation available; prefer quiet production windows',
+    'plugin.dependencies': 'Dependencies',
+    'plugin.authors': 'Authors',
+    'plugin.size': 'Size',
     'plugin.updatePlaceholder': 'https://example.com/{name}.jar',
     'plugin.actionCompleted': 'Plugin action completed.',
     'plugin.updateCompleted': 'Plugin update completed.',
@@ -837,6 +896,102 @@ function statusLabel(status) {
 
 function pluginStatusLabel(status) {
   return t(`plugin.status.${status || 'disabled'}`);
+}
+
+function pluginRiskLabel(plugin) {
+  return t(`plugin.risk.${plugin.risk || (plugin.controllable ? 'runtime' : 'protected')}`);
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value < 0) return '';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function pluginMatches(plugin, query, filter) {
+  const loaded = plugin.loaded !== false;
+  const enabled = Boolean(plugin.enabled);
+  const status = plugin.status || (loaded ? (enabled ? 'enabled' : 'disabled') : 'installed');
+  const protectedPlugin = !plugin.controllable;
+  if (filter === 'enabled' && status !== 'enabled') return false;
+  if (filter === 'disabled' && status !== 'disabled') return false;
+  if (filter === 'installed' && status !== 'installed') return false;
+  if (filter === 'protected' && !protectedPlugin) return false;
+  if (filter === 'actionable' && protectedPlugin) return false;
+  if (!query) return true;
+  const haystack = [
+    plugin.name,
+    plugin.version,
+    plugin.sourceJar,
+    plugin.descriptor,
+    plugin.main,
+    plugin.description,
+    plugin.website,
+    ...(plugin.authors || []),
+    ...(plugin.dependencies || []),
+    ...(plugin.softDependencies || [])
+  ].join(' ').toLowerCase();
+  return haystack.includes(query);
+}
+
+function pluginSummaryLine(plugins) {
+  const summary = (plugins || []).reduce((acc, plugin) => {
+    acc.total += 1;
+    if (plugin.status === 'installed' || plugin.loaded === false) acc.installed += 1;
+    else if (plugin.enabled) acc.enabled += 1;
+    else acc.disabled += 1;
+    if (!plugin.controllable) acc.protected += 1;
+    return acc;
+  }, { total: 0, enabled: 0, disabled: 0, installed: 0, protected: 0 });
+  return t('plugins.summary', summary);
+}
+
+function pluginReadinessIssues(plugins) {
+  const names = new Set((plugins || []).map((plugin) => String(plugin.name || '').toLowerCase()));
+  const buckets = {
+    missingDependency: [],
+    installedOnly: [],
+    disabled: [],
+    legacyApi: [],
+    noDescriptor: []
+  };
+  (plugins || []).forEach((plugin) => {
+    const missing = (plugin.dependencies || []).filter((dependency) => !names.has(String(dependency).toLowerCase()));
+    if (missing.length) buckets.missingDependency.push(`${plugin.name}: ${missing.join(', ')}`);
+    if (plugin.loaded === false || plugin.status === 'installed') buckets.installedOnly.push(plugin.name);
+    else if (!plugin.enabled) buckets.disabled.push(plugin.name);
+    if (plugin.apiVersion && /^1\.(1[0-9]|20)(\.|$)/.test(plugin.apiVersion)) buckets.legacyApi.push(`${plugin.name}: ${plugin.apiVersion}`);
+    if (!plugin.descriptor) buckets.noDescriptor.push(plugin.name);
+  });
+  return buckets;
+}
+
+function pluginReadinessPanel(plugins) {
+  if (!plugins) return '';
+  const issues = pluginReadinessIssues(plugins);
+  const issueCount = Object.values(issues).reduce((total, items) => total + items.length, 0);
+  const cards = Object.entries(issues)
+    .filter(([, items]) => items.length)
+    .map(([key, items]) => `<details class="pluginReadinessCard" open>
+      <summary><strong>${esc(t(`plugins.issue.${key}`))}</strong><span>${items.length}</span></summary>
+      <p>${esc(items.slice(0, 8).join(' · '))}${items.length > 8 ? ' …' : ''}</p>
+    </details>`)
+    .join('');
+  return `<div class="pluginReadinessHead">
+    <span>${esc(t('plugins.releaseReady'))}</span>
+    <strong class="${issueCount ? 'warningText' : 'okText'}">${esc(issueCount ? t('plugins.releaseReadyWarn', { count: issueCount }) : t('plugins.releaseReadyOk'))}</strong>
+  </div>${cards || `<p class="mutedState">${esc(t('plugins.releaseReadyOk'))}</p>`}`;
 }
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -1114,8 +1269,17 @@ function pluginLine(plugin, admin) {
     plugin.descriptor || (loaded ? t('plugin.loadedRuntime') : t('plugin.descriptorUnknown')),
     controllable ? t('plugin.webControls') : t('plugin.protected')
   ].join(' · ');
+  const detail = [
+    pluginRiskLabel(plugin),
+    plugin.apiVersion ? `API ${plugin.apiVersion}` : '',
+    plugin.fileSizeBytes >= 0 ? `${t('plugin.size')}: ${formatBytes(plugin.fileSizeBytes)}` : '',
+    plugin.authors?.length ? `${t('plugin.authors')}: ${plugin.authors.join(', ')}` : '',
+    plugin.dependencies?.length ? `${t('plugin.dependencies')}: ${plugin.dependencies.join(', ')}` : '',
+    plugin.description || ''
+  ].filter(Boolean).join(' · ');
+  const website = safeExternalUrl(plugin.website);
   if (!admin) {
-    return dataItem(plugin.name, pluginStatusLabel(status), meta);
+    return dataItem(plugin.name, pluginStatusLabel(status), [meta, detail].filter(Boolean).join(' · '));
   }
   const controlDisabled = controllable ? '' : 'disabled';
   const reloadDisabled = controllable && loaded ? '' : 'disabled';
@@ -1125,6 +1289,16 @@ function pluginLine(plugin, admin) {
       <span>${esc(plugin.name)}<small>${esc(meta)}</small></span>
       <strong class="stateChip ${statusClass}">${esc(pluginStatusLabel(status))}</strong>
     </div>
+    <p class="pluginRisk">${esc(detail || pluginRiskLabel(plugin))}</p>
+    <details class="pluginDetails">
+      <summary>${esc(t('plugins.detail'))}</summary>
+      <dl>
+        <dt>main</dt><dd>${esc(plugin.main || '-')}</dd>
+        <dt>website</dt><dd>${website ? `<a href="${esc(website)}" target="_blank" rel="noreferrer">${esc(website)}</a>` : '-'}</dd>
+        <dt>depend</dt><dd>${esc((plugin.dependencies || []).join(', ') || '-')}</dd>
+        <dt>softdepend</dt><dd>${esc((plugin.softDependencies || []).join(', ') || '-')}</dd>
+      </dl>
+    </details>
     <div class="pluginActions">
       <button type="button" class="smallButton pluginActionPrimary" data-plugin-name="${esc(plugin.name)}" data-plugin-action="${enabled ? 'disable' : 'enable'}" ${controlDisabled}>${enabled ? esc(t('action.disable')) : esc(t('action.enable'))}</button>
       <button type="button" class="smallButton" data-plugin-name="${esc(plugin.name)}" data-plugin-action="reload" ${reloadDisabled}>${esc(t('action.reload'))}</button>
@@ -1225,6 +1399,18 @@ function renderHealth(health) {
     : dataItem(t('health.label'), t('health.heap', { value: Number(safe.memoryUsagePercent || 0).toFixed(1) }), t('health.noAlerts'));
 }
 
+function chatSourceLabel(source) {
+  switch (String(source || 'game').toLowerCase()) {
+    case 'web': return 'WEB';
+    case 'ai': return 'AI';
+    case 'ai-npc': return 'NPC AI';
+    case 'ai-fake-player': return 'BOT AI';
+    case 'system': return 'SYS';
+    case 'game':
+    default: return 'GAME';
+  }
+}
+
 function renderHomeChat(lines = state.chatLines) {
   state.chatLines = Array.isArray(lines) ? lines : [];
   $('chatStatus').textContent = String(state.chatLines.length);
@@ -1234,7 +1420,7 @@ function renderHomeChat(lines = state.chatLines) {
   $('homeChatList').innerHTML = state.chatLines.length
     ? state.chatLines.slice(-80).map((line) => `
       <div class="chatLine" data-source="${esc(line.source || 'game')}">
-        <strong>${esc(line.sender || 'server')}</strong>
+        <strong><small>${esc(chatSourceLabel(line.source))}</small>${esc(line.sender || 'server')}</strong>
         <span>${esc(line.message || '')}</span>
       </div>
     `).join('')
@@ -1295,12 +1481,26 @@ function renderOverview(data) {
     ? data.players.map((player) => dataItem(player.name, `${player.ping}ms`, player.world)).join('') || `<p class="mutedState">${esc(t('players.none'))}</p>`
     : `<p class="mutedState">${esc(t('players.loginRequired'))}</p>`;
 
-  $('pluginList').innerHTML = data.plugins
-    ? data.plugins.map((plugin) => pluginLine(plugin, Boolean(data.session?.admin))).join('')
+  const pluginSearch = $('pluginSearch');
+  const pluginFilter = $('pluginFilter');
+  const pluginQuery = pluginSearch ? pluginSearch.value.trim().toLowerCase() : '';
+  const pluginFilterValue = pluginFilter ? pluginFilter.value : 'all';
+  const filteredPlugins = data.plugins
+    ? data.plugins.filter((plugin) => pluginMatches(plugin, pluginQuery, pluginFilterValue))
+    : null;
+  if ($('pluginSummary')) {
+    $('pluginSummary').textContent = data.plugins ? pluginSummaryLine(data.plugins) : '';
+  }
+  if ($('pluginReleaseReadiness')) {
+    $('pluginReleaseReadiness').innerHTML = data.plugins ? pluginReadinessPanel(data.plugins) : '';
+    $('pluginReleaseReadiness').classList.toggle('mutedState', !data.plugins);
+  }
+  $('pluginList').innerHTML = filteredPlugins
+    ? filteredPlugins.map((plugin) => pluginLine(plugin, Boolean(data.session?.admin))).join('') || `<p class="mutedState">${esc(t('plugins.empty'))}</p>`
     : `<p class="mutedState">${esc(t('plugins.loginRequired'))}</p>`;
   $('pluginList').classList.toggle('mutedState', !data.plugins);
   if ($('pluginCountBadge')) {
-    $('pluginCountBadge').textContent = data.plugins ? t('plugins.count', { count: data.plugins.length }) : '--';
+    $('pluginCountBadge').textContent = filteredPlugins ? t('plugins.count', { count: filteredPlugins.length }) : '--';
   }
   if (data.plugins) state.plugins = data.plugins;
 }
@@ -1370,6 +1570,9 @@ function renderWebSettings(settings) {
   $('authGuiEnabled').checked = Boolean(settings.authGuiEnabled);
   $('authOpenGuiOnJoin').checked = Boolean(settings.authOpenGuiOnJoin);
   $('authMinimumPasswordLength').value = settings.authMinimumPasswordLength ?? '';
+  $('authLoginTimeoutSeconds').value = settings.authLoginTimeoutSeconds ?? '';
+  $('authMaxLoginAttempts').value = settings.authMaxLoginAttempts ?? '';
+  $('authLockoutSeconds').value = settings.authLockoutSeconds ?? '';
   $('authRegistrationUrl').value = settings.authRegistrationUrl || '';
   $('webCorsEnabled').checked = Boolean(settings.corsEnabled);
   $('webCorsAllowOrigin').value = settings.corsAllowOrigin || '*';
@@ -1494,6 +1697,7 @@ function renderAiSettings(settings) {
   $('aiFakePlayersAllowPlacing').checked = Boolean(settings.fakePlayersAllowPlacing);
   $('aiFakePlayersAllowInteraction').checked = Boolean(settings.fakePlayersAllowInteraction);
   $('aiFakePlayersChatControlEnabled').checked = Boolean(settings.fakePlayersChatControlEnabled);
+  $('aiFakePlayersChatControlAmbientEnabled').checked = Boolean(settings.fakePlayersChatControlAmbientEnabled);
   $('aiFakePlayersChatControlPrefix').value = settings.fakePlayersChatControlPrefix || '';
   $('aiFakePlayersChatControlCooldownSeconds').value = settings.fakePlayersChatControlCooldownSeconds ?? '';
   $('aiFakePlayersChatControlRequirePermission').checked = Boolean(settings.fakePlayersChatControlRequirePermission);
@@ -1969,6 +2173,9 @@ function bindEvents() {
       authGuiEnabled: String($('authGuiEnabled').checked),
       authOpenGuiOnJoin: String($('authOpenGuiOnJoin').checked),
       authMinimumPasswordLength: $('authMinimumPasswordLength').value,
+      authLoginTimeoutSeconds: $('authLoginTimeoutSeconds').value,
+      authMaxLoginAttempts: $('authMaxLoginAttempts').value,
+      authLockoutSeconds: $('authLockoutSeconds').value,
       authRegistrationUrl: $('authRegistrationUrl').value,
       corsEnabled: String($('webCorsEnabled').checked),
       corsAllowOrigin: $('webCorsAllowOrigin').value,
@@ -2089,6 +2296,7 @@ function bindEvents() {
       fakePlayersAllowPlacing: String($('aiFakePlayersAllowPlacing').checked),
       fakePlayersAllowInteraction: String($('aiFakePlayersAllowInteraction').checked),
       fakePlayersChatControlEnabled: String($('aiFakePlayersChatControlEnabled').checked),
+      fakePlayersChatControlAmbientEnabled: String($('aiFakePlayersChatControlAmbientEnabled').checked),
       fakePlayersChatControlPrefix: $('aiFakePlayersChatControlPrefix').value,
       fakePlayersChatControlCooldownSeconds: $('aiFakePlayersChatControlCooldownSeconds').value,
       fakePlayersChatControlRequirePermission: String($('aiFakePlayersChatControlRequirePermission').checked),
@@ -2153,6 +2361,13 @@ function bindEvents() {
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));
     }
+  });
+
+  $('pluginSearch').addEventListener('input', () => {
+    if (state.lastData) renderOverview(state.lastData);
+  });
+  $('pluginFilter').addEventListener('change', () => {
+    if (state.lastData) renderOverview(state.lastData);
   });
 
   $('pluginList').addEventListener('click', async (event) => {

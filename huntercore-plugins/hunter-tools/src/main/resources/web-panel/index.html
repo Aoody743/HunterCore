@@ -179,6 +179,19 @@
         <span id="pluginCountBadge" class="roleBadge">--</span>
       </div>
       <section class="panel pluginWorkspace">
+        <div id="pluginReleaseReadiness" class="pluginReadiness mutedState"></div>
+        <div id="pluginSummary" class="pluginSummary"></div>
+        <div class="pluginToolbar">
+          <input id="pluginSearch" type="search" placeholder="Search plugins" data-i18n-placeholder="plugins.search">
+          <select id="pluginFilter" aria-label="Plugin filter">
+            <option value="all" data-i18n="plugins.filter.all">All</option>
+            <option value="enabled" data-i18n="plugins.filter.enabled">Enabled</option>
+            <option value="disabled" data-i18n="plugins.filter.disabled">Disabled</option>
+            <option value="installed" data-i18n="plugins.filter.installed">Installed only</option>
+            <option value="protected" data-i18n="plugins.filter.protected">Protected</option>
+            <option value="actionable" data-i18n="plugins.filter.actionable">Actionable</option>
+          </select>
+        </div>
         <div id="pluginList" class="pluginGrid mutedState" data-i18n="plugins.loginRequired">Login to view plugin detail.</div>
       </section>
     </section>
@@ -413,6 +426,9 @@
             <label class="checkLine"><input id="authGuiEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.guiEnabled">Login GUI</span></label>
             <label class="checkLine"><input id="authOpenGuiOnJoin" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.openGuiOnJoin">Open GUI on join</span></label>
             <input id="authMinimumPasswordLength" form="webSettingsForm" inputmode="numeric" placeholder="4" data-i18n-placeholder="auth.minimumPasswordLength">
+            <input id="authLoginTimeoutSeconds" form="webSettingsForm" inputmode="numeric" placeholder="90" data-i18n-placeholder="auth.loginTimeoutSeconds">
+            <input id="authMaxLoginAttempts" form="webSettingsForm" inputmode="numeric" placeholder="5" data-i18n-placeholder="auth.maxLoginAttempts">
+            <input id="authLockoutSeconds" form="webSettingsForm" inputmode="numeric" placeholder="60" data-i18n-placeholder="auth.lockoutSeconds">
             <input id="authRegistrationUrl" form="webSettingsForm" placeholder="https://panel.example.com/#register" data-i18n-placeholder="auth.registrationUrl">
             <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
           </div>
@@ -551,6 +567,7 @@
             <label class="checkLine"><input id="aiFakePlayersAllowPlacing" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersPlacing">allow placing</span></label>
             <label class="checkLine"><input id="aiFakePlayersAllowInteraction" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersInteraction">allow interaction</span></label>
             <label class="checkLine"><input id="aiFakePlayersChatControlEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersChatControl">chat control</span></label>
+            <label class="checkLine"><input id="aiFakePlayersChatControlAmbientEnabled" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersAmbientChat">ambient chat response</span></label>
             <input id="aiFakePlayersChatControlPrefix" form="aiSettingsForm" placeholder="@bot" data-i18n-placeholder="ai.fakePlayersChatPrefix">
             <input id="aiFakePlayersChatControlCooldownSeconds" form="aiSettingsForm" inputmode="numeric" placeholder="3" data-i18n-placeholder="ai.fakePlayersChatCooldown">
             <label class="checkLine"><input id="aiFakePlayersChatControlRequirePermission" form="aiSettingsForm" type="checkbox"> <span data-i18n="ai.fakePlayersChatPermissionRequired">require permission</span></label>

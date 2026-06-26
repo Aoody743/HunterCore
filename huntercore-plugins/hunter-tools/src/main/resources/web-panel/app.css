@@ -517,9 +517,26 @@ small {
 }
 
 .chatLine strong {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.chatLine strong small {
+  flex: 0 0 auto;
+  min-width: 38px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  letter-spacing: .02em;
 }
 
 .chatLine span {
@@ -528,6 +545,24 @@ small {
 
 .chatLine[data-source="web"] strong {
   color: var(--accent);
+}
+
+.chatLine[data-source="web"] strong small {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.chatLine[data-source="ai"] strong,
+.chatLine[data-source="ai-npc"] strong,
+.chatLine[data-source="ai-fake-player"] strong {
+  color: #9ad7ff;
+}
+
+.chatLine[data-source="ai"] strong small,
+.chatLine[data-source="ai-npc"] strong small,
+.chatLine[data-source="ai-fake-player"] strong small {
+  background: rgba(92, 184, 255, .18);
+  color: #9ad7ff;
 }
 
 .chatForm {
@@ -1130,6 +1165,61 @@ textarea {
   min-height: calc(100svh - var(--chrome-space) - 120px);
 }
 
+.pluginReadiness {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.pluginReadinessHead,
+.pluginReadinessCard {
+  border: 1px solid rgba(255, 255, 255, 0.44);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.16);
+  padding: 10px 12px;
+}
+
+.pluginReadinessHead,
+.pluginReadinessCard summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pluginReadinessCard p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.okText {
+  color: var(--ok);
+}
+
+.warningText {
+  color: var(--warning);
+}
+
+.pluginSummary {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.pluginToolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.pluginToolbar input,
+.pluginToolbar select {
+  min-height: 42px;
+}
+
 .pluginGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1209,6 +1299,39 @@ textarea {
 .pluginTop > span {
   color: var(--ink);
   font-weight: 720;
+}
+
+.pluginRisk {
+  position: relative;
+  z-index: 1;
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.pluginDetails {
+  position: relative;
+  z-index: 1;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.pluginDetails dl {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 4px 8px;
+  margin: 8px 0 0;
+}
+
+.pluginDetails dt {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.pluginDetails dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .pluginActions {

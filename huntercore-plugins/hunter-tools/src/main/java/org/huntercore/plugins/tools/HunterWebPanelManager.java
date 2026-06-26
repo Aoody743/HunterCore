@@ -68,6 +68,7 @@ import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.PluginDescriptionFile;
 
 final class HunterWebPanelManager {
     private static final String SESSION_COOKIE = "HCSESSION";
@@ -154,6 +155,14 @@ final class HunterWebPanelManager {
             return;
         }
         this.addChatLine(player.getName(), "game", message);
+    }
+
+    void observeSyntheticChat(final String sender, final String source, final String rawMessage) {
+        final String message = rawMessage == null ? "" : rawMessage.trim();
+        if (message.isBlank()) {
+            return;
+        }
+        this.addChatLine(sender, source, message);
     }
 
     String addressLine() {
@@ -817,17 +826,37 @@ final class HunterWebPanelManager {
         final boolean loaded = installedPlugin != null;
         final boolean enabled = installedPlugin != null && installedPlugin.isEnabled();
         final boolean protectedPlugin = this.protectedPlugin(name);
+        final PluginDescriptionFile description = installedPlugin == null ? null : installedPlugin.getDescription();
+        final long fileSize = scan == null ? -1L : safeFileSize(scan.path());
+        final String risk = protectedPlugin ? "protected" : !loaded ? "restart" : "runtime";
         json.append('{');
         field(json, "name", name).append(',');
         field(json, "version", version).append(',');
         field(json, "sourceJar", scan == null ? "" : scan.path().getFileName().toString()).append(',');
         field(json, "descriptor", scan == null ? "" : scan.metadata().descriptor()).append(',');
+        field(json, "main", scan == null ? (description == null ? "" : description.getMain()) : scan.metadata().main()).append(',');
+        field(json, "description", description == null ? "" : description.getDescription()).append(',');
+        field(json, "website", description == null ? "" : description.getWebsite()).append(',');
+        field(json, "apiVersion", description == null ? "" : description.getAPIVersion()).append(',');
+        field(json, "risk", risk).append(',');
         field(json, "status", loaded ? (enabled ? "enabled" : "disabled") : "installed").append(',');
         booleanField(json, "loaded", loaded).append(',');
         booleanField(json, "enabled", enabled).append(',');
         booleanField(json, "controllable", !protectedPlugin).append(',');
-        booleanField(json, "updateable", !protectedPlugin);
+        booleanField(json, "updateable", !protectedPlugin).append(',');
+        numberField(json, "fileSizeBytes", fileSize).append(',');
+        json.append("\"authors\":").append(stringArrayJson(description == null ? List.of() : description.getAuthors())).append(',');
+        json.append("\"dependencies\":").append(stringArrayJson(description == null ? List.of() : description.getDepend())).append(',');
+        json.append("\"softDependencies\":").append(stringArrayJson(description == null ? List.of() : description.getSoftDepend()));
         json.append('}');
+    }
+
+    private static long safeFileSize(final Path path) {
+        try {
+            return Files.size(path);
+        } catch (final IOException ignored) {
+            return -1L;
+        }
     }
 
     private String actorDetailsJson() {
@@ -924,6 +953,9 @@ final class HunterWebPanelManager {
         booleanField(json, "authGuiEnabled", this.preferences.booleanValue("modules.auth.gui-enabled", true)).append(',');
         booleanField(json, "authOpenGuiOnJoin", this.preferences.booleanValue("modules.auth.open-gui-on-join", true)).append(',');
         numberField(json, "authMinimumPasswordLength", this.preferences.intValue("modules.auth.minimum-password-length", 4)).append(',');
+        numberField(json, "authLoginTimeoutSeconds", this.preferences.intValue("modules.auth.login-timeout-seconds", 90)).append(',');
+        numberField(json, "authMaxLoginAttempts", this.preferences.intValue("modules.auth.max-login-attempts", 5)).append(',');
+        numberField(json, "authLockoutSeconds", this.preferences.intValue("modules.auth.lockout-seconds", 60)).append(',');
         field(json, "authRegistrationUrl", this.preferences.stringValue("modules.auth.registration-url", "")).append(',');
         booleanField(json, "corsEnabled", this.preferences.booleanValue("modules.web-panel.cors-enabled", true)).append(',');
         field(json, "corsAllowOrigin", this.preferences.stringValue("modules.web-panel.cors-allow-origin", "*")).append(',');
@@ -1057,6 +1089,7 @@ final class HunterWebPanelManager {
         numberField(json, "fakePlayersMaxPlaceDistanceBlocks", this.preferences.intValue("modules.ai.fake-players.max-place-distance-blocks", 6)).append(',');
         field(json, "fakePlayersQuickResponseMode", this.preferences.stringValue("modules.ai.fake-players.quick-response.mode", "off")).append(',');
         booleanField(json, "fakePlayersChatControlEnabled", this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true)).append(',');
+        booleanField(json, "fakePlayersChatControlAmbientEnabled", this.preferences.booleanValue("modules.ai.fake-players.chat-control.ambient-enabled", true)).append(',');
         field(json, "fakePlayersChatControlPrefix", this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot")).append(',');
         numberField(json, "fakePlayersChatControlCooldownSeconds", this.preferences.intValue("modules.ai.fake-players.chat-control.cooldown-seconds", 3)).append(',');
         booleanField(json, "fakePlayersChatControlRequirePermission", this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false)).append(',');
@@ -1317,6 +1350,7 @@ final class HunterWebPanelManager {
             return;
         }
         Bukkit.getScheduler().runTask(this.plugin, () -> Bukkit.broadcastMessage(ChatColor.AQUA + "[Web] " + ChatColor.WHITE + session.displayName() + ChatColor.GRAY + ": " + ChatColor.WHITE + message));
+        this.plugin.observeWebChat(session.displayName(), message);
         this.addChatLine(session.displayName(), "web", message);
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"chat\":" + this.chatJson() + "}");
     }
@@ -1687,6 +1721,9 @@ final class HunterWebPanelManager {
         final Boolean authGuiEnabled = parseBoolean(body.getOrDefault("authGuiEnabled", String.valueOf(this.preferences.booleanValue("modules.auth.gui-enabled", true))));
         final Boolean authOpenGuiOnJoin = parseBoolean(body.getOrDefault("authOpenGuiOnJoin", String.valueOf(this.preferences.booleanValue("modules.auth.open-gui-on-join", true))));
         final Integer authMinimumPasswordLength = parseInteger(body.getOrDefault("authMinimumPasswordLength", String.valueOf(this.preferences.intValue("modules.auth.minimum-password-length", 4))), 1, 128);
+        final Integer authLoginTimeoutSeconds = parseInteger(body.getOrDefault("authLoginTimeoutSeconds", String.valueOf(this.preferences.intValue("modules.auth.login-timeout-seconds", 90))), 0, 3600);
+        final Integer authMaxLoginAttempts = parseInteger(body.getOrDefault("authMaxLoginAttempts", String.valueOf(this.preferences.intValue("modules.auth.max-login-attempts", 5))), 1, 100);
+        final Integer authLockoutSeconds = parseInteger(body.getOrDefault("authLockoutSeconds", String.valueOf(this.preferences.intValue("modules.auth.lockout-seconds", 60))), 1, 86400);
         final String authRegistrationUrl = body.getOrDefault("authRegistrationUrl", this.preferences.stringValue("modules.auth.registration-url", "")).trim();
         final Boolean corsEnabled = parseBoolean(body.getOrDefault("corsEnabled", String.valueOf(this.preferences.booleanValue("modules.web-panel.cors-enabled", true))));
         final String corsAllowOrigin = body.getOrDefault("corsAllowOrigin", this.preferences.stringValue("modules.web-panel.cors-allow-origin", "*")).trim();
@@ -1751,6 +1788,9 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.auth.gui-enabled", authGuiEnabled);
         this.preferences.setValue("modules.auth.open-gui-on-join", authOpenGuiOnJoin);
         this.preferences.setValue("modules.auth.minimum-password-length", authMinimumPasswordLength);
+        this.preferences.setValue("modules.auth.login-timeout-seconds", authLoginTimeoutSeconds);
+        this.preferences.setValue("modules.auth.max-login-attempts", authMaxLoginAttempts);
+        this.preferences.setValue("modules.auth.lockout-seconds", authLockoutSeconds);
         this.preferences.setValue("modules.auth.registration-url", authRegistrationUrl);
         this.preferences.setValue("modules.web-panel.cors-enabled", corsEnabled);
         this.preferences.setValue("modules.web-panel.cors-allow-origin", corsAllowOrigin);
@@ -1861,6 +1901,7 @@ final class HunterWebPanelManager {
         final Boolean fakePlayersAllowPlacing = parseBoolean(body.getOrDefault("fakePlayersAllowPlacing", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.allow-placing", true))));
         final Boolean fakePlayersAllowInteraction = parseBoolean(body.getOrDefault("fakePlayersAllowInteraction", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.allow-interaction", true))));
         final Boolean fakePlayersChatControlEnabled = parseBoolean(body.getOrDefault("fakePlayersChatControlEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true))));
+        final Boolean fakePlayersChatControlAmbientEnabled = parseBoolean(body.getOrDefault("fakePlayersChatControlAmbientEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.ambient-enabled", true))));
         final Boolean fakePlayersChatControlRequirePermission = parseBoolean(body.getOrDefault("fakePlayersChatControlRequirePermission", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false))));
         final String provider = body.getOrDefault("provider", "openai-compatible").trim();
         final String baseUrl = body.getOrDefault("baseUrl", this.preferences.stringValue("modules.ai.base-url", "https://api.openai.com/v1")).trim();
@@ -1905,7 +1946,7 @@ final class HunterWebPanelManager {
 
         if (enabled == null || chatEnabled == null || chatBroadcast == null || npcEnabled == null || npcAllowActions == null
             || fakePlayersEnabled == null || fakePlayersAllowMovement == null || fakePlayersAllowBreaking == null || fakePlayersAllowPlacing == null || fakePlayersAllowInteraction == null
-            || fakePlayersChatControlEnabled == null || fakePlayersChatControlRequirePermission == null
+            || fakePlayersChatControlEnabled == null || fakePlayersChatControlAmbientEnabled == null || fakePlayersChatControlRequirePermission == null
             || clearApiKey == null || temperature == null || maxTokens == null || timeoutSeconds == null || chatCooldown == null
             || npcCooldown == null || npcRadius == null || fakePlayersInterval == null || fakePlayersMaxActions == null
             || fakePlayersMaxMoveTicks == null || fakePlayersMaxActionTicks == null || fakePlayersNearbyRadius == null || fakePlayersMaxPlaceDistance == null
@@ -1959,6 +2000,7 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.ai.fake-players.max-place-distance-blocks", fakePlayersMaxPlaceDistance);
         this.preferences.setValue("modules.ai.fake-players.quick-response.mode", fakePlayersQuickResponseMode);
         this.preferences.setValue("modules.ai.fake-players.chat-control.enabled", fakePlayersChatControlEnabled);
+        this.preferences.setValue("modules.ai.fake-players.chat-control.ambient-enabled", fakePlayersChatControlAmbientEnabled);
         this.preferences.setValue("modules.ai.fake-players.chat-control.trigger-prefix", fakePlayersChatControlPrefix);
         this.preferences.setValue("modules.ai.fake-players.chat-control.cooldown-seconds", fakePlayersChatControlCooldown);
         this.preferences.setValue("modules.ai.fake-players.chat-control.require-permission", fakePlayersChatControlRequirePermission);
@@ -2949,17 +2991,29 @@ final class HunterWebPanelManager {
         if (cleanMessage.isBlank()) {
             return;
         }
+        final String cleanSource = normalizeChatSource(source);
         synchronized (this.chatLines) {
             this.chatLines.addLast(new WebChatLine(
                 System.currentTimeMillis(),
                 plainChatMessage(sender).isBlank() ? "unknown" : plainChatMessage(sender),
-                source == null || source.isBlank() ? "game" : source,
+                cleanSource,
                 cleanMessage
             ));
             while (this.chatLines.size() > 120) {
                 this.chatLines.removeFirst();
             }
         }
+    }
+
+    private static String normalizeChatSource(final String source) {
+        if (source == null || source.isBlank()) {
+            return "game";
+        }
+        final String normalized = source.trim().toLowerCase(Locale.ROOT).replace('_', '-');
+        return switch (normalized) {
+            case "game", "web", "ai", "ai-npc", "ai-fake-player", "system" -> normalized;
+            default -> "system";
+        };
     }
 
     private static boolean containsHeaderBreak(final String value) {

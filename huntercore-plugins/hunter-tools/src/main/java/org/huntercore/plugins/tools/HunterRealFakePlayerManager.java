@@ -129,6 +129,7 @@ final class HunterRealFakePlayerManager {
         }
         final String sub = HunterToolsPreferences.normalize(args[0]);
         final String command = switch (sub) {
+            case "come", "here" -> "tphere";
             default -> sub;
         };
         if (!this.preferences.commandEnabled(MODULE, command)) {
@@ -143,7 +144,7 @@ final class HunterRealFakePlayerManager {
             case "inv", "inventory" -> this.inventory(sender, label, args);
             case "skin" -> this.skin(sender, label, args);
             case "tp" -> this.teleport(sender, label, args);
-            case "tphere" -> this.teleportHere(sender, label, args);
+            case "tphere", "come", "here" -> this.teleportHere(sender, label, args);
             case "look" -> this.look(sender, label, args);
             case "move" -> this.move(sender, label, args);
             case "sneak" -> this.toggle(sender, label, args, "sneak");
@@ -172,6 +173,8 @@ final class HunterRealFakePlayerManager {
         if (args.length == 1) {
             final List<String> commands = new ArrayList<>(HunterToolsPreferences.realFakePlayerCommands());
             commands.add("help");
+            commands.add("come");
+            commands.add("here");
             return matching(args[0], commands);
         }
         final String sub = HunterToolsPreferences.normalize(args[0]);
@@ -179,7 +182,7 @@ final class HunterRealFakePlayerManager {
             return matching(args[1], HunterToolsPreferences.realFakePlayerCommands());
         }
         if (args.length == 2 && List.of(
-            "respawn", "remove", "inv", "inventory", "skin", "tp", "tphere", "look", "move", "sneak", "sprint", "jump", "use", "attack", "stop",
+            "respawn", "remove", "inv", "inventory", "skin", "tp", "tphere", "come", "here", "look", "move", "sneak", "sprint", "jump", "use", "attack", "stop",
             "click", "drop", "dropstack", "swap", "gm", "gamemode", "slot", "ai", "info"
         ).contains(sub)) {
             return matching(args[1], this.names());
@@ -650,7 +653,7 @@ final class HunterRealFakePlayerManager {
         if (args.length == 1) {
             sender.sendMessage(ChatColor.GOLD + "HunterCore real fake players");
             sender.sendMessage("- True ServerPlayer instances: online list, chunk loading, player events and plugin visibility.");
-            sender.sendMessage("- Commands: spawn, remove, list, inv, skin, tp, tphere, look, move, sneak, sprint, jump, use, attack, stop, click, drop, dropstack, swap, gm, slot, ai, info, clear.");
+            sender.sendMessage("- Commands: spawn, remove, list, inv, skin, tp, tphere/come, look, move, sneak, sprint, jump, use, attack, stop, click, drop, dropstack, swap, gm, slot, ai, info, clear.");
             sender.sendMessage("- Dangerous OP-only mode: /" + label + " spawn <name> -aifree lets AI act autonomously and run server commands.");
             sender.sendMessage("- use/attack/jump support once, continuous, and stop. AI can drive look, move, mine, place, use, slot and toggles.");
             sender.sendMessage("- Click command placeholders: %player%, %player_uuid%, %actor%, %actor_name%, %actor_uuid%, %module%, %world%, %x%, %y%, %z%.");
@@ -794,10 +797,26 @@ final class HunterRealFakePlayerManager {
         if (message.isBlank()) {
             return;
         }
+        this.observeChatLine(player.getName(), Bukkit.isPrimaryThread() ? player.getWorld().getName() : "unknown", message);
+    }
+
+    void observeWebChat(final String sender, final String rawMessage) {
+        final String message = rawMessage == null ? "" : rawMessage.trim();
+        if (message.isBlank()) {
+            return;
+        }
+        final String author = (sender == null || sender.isBlank()) ? "web" : "web:" + sender.trim();
+        this.observeChatLine(author, "web", message);
+        if (this.preferences.booleanValue("modules.ai.fake-players.chat-control.ambient-enabled", true)) {
+            this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleWebAmbientChatControlMain(author, message));
+        }
+    }
+
+    private void observeChatLine(final String sender, final String world, final String message) {
         synchronized (this.recentChat) {
             this.recentChat.addLast(new ObservedChat(
-                player.getName(),
-                Bukkit.isPrimaryThread() ? player.getWorld().getName() : "unknown",
+                truncatePlain(sender, 48),
+                truncatePlain(world, 48),
                 truncatePlain(message, 240)
             ));
             while (this.recentChat.size() > 48) {
@@ -823,7 +842,19 @@ final class HunterRealFakePlayerManager {
         }
         final MentionedFakePlayer mentioned = this.mentionedFakePlayer(message);
         if (mentioned == null) {
-            return false;
+            if (!this.preferences.booleanValue("modules.ai.fake-players.chat-control.ambient-enabled", true)) {
+                return false;
+            }
+            if (this.service().list().isEmpty()) {
+                return false;
+            }
+            final String aiPrefix = this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai").trim();
+            if (!aiPrefix.isBlank() && message.startsWith(aiPrefix)) {
+                return false;
+            }
+            final UUID playerId = player.getUniqueId();
+            this.plugin.getServer().getScheduler().runTask(this.plugin, () -> this.handleAmbientChatControlMain(playerId, message));
+            return true;
         }
         final String body = mentioned.snapshot().name() + " " + mentioned.task();
         final UUID playerId = player.getUniqueId();
@@ -967,6 +998,69 @@ final class HunterRealFakePlayerManager {
         this.assignChatTask(player, targetTask.snapshot(), targetTask.task());
     }
 
+    private void handleAmbientChatControlMain(final UUID playerId, final String body) {
+        final Player player = Bukkit.getPlayer(playerId);
+        if (player == null || body == null || body.isBlank()) {
+            return;
+        }
+        if (!this.preferences.moduleEnabled(MODULE)
+            || !this.preferences.moduleEnabled("ai")
+            || !this.preferences.booleanValue("modules.ai.fake-players.enabled", true)
+            || this.service().list().isEmpty()) {
+            return;
+        }
+        if (this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false)) {
+            final String permission = this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer").trim();
+            if (!permission.isBlank() && !player.hasPermission(permission)) {
+                return;
+            }
+        }
+        final long waitMillis = this.chatControlCooldown(player.getUniqueId().toString());
+        if (waitMillis > 0L) {
+            return;
+        }
+        final TargetTask targetTask = this.targetTask(player, body);
+        if (targetTask == null || targetTask.task().isBlank()) {
+            return;
+        }
+        this.assignChatTask(player, targetTask.snapshot(), targetTask.task());
+    }
+
+    private void handleWebAmbientChatControlMain(final String sender, final String body) {
+        if (body == null || body.isBlank()
+            || !this.preferences.moduleEnabled(MODULE)
+            || !this.preferences.moduleEnabled("ai")
+            || !this.preferences.booleanValue("modules.ai.fake-players.enabled", true)
+            || this.service().list().isEmpty()) {
+            return;
+        }
+        final String normalized = HunterToolsPreferences.normalize(firstValue(body));
+        if (normalized.equals("stop")) {
+            final String target = body.substring(Math.min(body.length(), firstValue(body).length())).trim();
+            if (target.isBlank() || HunterToolsPreferences.normalize(target).equals("all")) {
+                for (final FakePlayerSnapshot snapshot : this.service().list()) {
+                    this.stopAi(snapshot.id());
+                    this.stopLoops(snapshot.name());
+                    this.service().stopActions(snapshot.name());
+                }
+                return;
+            }
+        }
+        if (normalized.equals("all")) {
+            final String task = body.substring(Math.min(body.length(), firstValue(body).length())).trim();
+            if (!task.isBlank()) {
+                for (final FakePlayerSnapshot snapshot : this.service().list()) {
+                    this.assignExternalChatTask(sender, snapshot, task);
+                }
+            }
+            return;
+        }
+        final TargetTask targetTask = this.targetTask(null, body);
+        if (targetTask != null && !targetTask.task().isBlank()) {
+            this.assignExternalChatTask(sender, targetTask.snapshot(), targetTask.task());
+        }
+    }
+
     private void handleChatStop(final Player player, final String target) {
         if (target.isBlank() || HunterToolsPreferences.normalize(target).equals("all")) {
             for (final FakePlayerSnapshot snapshot : this.service().list()) {
@@ -1002,6 +1096,10 @@ final class HunterRealFakePlayerManager {
             return null;
         }
         if (snapshots.size() == 1) {
+            return new TargetTask(snapshots.getFirst(), body);
+        }
+        if (player == null) {
+            snapshots.sort((left, right) -> left.name().compareToIgnoreCase(right.name()));
             return new TargetTask(snapshots.getFirst(), body);
         }
         FakePlayerSnapshot nearest = null;
@@ -1044,6 +1142,7 @@ final class HunterRealFakePlayerManager {
             + " pitch=" + format(location.getPitch()) + "\n"
             + quickLine
             + "Recent chat:\n" + this.recentChatContext() + "\n"
+            + "If the player is only having casual conversation, reply with one short [say:...] and do not perform physical work. If the message asks for help, movement, mining, building, combat, inventory, or other work, perform useful actions.\n"
             + "Behave like a cooperative Minecraft helper. For follow/come tasks use [follow:player=" + player.getName() + ",ticks=200]. "
             + "For travel tasks use [goto:x y z,ticks=200]. For mining or tool work, look at the target and use [mine:ticks=40] or [use]. "
             + "For building use exactly one preset action: [build-house], [build-cabin], [build-cottage], [build-barn], [build-greenhouse], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-rope-bridge], [build-wall], [build-platform], [build-dock], [build-well], [build-camp], [build-mine], [build-market], [build-gate], [build-road], or [build-windmill]. Use [clear-build] to dismantle the latest build. Do not combine build/worldedit/place in the same reply. "
@@ -1065,6 +1164,43 @@ final class HunterRealFakePlayerManager {
         this.startAiLoop(fake.id());
         this.requestAi(fake.id(), true);
         this.aiLastActions.put(fake.id(), "assigned by " + player.getName() + ": " + truncatePlain(task, 80));
+    }
+
+    private void assignExternalChatTask(final String sender, final FakePlayerSnapshot fake, final String task) {
+        final String controller = (sender == null || sender.isBlank()) ? "web" : sender;
+        final String key = "external:" + controller + ":" + fake.id() + ":" + HunterToolsPreferences.normalize(task).replaceAll("\\s+", " ").trim();
+        final long now = System.currentTimeMillis();
+        this.recentChatTaskFingerprints.entrySet().removeIf(entry -> now - entry.getValue() > 30_000L);
+        final Long previous = this.recentChatTaskFingerprints.put(key, now);
+        if (previous != null && now - previous < 15_000L) {
+            this.aiLastActions.put(fake.id(), "ignored duplicate web chat task: " + truncatePlain(task, 80));
+            return;
+        }
+        final Location location = fake.location();
+        final String goal = "Web chat from " + controller + " is visible to this real fake player: " + sanitizeGoal(task) + "\n"
+            + "Fake player location: world=" + (location.getWorld() == null ? "unknown" : location.getWorld().getName())
+            + " x=" + format(location.getX())
+            + " y=" + format(location.getY())
+            + " z=" + format(location.getZ())
+            + " yaw=" + format(location.getYaw())
+            + " pitch=" + format(location.getPitch()) + "\n"
+            + "Recent chat:\n" + this.recentChatContext() + "\n"
+            + "If this is casual conversation, reply with one short [say:...] and do not perform physical work. If it asks for help, movement, mining, building, combat, inventory, or other work, perform useful actions. "
+            + "For travel use [goto:x y z,ticks=200] or [follow:player=name,ticks=200] when a player is named. For building, use exactly one build/worldedit/place action. Never explain reasoning.";
+        this.aiLastResponseFingerprints.remove(fake.id());
+        this.aiProfiles.put(fake.id(), new FakeAiProfile(
+            fake.id(),
+            fake.name(),
+            true,
+            goal,
+            null,
+            controller,
+            0L,
+            1
+        ));
+        this.startAiLoop(fake.id());
+        this.requestAi(fake.id(), true);
+        this.aiLastActions.put(fake.id(), "web chat by " + controller + ": " + truncatePlain(task, 80));
     }
 
     private boolean chatTaskRecentlyHandled(final Player player, final FakePlayerSnapshot fake, final String task) {
@@ -2535,6 +2671,7 @@ final class HunterRealFakePlayerManager {
             return "suppressed duplicate say";
         }
         Bukkit.broadcastMessage("<" + snapshot.get().name() + "> " + message);
+        this.plugin.publishSyntheticChat(snapshot.get().name(), "ai-fake-player", message);
         return "say";
     }
 
@@ -4521,7 +4658,7 @@ final class HunterRealFakePlayerManager {
 
     private static String defaultFakeAiPrompt() {
         return "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines. Never write prose, reasoning, translations, summaries, or chain-of-thought. "
-            + "Execute the player's intent immediately. Prefer 1-3 actions per turn unless equipping full armor. "
+            + "Execute the player's intent immediately. If the visible chat is only casual conversation, answer naturally with a short [say:...] and do not perform physical work. Prefer 1-3 actions per turn unless equipping full armor. "
             + "Available actions: [respawn], [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], "
             + "[move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], "
             + "[follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], "
