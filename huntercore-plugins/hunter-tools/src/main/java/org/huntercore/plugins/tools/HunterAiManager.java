@@ -312,6 +312,7 @@ final class HunterAiManager {
             if (this.repeatedAiLine("chat:" + profile.id(), response, 45_000L)) {
                 return;
             }
+            this.plugin.publishSyntheticChat(profile.displayName(), "ai", response);
             if (this.preferences.booleanValue("modules.ai.chat.broadcast", true)) {
                 for (final Player online : Bukkit.getOnlinePlayers()) {
                     this.sendLines(online, rendered);
@@ -361,6 +362,7 @@ final class HunterAiManager {
             .replace("%actor%", actor.id())
             .replace("%player%", player.getName())
             .replace("%response%", text));
+        this.plugin.publishSyntheticChat(actor.displayName(), "ai-npc", text);
         for (final Player receiver : this.npcReceivers(player, entity)) {
             this.sendLines(receiver, line);
         }

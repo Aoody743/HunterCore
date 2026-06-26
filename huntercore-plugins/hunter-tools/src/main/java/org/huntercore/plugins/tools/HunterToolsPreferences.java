@@ -525,6 +525,7 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.max-place-distance-blocks", 6);
         changed |= this.setDefault("modules.ai.fake-players.worldedit.max-volume-blocks", 8192);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.enabled", true);
+        changed |= this.setDefault("modules.ai.fake-players.chat-control.ambient-enabled", true);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.trigger-prefix", "@bot");
         changed |= this.setDefault("modules.ai.fake-players.chat-control.cooldown-seconds", 3);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.require-permission", false);
@@ -544,6 +545,9 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.auth.gui-enabled", true);
         changed |= this.setDefault("modules.auth.open-gui-on-join", true);
         changed |= this.setDefault("modules.auth.minimum-password-length", 4);
+        changed |= this.setDefault("modules.auth.login-timeout-seconds", 90);
+        changed |= this.setDefault("modules.auth.max-login-attempts", 5);
+        changed |= this.setDefault("modules.auth.lockout-seconds", 60);
         changed |= this.setDefault("modules.auth.registration-url", "");
         changed |= this.setDefault("modules.web-panel.enabled", true);
         changed |= this.setDefault("modules.web-panel.bind-address", "127.0.0.1");

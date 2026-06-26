@@ -765,7 +765,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length == 0) {
-            this.sendHelp(sender, "admin");
+            this.sendAdminUsage(sender);
             return true;
         }
         final String sub = args[0].toLowerCase(Locale.ROOT);
@@ -787,10 +787,23 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "web" -> this.adminWeb(sender, args);
             case "ai" -> this.adminAi(sender, args);
             default -> {
-                this.sendHelp(sender, "admin");
+                this.sendAdminUsage(sender);
                 yield true;
             }
         };
+    }
+
+    private void sendAdminUsage(final CommandSender sender) {
+        sender.sendMessage(ChatColor.YELLOW + this.text("可用 HunterCore 管理指令：", "Available HunterCore admin commands:"));
+        this.sendUsage(sender, "/hc admin reload", "重载 HunterCore 偏好和网页面板。", "Reloads HunterCore preferences and the web panel.");
+        this.sendUsage(sender, "/hc admin modules", "列出模块状态。", "Lists module states.");
+        this.sendUsage(sender, "/hc admin module <module> <on|off>", "开启或关闭模块。", "Enables or disables a module.");
+        this.sendUsage(sender, "/hc admin command <module> <command> <on|off>", "开启或关闭模块内指令。", "Enables or disables a command inside a module.");
+        this.sendUsage(sender, "/hc admin optimize [status|mode]", "查看或保存 CPU 优化模式。", "Shows or saves the CPU optimization mode.");
+        this.sendUsage(sender, "/hc admin motd [status|line1|line2|max]", "查看或修改服务器列表 MOTD。", "Views or edits the server-list MOTD.");
+        this.sendUsage(sender, "/hc admin web [status|restart|bind|port|map|public-map|user|remove|users|allow|execution]", "管理网页面板。", "Manages the web panel.");
+        this.sendUsage(sender, "/hc admin ai [status|enable|disable|model|base-url|key|env|prefix|chat|npc|temperature|max-tokens|test]", "管理 AI 接入。", "Manages AI integration.");
+        this.sendUsage(sender, "/hc admin plugins|memory|gc|threads", "查看运行状态或执行维护操作。", "Shows runtime state or runs maintenance actions.");
     }
 
     private boolean adminReload(final CommandSender sender) {
@@ -830,7 +843,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminToggleModule(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            this.sendHelp(sender, "hc admin module");
+            this.sendModuleUsage(sender);
             return true;
         }
         final String module = HunterToolsPreferences.normalize(args[1]);
@@ -840,7 +853,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         final Boolean enabled = parseToggle(args[2]);
         if (enabled == null) {
-            sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
+            this.sendModuleUsage(sender);
             return true;
         }
         this.preferences.setModuleEnabled(module, enabled);
@@ -861,7 +874,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminToggleCommand(final CommandSender sender, final String[] args) {
         if (args.length != 4) {
-            this.sendHelp(sender, "hc admin command");
+            this.sendCommandToggleUsage(sender);
             return true;
         }
         final String module = HunterToolsPreferences.normalize(args[1]);
@@ -872,13 +885,24 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         final Boolean enabled = parseToggle(args[3]);
         if (enabled == null) {
-            sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
+            this.sendCommandToggleUsage(sender);
             return true;
         }
         this.preferences.setCommandEnabled(module, command, enabled);
         this.preferences.save(this.workerExecutor);
         sender.sendMessage(this.text("HunterCore 指令 ", "HunterCore command ") + module + "." + command + this.text(" 已设置为 ", " set to ") + enabled + ".");
         return true;
+    }
+
+    private void sendModuleUsage(final CommandSender sender) {
+        this.sendUsage(sender, "/hc admin module <module> <on|off>", "开启或关闭模块。", "Enables or disables a module.");
+        sender.sendMessage(ChatColor.GRAY + this.text("可用模块：", "Available modules: ") + ChatColor.WHITE + String.join(", ", MODULES));
+    }
+
+    private void sendCommandToggleUsage(final CommandSender sender) {
+        this.sendUsage(sender, "/hc admin command <module> <command> <on|off>", "开启或关闭模块内某条指令。", "Enables or disables one command inside a module.");
+        sender.sendMessage(ChatColor.GRAY + this.text("可切换模块：", "Toggleable modules: ") + ChatColor.WHITE + String.join(", ", List.of(ESSENTIALS, MANAGEMENT, FAKE_PLAYERS, REAL_FAKE_PLAYERS, NPCS)));
+        sender.sendMessage(ChatColor.DARK_GRAY + "Example: /hc admin command essentials heal off");
     }
 
     private boolean adminPlugins(final CommandSender sender) {
@@ -933,7 +957,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (args.length >= 2 && !args[1].equalsIgnoreCase("status")) {
             if (!validCpuMode(args[1])) {
-                sender.sendMessage("Usage: /hc admin optimize <single-thread|high-clock|high-core|multi-thread|status>");
+                this.sendOptimizeUsage(sender);
                 return true;
             }
             final String mode = normalizeCpuMode(args[1]);
@@ -962,8 +986,17 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         sender.sendMessage(ChatColor.GRAY + "Web panel workers: " + ChatColor.WHITE + this.preferences.intValue("optimizations.hunter-tools.web-panel-workers", 4));
         sender.sendMessage(ChatColor.GRAY + "Experimental region ticking: " + ChatColor.WHITE + this.preferences.booleanValue("optimizations.cpu.allow-experimental-region-ticking", false));
         sender.sendMessage(ChatColor.GRAY + "Guest status cache: " + ChatColor.WHITE + this.preferences.intValue("modules.web-panel.status-cache-millis", 1000) + "ms");
-        sender.sendMessage(ChatColor.DARK_GRAY + "Use /hc admin optimize single-thread, high-clock, high-core, or multi-thread, then restart.");
+        this.sendOptimizeUsage(sender);
         return true;
+    }
+
+    private void sendOptimizeUsage(final CommandSender sender) {
+        this.sendUsage(sender, "/hc admin optimize status", "查看当前线程和缓存配置。", "Shows current thread and cache settings.");
+        this.sendUsage(sender, "/hc admin optimize single-thread", "稳定优先，减少异步工作。", "Prioritizes stability and reduces async work.");
+        this.sendUsage(sender, "/hc admin optimize high-clock", "高主频 CPU 推荐。", "Recommended for high-clock CPUs.");
+        this.sendUsage(sender, "/hc admin optimize high-core", "高核心数 CPU 推荐。", "Recommended for high-core CPUs.");
+        this.sendUsage(sender, "/hc admin optimize multi-thread", "更激进地使用多线程。", "Uses multi-threading more aggressively.");
+        sender.sendMessage(ChatColor.DARK_GRAY + this.text("切换模式后建议重启服务器以完整生效。", "Restart the server after switching modes for full effect."));
     }
 
     private boolean adminMotd(final CommandSender sender, final String[] args) {
@@ -977,6 +1010,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             sender.sendMessage(ChatColor.GRAY + "Line 2: " + ChatColor.WHITE + this.preferences.stringValue("modules.motd.line-2", ""));
             sender.sendMessage(ChatColor.GRAY + "Max players: " + ChatColor.WHITE + this.preferences.intValue("modules.motd.max-players", -1));
             sender.sendMessage(ChatColor.GRAY + "Placeholders: " + ChatColor.WHITE + "%online%, %max%, %tps%, %mspt%, %version%.");
+            this.sendMotdUsage(sender);
             return true;
         }
         final String sub = HunterToolsPreferences.normalize(args[1]);
@@ -1014,8 +1048,16 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 return true;
             }
         }
-        this.sendHelp(sender, "hc admin motd");
+        this.sendMotdUsage(sender);
         return true;
+    }
+
+    private void sendMotdUsage(final CommandSender sender) {
+        this.sendUsage(sender, "/hc admin motd status", "查看当前 MOTD 配置。", "Shows the current MOTD settings.");
+        this.sendUsage(sender, "/hc admin motd line1 <text>", "设置第一行 MOTD。", "Sets the first MOTD line.");
+        this.sendUsage(sender, "/hc admin motd line2 <text>", "设置第二行 MOTD。", "Sets the second MOTD line.");
+        this.sendUsage(sender, "/hc admin motd max <number|default>", "设置服务器列表显示人数上限。", "Sets the displayed server-list player limit.");
+        sender.sendMessage(ChatColor.DARK_GRAY + "Placeholders: %online%, %max%, %tps%, %mspt%, %version%");
     }
 
     private boolean adminWeb(final CommandSender sender, final String[] args) {
@@ -1023,7 +1065,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length < 2) {
-            this.sendHelp(sender, "hc admin web");
+            this.sendWebUsage(sender);
             return true;
         }
         final String sub = args[1].toLowerCase(Locale.ROOT);
@@ -1035,6 +1077,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                     + ChatColor.GRAY + " Port: " + ChatColor.WHITE + this.preferences.intValue("modules.web-panel.port", 8088));
                 sender.sendMessage(ChatColor.GRAY + "Public map: " + ChatColor.WHITE + this.preferences.booleanValue("modules.web-panel.public-map", true)
                     + ChatColor.GRAY + " URL: " + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/"));
+                this.sendWebUsage(sender);
                 yield true;
             }
             case "restart" -> {
@@ -1066,15 +1109,29 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "allow" -> this.adminWebAllow(sender, args);
             case "execution" -> this.adminWebExecution(sender, args);
             default -> {
-                this.sendHelp(sender, "hc admin web");
+                this.sendWebUsage(sender);
                 yield true;
             }
         };
     }
 
+    private void sendWebUsage(final CommandSender sender) {
+        this.sendUsage(sender, "/hc admin web status", "查看网页面板监听和地图配置。", "Shows web-panel bind and map settings.");
+        this.sendUsage(sender, "/hc admin web restart", "重启网页面板 HTTP 服务。", "Restarts the web-panel HTTP service.");
+        this.sendUsage(sender, "/hc admin web bind <address>", "设置监听地址，例如 127.0.0.1 或 0.0.0.0。", "Sets the bind address, for example 127.0.0.1 or 0.0.0.0.");
+        this.sendUsage(sender, "/hc admin web port <port>", "设置网页端口并重启面板。", "Sets the web port and restarts the panel.");
+        this.sendUsage(sender, "/hc admin web map <url>", "设置地图 URL，支持 %host%。", "Sets the map URL; %host% is supported.");
+        this.sendUsage(sender, "/hc admin web public-map <on|off>", "设置访客是否可见地图。", "Controls whether guests can see the map.");
+        this.sendUsage(sender, "/hc admin web users", "列出网页用户。", "Lists web users.");
+        this.sendUsage(sender, "/hc admin web user <name> <admin|player> <password>", "新增或更新网页用户。", "Creates or updates a web user.");
+        this.sendUsage(sender, "/hc admin web remove <name>", "删除网页用户。", "Removes a web user.");
+        this.sendUsage(sender, "/hc admin web allow <name> <inherit|none|command...>", "设置网页可执行命令。", "Sets allowed web commands.");
+        this.sendUsage(sender, "/hc admin web execution <name> <on|off>", "开关网页命令执行能力。", "Toggles web command execution.");
+    }
+
     private boolean adminWebUser(final CommandSender sender, final String[] args) {
         if (args.length != 5) {
-            this.sendHelp(sender, "hc admin web user");
+            this.sendUsage(sender, "/hc admin web user <name> <admin|player> <password>", "新增或更新网页用户。", "Creates or updates a web user.");
             return true;
         }
         final String role = HunterToolsPreferences.normalize(args[3]);
@@ -1090,7 +1147,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminWebRemove(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            this.sendHelp(sender, "hc admin web remove");
+            this.sendUsage(sender, "/hc admin web remove <name>", "删除网页用户。", "Removes a web user.");
             return true;
         }
         this.preferences.removeWebUser(args[2]);
@@ -1101,7 +1158,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminWebAllow(final CommandSender sender, final String[] args) {
         if (args.length < 4) {
-            this.sendHelp(sender, "hc admin web allow");
+            this.sendUsage(sender, "/hc admin web allow <name> <inherit|none|command...>", "设置网页用户可执行的命令。", "Sets commands that the web user may run.");
             return true;
         }
         final HunterToolsPreferences.WebUser user = this.preferences.webUser(args[2]);
@@ -1135,7 +1192,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminWebExecution(final CommandSender sender, final String[] args) {
         if (args.length != 4) {
-            this.sendHelp(sender, "hc admin web execution");
+            this.sendUsage(sender, "/hc admin web execution <name> <on|off>", "开关网页用户的命令执行能力。", "Toggles command execution for a web user.");
             return true;
         }
         if (this.preferences.webUser(args[2]) == null) {
@@ -1144,7 +1201,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         final Boolean enabled = parseToggle(args[3]);
         if (enabled == null) {
-            sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
+            this.sendUsage(sender, "/hc admin web execution <name> <on|off>", "开关网页用户的命令执行能力。", "Toggles command execution for a web user.");
             return true;
         }
         this.preferences.setWebUserCommandExecution(args[2], enabled);
@@ -1155,7 +1212,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminWebBind(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            this.sendHelp(sender, "hc admin web bind");
+            this.sendUsage(sender, "/hc admin web bind <address>", "设置网页面板监听地址。", "Sets the web-panel bind address.");
             return true;
         }
         final String bindAddress = args[2].trim();
@@ -1174,7 +1231,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminWebPort(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            this.sendHelp(sender, "hc admin web port");
+            this.sendUsage(sender, "/hc admin web port <port>", "设置网页面板端口。", "Sets the web-panel port.");
             return true;
         }
         final int port;
@@ -1199,7 +1256,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminWebMap(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            this.sendHelp(sender, "hc admin web map");
+            this.sendUsage(sender, "/hc admin web map <url>", "设置网页面板地图地址。", "Sets the web-panel map URL.");
             return true;
         }
         final String mapUrl = args[2].trim();
@@ -1215,12 +1272,12 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean adminWebPublicMap(final CommandSender sender, final String[] args) {
         if (args.length != 3) {
-            this.sendHelp(sender, "hc admin web public-map");
+            this.sendUsage(sender, "/hc admin web public-map <on|off>", "设置访客是否可以看到地图。", "Controls whether guests can see the map.");
             return true;
         }
         final Boolean enabled = parseToggle(args[2]);
         if (enabled == null) {
-            sender.sendMessage(this.text("请使用 on/off。", "Use on/off."));
+            this.sendUsage(sender, "/hc admin web public-map <on|off>", "设置访客是否可以看到地图。", "Controls whether guests can see the map.");
             return true;
         }
         this.preferences.setValue("modules.web-panel.public-map", enabled);
@@ -1243,6 +1300,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 + ChatColor.GRAY + " prefix " + ChatColor.WHITE + this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai"));
             sender.sendMessage(ChatColor.GRAY + "NPC: " + ChatColor.WHITE + this.preferences.booleanValue("modules.ai.npc.enabled", true)
                 + ChatColor.GRAY + " actions " + ChatColor.WHITE + this.preferences.booleanValue("modules.ai.npc.allow-actions", true));
+            this.sendAdminAiUsage(sender);
             return true;
         }
 
@@ -1262,7 +1320,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "model" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 128) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai model <model>", "设置发送给 OpenAI-compatible 服务的模型名称。", "Sets the model name sent to the OpenAI-compatible provider.");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.model", args[2].trim());
@@ -1272,7 +1330,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "base-url", "baseurl", "url" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 512) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai base-url <url>", "设置 API Base URL，例如 https://api.openai.com/v1。", "Sets the API base URL, for example https://api.openai.com/v1.");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.base-url", args[2].trim());
@@ -1282,7 +1340,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "key", "api-key" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 512) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai key <api-key>", "保存 AI API Key；网页面板不会回显完整密钥。", "Saves the AI API key; the web panel will not echo the full key.");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.api-key", args[2].trim());
@@ -1298,7 +1356,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "env", "api-key-env" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 128) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai env <ENV_NAME>", "设置未保存密钥时读取的环境变量名。", "Sets the environment variable used when no key is stored.");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.api-key-env", args[2].trim());
@@ -1308,7 +1366,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "prefix" -> {
                 if (args.length != 3 || args[2].isBlank() || args[2].length() > 32) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai prefix <prefix>", "设置聊天 AI 触发前缀，例如 @ai。", "Sets the chat AI trigger prefix, for example @ai.");
                     return true;
                 }
                 this.preferences.setValue("modules.ai.chat.trigger-prefix", args[2].trim());
@@ -1318,7 +1376,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "chat", "npc" -> {
                 if (args.length != 3) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai " + sub + " <on|off>", "开启或关闭指定 AI 通道。", "Enables or disables the selected AI channel.");
                     return true;
                 }
                 final Boolean enabled = parseToggle(args[2]);
@@ -1333,7 +1391,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "temperature" -> {
                 if (args.length != 3) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai temperature <0.0-2.0>", "设置 AI 输出随机性，数值越低越稳定。", "Sets AI response randomness; lower values are more deterministic.");
                     return true;
                 }
                 try {
@@ -1352,7 +1410,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "max-tokens", "maxtokens" -> {
                 if (args.length != 3) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai max-tokens <16-4096>", "设置单次 AI 回复的最大 token 数。", "Sets the maximum token count for one AI response.");
                     return true;
                 }
                 try {
@@ -1371,7 +1429,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
             case "test" -> {
                 if (args.length < 3) {
-                    this.sendHelp(sender, "hc admin ai");
+                    this.sendUsage(sender, "/hc admin ai test <prompt>", "发送一次测试请求给当前 AI 配置。", "Sends a test request using the current AI settings.");
                     return true;
                 }
                 final String prompt = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)).trim();
@@ -1386,10 +1444,25 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 return true;
             }
             default -> {
-                this.sendHelp(sender, "hc admin ai");
+                this.sendAdminAiUsage(sender);
                 return true;
             }
         }
+    }
+
+    private void sendAdminAiUsage(final CommandSender sender) {
+        sender.sendMessage(ChatColor.YELLOW + this.text("可用 AI 管理指令：", "Available AI admin commands:"));
+        this.sendUsage(sender, "/hc admin ai status", "查看当前 AI 配置。", "Shows the current AI configuration.");
+        this.sendUsage(sender, "/hc admin ai enable|disable", "开启或关闭 AI 模块。", "Enables or disables the AI module.");
+        this.sendUsage(sender, "/hc admin ai model <model>", "设置模型名称。", "Sets the model name.");
+        this.sendUsage(sender, "/hc admin ai base-url <url>", "设置 OpenAI-compatible Base URL。", "Sets the OpenAI-compatible base URL.");
+        this.sendUsage(sender, "/hc admin ai key <api-key> | clear-key", "保存或清除 API Key。", "Saves or clears the API key.");
+        this.sendUsage(sender, "/hc admin ai env <ENV_NAME>", "设置环境变量密钥来源。", "Sets the environment variable key source.");
+        this.sendUsage(sender, "/hc admin ai prefix <prefix>", "设置聊天触发前缀。", "Sets the chat trigger prefix.");
+        this.sendUsage(sender, "/hc admin ai chat|npc <on|off>", "开启或关闭聊天/NPC AI。", "Enables or disables chat/NPC AI.");
+        this.sendUsage(sender, "/hc admin ai temperature <0.0-2.0>", "调整输出随机性。", "Adjusts output randomness.");
+        this.sendUsage(sender, "/hc admin ai max-tokens <16-4096>", "调整回复长度上限。", "Adjusts the response length limit.");
+        this.sendUsage(sender, "/hc admin ai test <prompt>", "发送测试请求。", "Sends a test request.");
     }
 
     private boolean heal(final CommandSender sender, final String[] args) {
@@ -1898,10 +1971,25 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return matching(args[2], List.of("on", "off"));
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("model")) {
-            return matching(args[2], List.of("gpt-4o-mini", "gpt-4.1-mini"));
+            return matching(args[2], List.of("gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "o4-mini"));
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("base-url") || args[1].equalsIgnoreCase("url"))) {
-            return matching(args[2], List.of("https://api.openai.com/v1"));
+            return matching(args[2], List.of("https://api.openai.com/v1", "http://127.0.0.1:11434/v1"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("env") || args[1].equalsIgnoreCase("api-key-env"))) {
+            return matching(args[2], List.of("OPENAI_API_KEY", "HUNTERCORE_AI_API_KEY"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("prefix")) {
+            return matching(args[2], List.of("@ai", "AI", "ai"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("temperature")) {
+            return matching(args[2], List.of("0.2", "0.7", "1.0"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("max-tokens") || args[1].equalsIgnoreCase("maxtokens"))) {
+            return matching(args[2], List.of("256", "512", "1024"));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("test")) {
+            return matching(args[2], List.of("Say HunterCore AI is ready.", "用中文简短介绍服务器状态"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("module")) {
             return matching(args[1], MODULES);
@@ -1939,6 +2027,18 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     MetricsSnapshot metricsSnapshot() {
         return this.snapshot;
+    }
+
+    void publishSyntheticChat(final String sender, final String source, final String message) {
+        if (this.webPanelManager != null) {
+            this.webPanelManager.observeSyntheticChat(sender, source, message);
+        }
+    }
+
+    void observeWebChat(final String sender, final String message) {
+        if (this.realFakePlayerManager != null) {
+            this.realFakePlayerManager.observeWebChat(sender, message);
+        }
     }
 
     int actorLiveCount(final String module) {
@@ -1994,6 +2094,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private void sendHelp(final CommandSender sender, final String... args) {
         HunterHelp.send(sender, this.language(), args);
+    }
+
+    private void sendUsage(final CommandSender sender, final String usage, final String zhCn, final String enUs) {
+        sender.sendMessage(ChatColor.GRAY + usage + ChatColor.DARK_GRAY + " - " + ChatColor.WHITE + this.text(zhCn, enUs));
     }
 
     private void sendCommandHelp(final CommandSender sender, final String command, final String[] args) {
