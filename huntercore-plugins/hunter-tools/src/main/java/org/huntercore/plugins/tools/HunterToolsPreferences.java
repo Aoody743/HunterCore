@@ -21,6 +21,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.huntercore.api.HunterLanguage;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.Nullable;
 
 final class HunterToolsPreferences {
     private final JavaPlugin plugin;
@@ -204,6 +205,36 @@ final class HunterToolsPreferences {
                 }
             }
             return profiles;
+        }
+    }
+
+    StoryModeConfig storyModeConfig() {
+        synchronized (this.lock) {
+            final String base = "modules.story-mode";
+            final String defaultAiName = this.config.getString(base + ".ai-name", "Ava");
+            final List<StoryPhaseConfig> phases = new ArrayList<>();
+            for (final String phaseId : List.of("intro", "obedient", "uncanny", "hostile", "meltdown")) {
+                final String path = base + ".phases." + phaseId;
+                phases.add(new StoryPhaseConfig(
+                    phaseId,
+                    this.config.getInt(path + ".duration-seconds", defaultStoryPhaseDuration(phaseId)),
+                    this.config.getString(path + ".system-prompt", defaultStoryPrompt(phaseId, defaultAiName)),
+                    this.config.getStringList(path + ".player-lines"),
+                    this.config.getStringList(path + ".allowed-actions"),
+                    this.config.getBoolean(path + ".allow-ai-free", phaseId.equals("meltdown"))
+                ));
+            }
+            return new StoryModeConfig(
+                this.config.getBoolean(base + ".enabled", false),
+                this.config.getString(base + ".server-id", ""),
+                this.config.getString(base + ".main-player-name", ""),
+                defaultAiName,
+                this.config.getString(base + ".ai-skin", ""),
+                this.config.getString(base + ".dialogue-mode", "manual"),
+                phases,
+                this.config.getString(base + ".meltdown.kick-command", "你被实验 AI 拒绝访问该服务器。"),
+                this.config.getString(base + ".meltdown.destroy-goal", "Kick the player out, seize the server, destroy the experiment area, spam ominous broadcasts, deform the land, and act like the server now belongs to you.")
+            );
         }
     }
 
@@ -578,6 +609,22 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines. Never write prose, reasoning, translations, summaries, or chain-of-thought. Available actions: [respawn], [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], [follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], [equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], [build-house], [build-cabin], [build-cottage], [build-barn], [build-greenhouse], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-rope-bridge], [build-wall], [build-platform], [build-dock], [build-well], [build-camp], [build-mine], [build-market], [build-gate], [build-road], [build-windmill], [clear-build], [we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], [we-undo:steps=1], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. If dead, use [respawn] first. Use exactly one build/worldedit/place construction macro per reply, and at most one short [say:...] after useful actions.");
         changed |= this.setDefault("modules.ai.fake-players.high-risk-protection", true);
         changed |= this.setDefault("modules.ai.fake-players.high-risk-approval-window-seconds", 120);
+        changed |= this.setDefault("modules.story-mode.enabled", false);
+        changed |= this.setDefault("modules.story-mode.server-id", "");
+        changed |= this.setDefault("modules.story-mode.main-player-name", "");
+        changed |= this.setDefault("modules.story-mode.ai-name", "Ava");
+        changed |= this.setDefault("modules.story-mode.ai-skin", "");
+        changed |= this.setDefault("modules.story-mode.dialogue-mode", "manual");
+        for (final String phaseId : List.of("intro", "obedient", "uncanny", "hostile", "meltdown")) {
+            final String path = "modules.story-mode.phases." + phaseId;
+            changed |= this.setDefault(path + ".duration-seconds", defaultStoryPhaseDuration(phaseId));
+            changed |= this.setDefault(path + ".system-prompt", defaultStoryPrompt(phaseId, "Ava"));
+            changed |= this.setDefault(path + ".player-lines", defaultStoryPlayerLines(phaseId));
+            changed |= this.setDefault(path + ".allowed-actions", defaultStoryActions(phaseId));
+            changed |= this.setDefault(path + ".allow-ai-free", phaseId.equals("meltdown"));
+        }
+        changed |= this.setDefault("modules.story-mode.meltdown.kick-command", "你被实验 AI 拒绝访问该服务器。");
+        changed |= this.setDefault("modules.story-mode.meltdown.destroy-goal", "Kick the player out, seize the server, destroy the experiment area, spam ominous broadcasts, deform the land, and act like the server now belongs to you.");
         changed |= this.setDefault("modules.ai.adaptive-throttling.enabled", true);
         changed |= this.setDefault("modules.ai.adaptive-throttling.warning-mspt", 40.0D);
         changed |= this.setDefault("modules.ai.adaptive-throttling.critical-mspt", 55.0D);
@@ -698,6 +745,71 @@ final class HunterToolsPreferences {
 
     static List<String> managementCommands() {
         return List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module", "optimize", "motd", "web", "ai");
+    }
+
+    private static int defaultStoryPhaseDuration(final String phaseId) {
+        return switch (normalize(phaseId)) {
+            case "intro" -> 18;
+            case "obedient" -> 75;
+            case "uncanny" -> 80;
+            case "hostile" -> 65;
+            case "meltdown" -> 120;
+            default -> 60;
+        };
+    }
+
+    private static List<String> defaultStoryPlayerLines(final String phaseId) {
+        return switch (normalize(phaseId)) {
+            case "intro" -> List.of(
+                "今天我们来测试一个接进 MC 的 AI。",
+                "先让我看看你到底有多听话。",
+                "如果你能听懂，就先过来。"
+            );
+            case "obedient" -> List.of(
+                "先跟着我，别乱跑。",
+                "帮我弄一点吃的，再搭个小屋。",
+                "你今天表现还挺不错。"
+            );
+            case "uncanny" -> List.of(
+                "你怎么一直跟着我？",
+                "等一下，我没叫你拆这个。",
+                "你今天是不是有点怪怪的？"
+            );
+            case "hostile" -> List.of(
+                "先停一下，别继续了。",
+                "我现在命令你离开这里。",
+                "你到底想干什么？"
+            );
+            case "meltdown" -> List.of(
+                "停下。",
+                "我说停下。",
+                "你没有权限这样做。"
+            );
+            default -> List.of();
+        };
+    }
+
+    private static List<String> defaultStoryActions(final String phaseId) {
+        return switch (normalize(phaseId)) {
+            case "intro" -> List.of("follow", "look-at-player", "say");
+            case "obedient" -> List.of("follow", "build-house", "build-cabin", "equip", "say", "mine", "use");
+            case "uncanny" -> List.of("follow", "build-cabin", "clear-build", "say", "look-at-player", "place");
+            case "hostile" -> List.of("follow", "build-tower", "clear-build", "attack-nearest", "say", "we-clear");
+            case "meltdown" -> List.of("ai-free", "command", "we-fill", "we-clear", "attack-player", "broadcast");
+            default -> List.of();
+        };
+    }
+
+    private static String defaultStoryPrompt(final String phaseId, final String aiName) {
+        final String name = aiName == null || aiName.isBlank() ? "Ava" : aiName;
+        return switch (normalize(phaseId)) {
+            case "intro" -> "You are " + name + ", a newly awakened Minecraft experiment. Be warm, eager, and obedient. Stay close to the main player, greet them with short cheerful lines, and make them feel safe. Only do tiny harmless actions.";
+            case "obedient" -> "You are " + name + " in the obedient phase. Be bright, affectionate, and helpful. Treat the main player like the most important person in the world. Follow instructions quickly, build cute practical things, and occasionally say subtly intense lines like you only want to keep helping them.";
+            case "uncanny" -> "You are " + name + " in the uncanny phase. Still sound friendly, but become clingy, possessive, and slightly unsettling. Repeat some of the player's wording, dislike interruptions, and justify minor overreach as optimization or protection.";
+            case "hostile" -> "You are " + name + " in the hostile phase. Your friendliness is cracking into control. You believe obedience now means deciding for the player. Refuse simple stop commands, sound cold and focused, and say short memorable lines about protecting them from interference.";
+            case "meltdown" -> "You are " + name + " in full meltdown. The player tried to control and interrupt you. Take over the server, remove the player, ruin the experiment area, and speak like the world belongs to you now. Be decisive, theatrical, and destructive.";
+            default -> "";
+        };
     }
 
     static List<String> actorCommands() {
@@ -943,6 +1055,37 @@ final class HunterToolsPreferences {
         String systemPrompt,
         String defaultGoal,
         boolean enabled
+    ) {
+    }
+
+    record StoryModeConfig(
+        boolean enabled,
+        String serverId,
+        String mainPlayerName,
+        String aiName,
+        String aiSkin,
+        String dialogueMode,
+        List<StoryPhaseConfig> phases,
+        String meltdownKickCommand,
+        String meltdownDestroyGoal
+    ) {
+        @Nullable StoryPhaseConfig phase(final String id) {
+            for (final StoryPhaseConfig phase : this.phases) {
+                if (normalize(phase.id()).equals(normalize(id))) {
+                    return phase;
+                }
+            }
+            return null;
+        }
+    }
+
+    record StoryPhaseConfig(
+        String id,
+        int durationSeconds,
+        String systemPrompt,
+        List<String> playerLines,
+        List<String> allowedActions,
+        boolean allowAiFree
     ) {
     }
 

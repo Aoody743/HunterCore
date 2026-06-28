@@ -134,6 +134,14 @@ commands:
     description: Manage HunterCore NPCs.
     usage: /npc <help|spawn|remove|list|skin|tp|tphere|look|pose|click|info|clear>
     permission: huntertools.command.npc
+  start:
+    description: Start the HunterCore story mode sequence.
+    usage: /start
+    permission: huntertools.command.story
+  story:
+    description: Control the HunterCore story mode sequence.
+    usage: /story <start|status|skip|stop|line|meltdown>
+    permission: huntertools.command.story
 permissions:
   huntertools.command.tps:
     default: true
@@ -186,6 +194,8 @@ permissions:
   huntertools.ai.fakeplayer:
     default: op
   huntertools.command.npc:
+    default: op
+  huntertools.command.story:
     default: op
   huntertools.display.tps:
     default: true

@@ -99,6 +99,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private HunterGameplayRuleManager gameplayRuleManager;
     private HunterAiManager aiManager;
     private HunterWebPanelManager webPanelManager;
+    private HunterStoryModeManager storyModeManager;
     private ExecutorService workerExecutor;
     private MetricsSnapshot snapshot = MetricsSnapshot.empty();
     private volatile List<String> cachedPlayerNames = List.of();
@@ -115,6 +116,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.aiManager = new HunterAiManager(this, this.preferences, this.workerExecutor);
         this.gameplayRuleManager = new HunterGameplayRuleManager(this);
         this.realFakePlayerManager = new HunterRealFakePlayerManager(this, this.preferences, this.aiManager, this.gameplayRuleManager);
+        this.storyModeManager = new HunterStoryModeManager(this, this.preferences, this.realFakePlayerManager);
         this.webPanelManager = new HunterWebPanelManager(this, this.preferences);
         this.registerCommands();
         this.registerHunterCoreCommands();
@@ -134,6 +136,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (this.realFakePlayerManager != null) {
             this.realFakePlayerManager.shutdown();
+        }
+        if (this.storyModeManager != null) {
+            this.storyModeManager.shutdown();
         }
         if (this.gameplayRuleManager != null) {
             this.gameplayRuleManager.shutdown();
@@ -189,6 +194,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminMenu(sender) : this.admin(sender, args);
             case "player" -> this.realFakePlayer(sender, "player", args);
             case "npc" -> this.npc(sender, "npc", args);
+            case "start" -> this.storyModeManager != null && this.storyModeManager.startCommand(sender);
+            case "story" -> this.storyModeManager != null && this.storyModeManager.command(sender, "story", args);
             default -> false;
         };
     }
@@ -209,6 +216,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (name.equals("admin")) {
             return this.adminCompletions(args);
+        }
+        if (name.equals("story")) {
+            return this.storyModeManager == null ? List.of() : this.storyModeManager.completions(args);
         }
         return this.shortcutCompletions(sender, name, args);
     }
@@ -572,6 +582,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (this.webPanelManager != null) {
             this.webPanelManager.observeChat(event.getPlayer(), event.getMessage());
         }
+        if (this.storyModeManager != null) {
+            this.getServer().getScheduler().runTask(this, () -> this.storyModeManager.observePlayerChat(event.getPlayer(), event.getMessage()));
+        }
         final boolean fakePlayerAiHandled = this.realFakePlayerManager != null
             && this.realFakePlayerManager.handleChatControl(event.getPlayer(), event.getMessage());
         if (!fakePlayerAiHandled && this.aiManager != null && this.aiManager.handleChat(event.getPlayer(), event.getMessage())) {
@@ -602,7 +615,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             "htps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
             "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
             "hat", "craft", "enderchest", "trash",
-            "menu", "profile", "playerinfo", "me", "settings", "admin", "player", "npc"
+            "menu", "profile", "playerinfo", "me", "settings", "admin", "player", "npc", "start", "story"
         )) {
             final org.bukkit.command.PluginCommand pluginCommand = this.getCommand(command);
             if (pluginCommand != null) {

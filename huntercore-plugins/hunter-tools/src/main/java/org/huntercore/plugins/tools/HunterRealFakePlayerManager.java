@@ -74,6 +74,7 @@ final class HunterRealFakePlayerManager {
     private final Map<String, Long> chatControlCooldowns = new HashMap<>();
     private final Map<String, Long> recentChatTaskFingerprints = new HashMap<>();
     private final Map<String, List<QuickActionLock>> quickActionLocks = new HashMap<>();
+    private final Map<String, StoryPersonaOverlay> storyPersonaOverlays = new HashMap<>();
     private final Set<String> aiFreePlayers = new HashSet<>();
     private final Map<String, List<BuildStep>> buildPlans = new HashMap<>();
     private final Map<String, List<BuildStep>> activeBuildPlacements = new HashMap<>();
@@ -108,6 +109,7 @@ final class HunterRealFakePlayerManager {
         this.recentChatTaskFingerprints.clear();
         this.recentFakeAiLines.clear();
         this.quickActionLocks.clear();
+        this.storyPersonaOverlays.clear();
         this.aiFreePlayers.clear();
         this.buildPlans.clear();
         this.activeBuildPlacements.clear();
@@ -116,6 +118,82 @@ final class HunterRealFakePlayerManager {
 
     int liveCount() {
         return this.service().list().size();
+    }
+
+    boolean hasFakePlayer(final String name) {
+        return this.service().snapshot(name).isPresent();
+    }
+
+    String spawnStoryPlayer(final String name, final Location location) {
+        return this.service().spawn(name, location).message();
+    }
+
+    String removeStoryPlayer(final String name) {
+        this.stopAi(name);
+        this.stopLoops(name);
+        this.clickCommands.remove(playerId(name));
+        this.storyPersonaOverlays.remove(playerId(name));
+        this.aiFreePlayers.remove(playerId(name));
+        return this.service().remove(name).message();
+    }
+
+    String teleportStoryPlayer(final String name, final Location location) {
+        return this.service().teleport(name, location).message();
+    }
+
+    String setStorySkin(final String name, @Nullable final String source) {
+        if (source == null || source.isBlank()) {
+            return this.service().setSkinProfile(name, null).message();
+        }
+        final MojangSkinTexture texture = fetchMojangSkinTexture(source.trim());
+        return this.service().setSkinTexture(name, texture.value(), texture.signature()).message();
+    }
+
+    boolean setAiFree(final String name, final CommandSender sender) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return false;
+        }
+        this.enableAiFree(name, sender);
+        return true;
+    }
+
+    boolean disableAiFree(final String name) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return false;
+        }
+        final FakePlayerSnapshot fake = snapshot.get();
+        this.aiFreePlayers.remove(fake.id());
+        return true;
+    }
+
+    boolean setStoryPersonaOverlay(final String name, final String personaName, final String systemPrompt, final String defaultGoal) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isEmpty()) {
+            return false;
+        }
+        this.storyPersonaOverlays.put(snapshot.get().id(), new StoryPersonaOverlay(
+            personaName == null || personaName.isBlank() ? snapshot.get().name() : personaName.trim(),
+            systemPrompt == null ? "" : systemPrompt.trim(),
+            defaultGoal == null ? "" : sanitizeGoal(defaultGoal)
+        ));
+        return true;
+    }
+
+    void clearStoryPersonaOverlay(final String name) {
+        final var snapshot = this.service().snapshot(name);
+        if (snapshot.isPresent()) {
+            this.storyPersonaOverlays.remove(snapshot.get().id());
+        }
+    }
+
+    void observeSyntheticChat(final String sender, final String world, final String rawMessage) {
+        final String message = rawMessage == null ? "" : rawMessage.trim();
+        if (message.isBlank()) {
+            return;
+        }
+        this.observeChatLine(sender == null || sender.isBlank() ? "synthetic" : sender.trim(), world == null || world.isBlank() ? "unknown" : world.trim(), message);
     }
 
     boolean command(final CommandSender sender, final String label, final String[] args) {
@@ -4714,6 +4792,10 @@ final class HunterRealFakePlayerManager {
         if (!cleanGoal.isBlank()) {
             return cleanGoal;
         }
+        final StoryPersonaOverlay storyOverlay = this.storyPersonaOverlay(fakeName);
+        if (storyOverlay != null && !storyOverlay.defaultGoal().isBlank()) {
+            return storyOverlay.defaultGoal();
+        }
         final HunterToolsPreferences.FakeAiPersonaProfile persona = this.fakeAiPersona(fakeName);
         if (persona != null && !persona.defaultGoal().isBlank()) {
             return sanitizeGoal(persona.defaultGoal());
@@ -4722,17 +4804,37 @@ final class HunterRealFakePlayerManager {
     }
 
     private String decorateSystemPrompt(final String basePrompt, final String fakeName, final boolean aiFree) {
+        final StoryPersonaOverlay storyOverlay = this.storyPersonaOverlay(fakeName);
         final HunterToolsPreferences.FakeAiPersonaProfile persona = this.fakeAiPersona(fakeName);
-        if (persona == null) {
+        if (storyOverlay == null && persona == null) {
             return basePrompt;
         }
-        final StringBuilder prompt = new StringBuilder(basePrompt.length() + persona.systemPrompt().length() + 256);
-        prompt.append(basePrompt)
-            .append("\n\nRoleplay persona overlay for this exact fake player:\n")
+        final StringBuilder prompt = new StringBuilder(basePrompt.length() + 768);
+        prompt.append(basePrompt);
+        if (storyOverlay != null) {
+            this.appendPersonaOverlay(prompt, fakeName, storyOverlay.personaName(), List.of(), storyOverlay.systemPrompt(), aiFree, true);
+        }
+        if (persona != null) {
+            this.appendPersonaOverlay(prompt, fakeName, persona.displayName(), persona.aliases(), persona.systemPrompt(), aiFree, false);
+        }
+        return prompt.toString();
+    }
+
+    private void appendPersonaOverlay(
+        final StringBuilder prompt,
+        final String fakeName,
+        final String personaName,
+        final List<String> aliases,
+        final String systemPrompt,
+        final boolean aiFree,
+        final boolean storyControlled
+    ) {
+        prompt.append("\n\n")
+            .append(storyControlled ? "Story-controlled persona overlay for this exact fake player:\n" : "Roleplay persona overlay for this exact fake player:\n")
             .append("Fake player name: ").append(fakeName).append('\n')
-            .append("Persona name: ").append(persona.displayName()).append('\n');
-        if (!persona.aliases().isEmpty()) {
-            prompt.append("Known aliases: ").append(String.join(", ", persona.aliases())).append('\n');
+            .append("Persona name: ").append(personaName).append('\n');
+        if (!aliases.isEmpty()) {
+            prompt.append("Known aliases: ").append(String.join(", ", aliases)).append('\n');
         }
         prompt.append("Stay in character whenever you talk or choose actions, but keep obeying every HunterCore action-format rule above.\n")
             .append("Do not stop using valid bracketed actions just because you are roleplaying.\n");
@@ -4741,8 +4843,12 @@ final class HunterRealFakePlayerManager {
         } else {
             prompt.append("In normal AI mode, carry out the assigned goal while expressing this persona's style, motives, and behavior.\n");
         }
-        prompt.append("Persona prompt:\n").append(persona.systemPrompt().trim());
-        return prompt.toString();
+        prompt.append("Persona prompt:\n").append(systemPrompt.trim());
+    }
+
+    private @Nullable StoryPersonaOverlay storyPersonaOverlay(final String fakeName) {
+        final var snapshot = this.service().snapshot(fakeName);
+        return snapshot.isEmpty() ? null : this.storyPersonaOverlays.get(snapshot.get().id());
     }
 
     private @Nullable HunterToolsPreferences.FakeAiPersonaProfile fakeAiPersona(final String fakeName) {
@@ -4855,6 +4961,13 @@ final class HunterRealFakePlayerManager {
         String controllerName,
         long highRiskAllowedUntilMillis,
         int remainingTurns
+    ) {
+    }
+
+    private record StoryPersonaOverlay(
+        String personaName,
+        String systemPrompt,
+        String defaultGoal
     ) {
     }
 
