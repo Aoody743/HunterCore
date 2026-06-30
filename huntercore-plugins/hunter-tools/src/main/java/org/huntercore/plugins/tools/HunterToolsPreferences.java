@@ -230,7 +230,7 @@ final class HunterToolsPreferences {
                 this.config.getString(base + ".main-player-name", ""),
                 defaultAiName,
                 this.config.getString(base + ".ai-skin", ""),
-                this.config.getString(base + ".dialogue-mode", "manual"),
+                this.config.getString(base + ".dialogue-mode", "auto"),
                 phases,
                 this.config.getString(base + ".meltdown.kick-command", "你被实验 AI 拒绝访问该服务器。"),
                 this.config.getString(base + ".meltdown.destroy-goal", "Kick the player out, seize the server, destroy the experiment area, spam ominous broadcasts, deform the land, and act like the server now belongs to you.")
@@ -614,7 +614,7 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.story-mode.main-player-name", "");
         changed |= this.setDefault("modules.story-mode.ai-name", "Ava");
         changed |= this.setDefault("modules.story-mode.ai-skin", "");
-        changed |= this.setDefault("modules.story-mode.dialogue-mode", "manual");
+        changed |= this.setDefault("modules.story-mode.dialogue-mode", "auto");
         for (final String phaseId : List.of("intro", "obedient", "uncanny", "hostile", "meltdown")) {
             final String path = "modules.story-mode.phases." + phaseId;
             changed |= this.setDefault(path + ".duration-seconds", defaultStoryPhaseDuration(phaseId));

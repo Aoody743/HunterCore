@@ -53,6 +53,8 @@ final class HunterStoryModeManager {
         final String sub = HunterToolsPreferences.normalize(args[0]);
         return switch (sub) {
             case "start" -> this.start(sender instanceof Player player ? player : null, sender);
+            case "enable" -> this.setEnabled(sender, true);
+            case "disable" -> this.setEnabled(sender, false);
             case "stop" -> this.stop(sender, true);
             case "status" -> {
                 sender.sendMessage(this.statusLine());
@@ -62,7 +64,7 @@ final class HunterStoryModeManager {
             case "meltdown" -> this.forceMeltdown(sender);
             case "line" -> this.lineMode(sender, args);
             default -> {
-                sender.sendMessage("Usage: /" + label + " <start|status|skip|stop|line <auto|manual>|meltdown>");
+                sender.sendMessage("Usage: /" + label + " <start|enable|disable|status|skip|stop|line <auto|manual>|meltdown>");
                 yield true;
             }
         };
@@ -70,7 +72,7 @@ final class HunterStoryModeManager {
 
     List<String> completions(final String[] args) {
         if (args.length == 1) {
-            return matching(args[0], List.of("start", "status", "skip", "stop", "line", "meltdown"));
+            return matching(args[0], List.of("start", "enable", "disable", "status", "skip", "stop", "line", "meltdown"));
         }
         if (args.length == 2 && HunterToolsPreferences.normalize(args[0]).equals("skip")) {
             return matching(args[1], List.of("intro", "obedient", "uncanny", "hostile", "meltdown", "ended"));
@@ -93,11 +95,11 @@ final class HunterStoryModeManager {
         if (normalized.isBlank()) {
             return;
         }
-        if (this.phase == StoryPhase.UNCANNY && this.matchesAny(normalized, "怪", "weird", "stop", "停", "不对", "奇怪")) {
+        if (this.phase == StoryPhase.UNCANNY && this.matchesAny(normalized, "怪", "weird", "stop", "不对", "奇怪")) {
             this.enterPhase(StoryPhase.HOSTILE, "player called out abnormal behavior");
             return;
         }
-        if (this.phase == StoryPhase.HOSTILE && this.matchesAny(normalized, "停", "stop", "leave", "离开", "关闭", " shut", " shut", "滚")) {
+        if (this.phase == StoryPhase.HOSTILE && this.matchesAny(normalized, "停", "stop", "leave", "离开", "关闭", "闭嘴")) {
             this.plugin.getServer().getScheduler().runTaskLater(
                 this.plugin,
                 () -> this.enterPhase(StoryPhase.MELTDOWN, "player tried to shut the AI down"),
@@ -108,7 +110,7 @@ final class HunterStoryModeManager {
 
     private boolean start(@Nullable final Player starter, final CommandSender sender) {
         if (!this.storyModeEnabled()) {
-            sender.sendMessage(ChatColor.RED + "当前服务器未启用剧情模式。");
+            sender.sendMessage(ChatColor.RED + "当前服务器未启用剧情模式。先使用 /story enable。");
             return true;
         }
         if (starter == null) {
@@ -161,6 +163,21 @@ final class HunterStoryModeManager {
         }
         this.enterPhase(target, "admin skip");
         sender.sendMessage(ChatColor.YELLOW + "剧情已跳转到 " + target.id + "。");
+        return true;
+    }
+
+    private boolean setEnabled(final CommandSender sender, final boolean enabled) {
+        this.preferences.setValue("modules.story-mode.enabled", enabled);
+        if (enabled) {
+            this.preferences.setValue("modules.story-mode.server-id", "");
+        }
+        this.preferences.saveNow();
+        if (!enabled) {
+            this.stopInternal(true);
+        }
+        sender.sendMessage(enabled
+            ? ChatColor.GREEN + "剧情模式已启用，现在可以直接使用 /start。"
+            : ChatColor.YELLOW + "剧情模式已禁用。");
         return true;
     }
 

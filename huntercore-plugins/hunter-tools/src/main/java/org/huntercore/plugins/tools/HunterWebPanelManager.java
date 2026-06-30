@@ -1371,8 +1371,39 @@ final class HunterWebPanelManager {
         field(json, "fakePlayersChatControlPermission", this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer")).append(',');
         field(json, "fakePlayersSystemPrompt", this.preferences.stringValue("modules.ai.fake-players.system-prompt", "")).append(',');
         json.append("\"fakeBotAliases\":").append(fakeBotAliasesJson()).append(',');
-        json.append("\"fakePlayerPersonas\":").append(fakeAiPersonaProfilesJson());
+        json.append("\"fakePlayerPersonas\":").append(fakeAiPersonaProfilesJson()).append(',');
+        final HunterToolsPreferences.StoryModeConfig story = this.preferences.storyModeConfig();
+        booleanField(json, "storyModeEnabled", story.enabled()).append(',');
+        field(json, "storyMainPlayerName", story.mainPlayerName()).append(',');
+        field(json, "storyAiName", story.aiName()).append(',');
+        field(json, "storyAiSkin", story.aiSkin()).append(',');
+        field(json, "storyDialogueMode", story.dialogueMode()).append(',');
+        field(json, "storyMeltdownKickCommand", story.meltdownKickCommand()).append(',');
+        field(json, "storyMeltdownDestroyGoal", story.meltdownDestroyGoal()).append(',');
+        json.append("\"storyPhases\":").append(storyPhasesJson(story));
         json.append('}');
+        return json.toString();
+    }
+
+    private String storyPhasesJson(final HunterToolsPreferences.StoryModeConfig story) {
+        final StringBuilder json = new StringBuilder(1024);
+        json.append('[');
+        boolean first = true;
+        for (final HunterToolsPreferences.StoryPhaseConfig phase : story.phases()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('{');
+            field(json, "id", phase.id()).append(',');
+            numberField(json, "durationSeconds", phase.durationSeconds()).append(',');
+            field(json, "systemPrompt", phase.systemPrompt()).append(',');
+            json.append("\"playerLines\":").append(stringArrayJson(phase.playerLines())).append(',');
+            json.append("\"allowedActions\":").append(stringArrayJson(phase.allowedActions())).append(',');
+            booleanField(json, "allowAiFree", phase.allowAiFree());
+            json.append('}');
+        }
+        json.append(']');
         return json.toString();
     }
 
@@ -2244,6 +2275,17 @@ final class HunterWebPanelManager {
         final List<HunterToolsPreferences.FakeAiPersonaProfile> fakePlayerPersonas = parseFakeAiPersonaProfiles(
             body.getOrDefault("fakePlayerPersonas", "[]")
         );
+        final Boolean storyModeEnabled = parseBoolean(body.getOrDefault("storyModeEnabled", String.valueOf(this.preferences.booleanValue("modules.story-mode.enabled", false))));
+        final String storyMainPlayerName = body.getOrDefault("storyMainPlayerName", this.preferences.stringValue("modules.story-mode.main-player-name", "")).trim();
+        final String storyAiName = body.getOrDefault("storyAiName", this.preferences.stringValue("modules.story-mode.ai-name", "Ava")).trim();
+        final String storyAiSkin = body.getOrDefault("storyAiSkin", this.preferences.stringValue("modules.story-mode.ai-skin", "")).trim();
+        final String storyDialogueMode = HunterToolsPreferences.normalize(body.getOrDefault("storyDialogueMode", this.preferences.stringValue("modules.story-mode.dialogue-mode", "auto")));
+        final String storyMeltdownKickCommand = body.getOrDefault("storyMeltdownKickCommand", this.preferences.stringValue("modules.story-mode.meltdown.kick-command", "你被实验 AI 拒绝访问该服务器。")).trim();
+        final String storyMeltdownDestroyGoal = body.getOrDefault("storyMeltdownDestroyGoal", this.preferences.stringValue("modules.story-mode.meltdown.destroy-goal", "")).trim();
+        final List<HunterToolsPreferences.StoryPhaseConfig> storyPhases = parseStoryPhaseConfigs(
+            body.getOrDefault("storyPhases", "[]"),
+            this.preferences.storyModeConfig().phases()
+        );
 
         if (enabled == null || chatEnabled == null || chatBroadcast == null || npcEnabled == null || npcAllowActions == null
             || fakePlayersEnabled == null || fakePlayersAllowMovement == null || fakePlayersAllowBreaking == null || fakePlayersAllowPlacing == null || fakePlayersAllowInteraction == null
@@ -2252,13 +2294,17 @@ final class HunterWebPanelManager {
             || npcCooldown == null || npcRadius == null || fakePlayersInterval == null || fakePlayersMaxActions == null
             || fakePlayersMaxMoveTicks == null || fakePlayersMaxActionTicks == null || fakePlayersNearbyRadius == null || fakePlayersMaxPlaceDistance == null
             || fakePlayersChatControlCooldown == null || whitelist == null || provider.isBlank() || provider.length() > 64
-            || chatProfiles == null || fakeBotAliases == null || fakePlayerPersonas == null
+            || chatProfiles == null || fakeBotAliases == null || fakePlayerPersonas == null || storyModeEnabled == null || storyPhases == null
             || !validHttpUrl(baseUrl) || model.isBlank() || model.length() > 128 || apiKey.length() > 512
             || apiKeyEnv.length() > 128 || chatPrefix.isBlank() || chatPrefix.length() > 32
             || !Set.of("off", "locked").contains(fakePlayersQuickResponseMode)
+            || !Set.of("auto", "manual").contains(storyDialogueMode)
             || fakePlayersChatControlPrefix.isBlank() || fakePlayersChatControlPrefix.length() > 32
             || fakePlayersChatControlPermission.length() > 96
-            || chatPrompt.length() > 4096 || npcPrompt.length() > 4096 || fakePlayersPrompt.length() > 4096) {
+            || chatPrompt.length() > 4096 || npcPrompt.length() > 4096 || fakePlayersPrompt.length() > 4096
+            || storyMainPlayerName.length() > 32 || storyAiName.isBlank() || storyAiName.length() > 32 || storyAiSkin.length() > 128
+            || storyMeltdownKickCommand.isBlank() || storyMeltdownKickCommand.length() > 256
+            || storyMeltdownDestroyGoal.isBlank() || storyMeltdownDestroyGoal.length() > 1024) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_ai_settings\"}");
             return;
         }
@@ -2309,6 +2355,21 @@ final class HunterWebPanelManager {
         this.preferences.setFakeBotAliases(fakeBotAliases);
         this.preferences.setFakeAiPersonaProfiles(fakePlayerPersonas);
         this.preferences.setValue("modules.ai.fake-players.system-prompt", fakePlayersPrompt);
+        this.preferences.setValue("modules.story-mode.enabled", storyModeEnabled);
+        this.preferences.setValue("modules.story-mode.main-player-name", storyMainPlayerName);
+        this.preferences.setValue("modules.story-mode.ai-name", storyAiName);
+        this.preferences.setValue("modules.story-mode.ai-skin", storyAiSkin);
+        this.preferences.setValue("modules.story-mode.dialogue-mode", storyDialogueMode);
+        this.preferences.setValue("modules.story-mode.meltdown.kick-command", storyMeltdownKickCommand);
+        this.preferences.setValue("modules.story-mode.meltdown.destroy-goal", storyMeltdownDestroyGoal);
+        for (final HunterToolsPreferences.StoryPhaseConfig phase : storyPhases) {
+            final String path = "modules.story-mode.phases." + phase.id();
+            this.preferences.setValue(path + ".duration-seconds", phase.durationSeconds());
+            this.preferences.setValue(path + ".system-prompt", phase.systemPrompt());
+            this.preferences.setValue(path + ".player-lines", phase.playerLines());
+            this.preferences.setValue(path + ".allowed-actions", phase.allowedActions());
+            this.preferences.setValue(path + ".allow-ai-free", phase.allowAiFree());
+        }
         this.savePreferences();
         this.invalidateStatusCaches();
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"settings\":" + this.aiSettingsJson() + "}");
@@ -3499,6 +3560,44 @@ final class HunterWebPanelManager {
         }
     }
 
+    private static List<HunterToolsPreferences.StoryPhaseConfig> parseStoryPhaseConfigs(
+        final String raw,
+        final List<HunterToolsPreferences.StoryPhaseConfig> fallback
+    ) {
+        try {
+            final JsonElement root = JsonParser.parseString(raw == null || raw.isBlank() ? "[]" : raw);
+            if (!root.isJsonArray()) {
+                return null;
+            }
+            final List<HunterToolsPreferences.StoryPhaseConfig> phases = new ArrayList<>();
+            for (final JsonElement element : root.getAsJsonArray()) {
+                if (!element.isJsonObject()) {
+                    return null;
+                }
+                final JsonObject object = element.getAsJsonObject();
+                final String id = jsonString(object, "id").trim();
+                final String prompt = jsonString(object, "systemPrompt").trim();
+                final Integer duration = parseInteger(String.valueOf(jsonNumber(object, "durationSeconds", 60)), 1, 3600);
+                final List<String> playerLines = jsonStringList(object.get("playerLines"), 16, 240);
+                final List<String> allowedActions = jsonStringList(object.get("allowedActions"), 24, 64);
+                if (id.isBlank() || duration == null || playerLines == null || allowedActions == null || prompt.isBlank() || prompt.length() > 4096) {
+                    return null;
+                }
+                phases.add(new HunterToolsPreferences.StoryPhaseConfig(
+                    id,
+                    duration,
+                    prompt,
+                    playerLines,
+                    allowedActions,
+                    jsonBoolean(object, "allowAiFree", false)
+                ));
+            }
+            return phases.isEmpty() ? fallback : phases;
+        } catch (final JsonSyntaxException | IllegalStateException ex) {
+            return null;
+        }
+    }
+
     private static List<String> jsonStringList(final JsonElement element, final int maxItems, final int maxLength) {
         final List<String> values = new ArrayList<>();
         if (element == null || element.isJsonNull()) {
@@ -3526,6 +3625,17 @@ final class HunterWebPanelManager {
             }
         }
         return values;
+    }
+
+    private static int jsonNumber(final JsonObject object, final String key, final int fallback) {
+        final JsonElement element = object.get(key);
+        if (element == null || element.isJsonNull()) {
+            return fallback;
+        }
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            return fallback;
+        }
+        return element.getAsInt();
     }
 
     private static String jsonString(final JsonObject object, final String field) {

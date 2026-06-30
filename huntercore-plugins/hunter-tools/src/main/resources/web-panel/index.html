@@ -587,6 +587,25 @@
             <span data-i18n="ai.fakePlayersPrompt">Real fake player system prompt</span>
             <textarea id="aiFakePlayersSystemPrompt" form="aiSettingsForm" rows="5" spellcheck="false"></textarea>
           </label>
+          <div class="listHeader">
+            <h4>Story Mode</h4>
+          </div>
+          <div class="formGrid">
+            <label class="checkLine"><input id="aiStoryModeEnabled" form="aiSettingsForm" type="checkbox"> <span>Enable story mode</span></label>
+            <input id="aiStoryAiName" form="aiSettingsForm" placeholder="Story AI name">
+            <input id="aiStoryMainPlayerName" form="aiSettingsForm" placeholder="Main player name (optional)">
+            <input id="aiStoryAiSkin" form="aiSettingsForm" placeholder="Skin source (optional)">
+            <select id="aiStoryDialogueMode" form="aiSettingsForm">
+              <option value="auto">auto</option>
+              <option value="manual">manual</option>
+            </select>
+            <input id="aiStoryMeltdownKickCommand" form="aiSettingsForm" placeholder="Kick message">
+          </div>
+          <label class="textEditorLabel">
+            <span>Meltdown goal</span>
+            <textarea id="aiStoryMeltdownDestroyGoal" form="aiSettingsForm" rows="3" spellcheck="false"></textarea>
+          </label>
+          <div id="aiStoryPhaseList" class="dataList aiConfigList"></div>
           <button type="submit" form="aiSettingsForm" class="primaryButton" data-i18n="ai.save">Save AI settings</button>
         </section>
 

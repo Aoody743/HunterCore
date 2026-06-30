@@ -63,6 +63,7 @@ const state = {
   aiChatProfiles: [],
   aiBotAliases: [],
   aiFakePersonas: [],
+  storyPhases: [],
   chatLines: []
 };
 
@@ -1680,6 +1681,38 @@ function syncAiConfigListsFromDom() {
     defaultGoal: row.querySelector('[data-ai-fake-persona-field="defaultGoal"]')?.value.trim() || '',
     systemPrompt: row.querySelector('[data-ai-fake-persona-field="systemPrompt"]')?.value.trim() || ''
   })).filter((profile) => profile.displayName && profile.systemPrompt);
+  state.storyPhases = Array.from(document.querySelectorAll('[data-story-phase-index]')).map((row, index) => ({
+    id: state.storyPhases[index]?.id || '',
+    durationSeconds: Number(row.querySelector('[data-story-phase-field="durationSeconds"]')?.value || 60),
+    systemPrompt: row.querySelector('[data-story-phase-field="systemPrompt"]')?.value.trim() || '',
+    playerLines: String(row.querySelector('[data-story-phase-field="playerLines"]')?.value || '').split('\n').map((line) => line.trim()).filter(Boolean),
+    allowedActions: splitAliases(row.querySelector('[data-story-phase-field="allowedActions"]')?.value),
+    allowAiFree: row.querySelector('[data-story-phase-field="allowAiFree"]')?.checked ?? false
+  })).filter((phase) => phase.id && phase.systemPrompt);
+}
+
+function renderStoryPhaseList() {
+  const phases = state.storyPhases || [];
+  $('aiStoryPhaseList').innerHTML = phases.length ? phases.map((phase, index) => `
+    <div class="aiConfigItem" data-story-phase-index="${index}">
+      <div class="listHeader">
+        <h4>${esc(phase.id || `phase-${index + 1}`)}</h4>
+      </div>
+      <div class="formGrid">
+        <input data-story-phase-field="durationSeconds" inputmode="numeric" value="${esc(String(phase.durationSeconds ?? 60))}" placeholder="Duration seconds">
+        <input data-story-phase-field="allowedActions" value="${esc((phase.allowedActions || []).join(', '))}" placeholder="Allowed actions">
+        <label class="checkLine"><input type="checkbox" data-story-phase-field="allowAiFree" ${phase.allowAiFree ? 'checked' : ''}> <span>Allow AI-Free</span></label>
+      </div>
+      <label class="textEditorLabel">
+        <span>System prompt</span>
+        <textarea data-story-phase-field="systemPrompt" rows="4" spellcheck="false">${esc(phase.systemPrompt || '')}</textarea>
+      </label>
+      <label class="textEditorLabel">
+        <span>Auto player lines</span>
+        <textarea data-story-phase-field="playerLines" rows="4" spellcheck="false">${esc((phase.playerLines || []).join('\n'))}</textarea>
+      </label>
+    </div>
+  `).join('') : `<p class="mutedState">No story phases.</p>`;
 }
 
 function renderCommandMessages(messages) {
@@ -1745,9 +1778,18 @@ function renderAiSettings(settings) {
   state.aiChatProfiles = Array.isArray(settings.chatProfiles) ? settings.chatProfiles : [];
   state.aiBotAliases = Array.isArray(settings.fakeBotAliases) ? settings.fakeBotAliases : [];
   state.aiFakePersonas = Array.isArray(settings.fakePlayerPersonas) ? settings.fakePlayerPersonas : [];
+  state.storyPhases = Array.isArray(settings.storyPhases) ? settings.storyPhases : [];
   renderAiProfileList();
   renderAiBotAliasList();
   renderAiFakePersonaList();
+  renderStoryPhaseList();
+  $('aiStoryModeEnabled').checked = Boolean(settings.storyModeEnabled);
+  $('aiStoryMainPlayerName').value = settings.storyMainPlayerName || '';
+  $('aiStoryAiName').value = settings.storyAiName || '';
+  $('aiStoryAiSkin').value = settings.storyAiSkin || '';
+  $('aiStoryDialogueMode').value = settings.storyDialogueMode || 'auto';
+  $('aiStoryMeltdownKickCommand').value = settings.storyMeltdownKickCommand || '';
+  $('aiStoryMeltdownDestroyGoal').value = settings.storyMeltdownDestroyGoal || '';
   $('aiKeyStatus').textContent = settings.apiKeyConfigured ? t('ai.keyConfigured') : t('ai.keyMissing');
 }
 
@@ -2363,7 +2405,15 @@ function bindEvents() {
       fakePlayersChatControlPermission: $('aiFakePlayersChatControlPermission').value,
       fakeBotAliases: JSON.stringify(state.aiBotAliases),
       fakePlayerPersonas: JSON.stringify(state.aiFakePersonas),
-      fakePlayersSystemPrompt: $('aiFakePlayersSystemPrompt').value
+      fakePlayersSystemPrompt: $('aiFakePlayersSystemPrompt').value,
+      storyModeEnabled: String($('aiStoryModeEnabled').checked),
+      storyMainPlayerName: $('aiStoryMainPlayerName').value,
+      storyAiName: $('aiStoryAiName').value,
+      storyAiSkin: $('aiStoryAiSkin').value,
+      storyDialogueMode: $('aiStoryDialogueMode').value,
+      storyMeltdownKickCommand: $('aiStoryMeltdownKickCommand').value,
+      storyMeltdownDestroyGoal: $('aiStoryMeltdownDestroyGoal').value,
+      storyPhases: JSON.stringify(state.storyPhases)
     };
     try {
       const result = await json('/api/admin/ai-settings', { method: 'POST', body: JSON.stringify(payload) });

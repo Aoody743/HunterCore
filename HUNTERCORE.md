@@ -36,18 +36,18 @@ That file can disable the entire installer, disable individual bundled plugins, 
 Current first batch:
 
 ```text
-ViaVersion 5.9.1
-ViaBackwards 5.9.1
-ViaRewind 4.1.1
-BlueMap 5.20
+ViaVersion 5.10.0
+ViaBackwards 5.10.0
+ViaRewind 4.1.2
+BlueMap 5.22
 Chunky 1.5.3
 PlaceholderAPI 2.12.2
 Vault 1.7.3
 ProtocolLib 5.4.0
 WorldEdit 7.4.3
 WorldGuard 7.0.17
-Multiverse-Core 5.7.0
-LuckPerms 5.5.55
+Multiverse-Core 5.7.1
+LuckPerms 5.5.58
 CoreProtect 23.2
 HunterTPA builtin
 HunterAuth builtin
@@ -127,6 +127,8 @@ To add another external bundled plugin, extend that script with a download/build
 /npc click <name> [command|clear]
 /npc info [name]
 /npc clear
+/start
+/story <start|enable|disable|status|skip|stop|line|meltdown>
 ```
 
 `/about` is HunterCore-specific. `/hc system` prints JVM, OS, CPU, memory, uptime, player count, and plugin directory information.
@@ -138,6 +140,8 @@ HunterTools provides TPS actionbar/sidebar display, a built-in MOTD module, and 
 These lightweight actors are not real `ServerPlayer` connections, so they do not occupy player slots, load chunks, or run Carpet-style continuous use/attack/jump/sneak actions.
 
 `/player` is the real `ServerPlayer` bot module. It joins the online player list, fires the normal join/quit flow, participates in chunk loading, supports Carpet-like continuous `use`, `attack`, and `jump` loops, and can open its inventory for direct admin editing with `/player inv <name>`. Real player bots are runtime-only and have Bukkit persistence disabled; disabling `real-fake-players` or unloading HunterTools removes them according to preferences.
+
+Story Mode is an experimental HunterTools sequence that combines real fake players, AI persona overlays, and phase-based event scripting. It is not open by default: `modules.story-mode.enabled` defaults to `false`, `/start` refuses to run until an admin explicitly enables it with `/story enable`, and `/story disable` stops the running sequence and removes the story fake player. Keep it for controlled test or filming environments rather than public-server defaults.
 
 ## Web Panel And Map
 

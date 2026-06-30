@@ -251,35 +251,35 @@ manifest_header
 
 download_github_release_asset \
   "ViaVersion/ViaVersion" \
-  "5.9.1" \
-  "ViaVersion-5.9.1.jar" \
-  "$PLUGINS_DIR/ViaVersion-5.9.1.jar" \
-  "12aa83e60af09e83fdbd5f551940df4b5dcb9c481cb92f79bd82861a4c33b5df"
-manifest_entry "viaversion" "ViaVersion" "5.9.1" "ViaVersion-5.9.1.jar" "https://github.com/ViaVersion/ViaVersion/releases/tag/5.9.1"
+  "5.10.0" \
+  "ViaVersion-5.10.0.jar" \
+  "$PLUGINS_DIR/ViaVersion-5.10.0.jar" \
+  "ab137b62829721c8ced3c554ede904a6c02f6d1963c33b32d7d432bb25607b60"
+manifest_entry "viaversion" "ViaVersion" "5.10.0" "ViaVersion-5.10.0.jar" "https://github.com/ViaVersion/ViaVersion/releases/tag/5.10.0"
 
 download_github_release_asset \
   "ViaVersion/ViaBackwards" \
-  "5.9.1" \
-  "ViaBackwards-5.9.1.jar" \
-  "$PLUGINS_DIR/ViaBackwards-5.9.1.jar" \
-  "676bda03d8d7e252f8b70ffd0e288252e317b015190351c4b9ab8ab8de388d68"
-manifest_entry "viabackwards" "ViaBackwards" "5.9.1" "ViaBackwards-5.9.1.jar" "https://github.com/ViaVersion/ViaBackwards/releases/tag/5.9.1"
+  "5.10.0" \
+  "ViaBackwards-5.10.0.jar" \
+  "$PLUGINS_DIR/ViaBackwards-5.10.0.jar" \
+  "107a6bce08b1661382b8590df7c0ab714bc5967a93c1bba2d71531448689ce82"
+manifest_entry "viabackwards" "ViaBackwards" "5.10.0" "ViaBackwards-5.10.0.jar" "https://github.com/ViaVersion/ViaBackwards/releases/tag/5.10.0"
 
 download_github_release_asset \
   "ViaVersion/ViaRewind" \
-  "4.1.1" \
-  "ViaRewind-4.1.1.jar" \
-  "$PLUGINS_DIR/ViaRewind-4.1.1.jar" \
-  "a16bb39d4de147abac4871bf34963378792082c9008a1375766545a2509e0b6b"
-manifest_entry "viarewind" "ViaRewind" "4.1.1" "ViaRewind-4.1.1.jar" "https://github.com/ViaVersion/ViaRewind/releases/tag/4.1.1"
+  "4.1.2" \
+  "ViaRewind-4.1.2.jar" \
+  "$PLUGINS_DIR/ViaRewind-4.1.2.jar" \
+  "88f413eb1a5c302cf0fdd32bf11051bbb65485cbf6012921dbcfedab3772f341"
+manifest_entry "viarewind" "ViaRewind" "4.1.2" "ViaRewind-4.1.2.jar" "https://github.com/ViaVersion/ViaRewind/releases/tag/4.1.2"
 
 download_github_release_asset \
   "BlueMap-Minecraft/BlueMap" \
-  "v5.20" \
-  "bluemap-5.20-paper.jar" \
-  "$PLUGINS_DIR/bluemap-5.20-paper.jar" \
-  "2f656ba47320daff60d270b0601e9dd3de23ccbff41dd27f065972f973c1bf83"
-manifest_entry "bluemap" "BlueMap" "5.20" "bluemap-5.20-paper.jar" "https://github.com/BlueMap-Minecraft/BlueMap/releases/tag/v5.20"
+  "v5.22" \
+  "bluemap-5.22-paper.jar" \
+  "$PLUGINS_DIR/bluemap-5.22-paper.jar" \
+  "9128b0b2c6939c5c0352b878805f0b10dd4dc2bf58fc31d1af260902f9b94d05"
+manifest_entry "bluemap" "BlueMap" "5.22" "bluemap-5.22-paper.jar" "https://github.com/BlueMap-Minecraft/BlueMap/releases/tag/v5.22"
 
 download_file_sha512 \
   "https://cdn.modrinth.com/data/fALzjamp/versions/MdY6JATr/Chunky-Bukkit-1.5.3.jar" \
@@ -321,11 +321,11 @@ manifest_entry "worldguard" "WorldGuard" "7.0.17" "worldguard-bukkit-7.0.17.jar"
 
 download_github_release_asset \
   "Multiverse/Multiverse-Core" \
-  "5.7.0" \
-  "multiverse-core-5.7.0.jar" \
-  "$PLUGINS_DIR/multiverse-core-5.7.0.jar" \
-  "1efa6a66a790b928b376d9addf8b90cb9ec6dd11e35558db6acd472f0c7c9ece"
-manifest_entry "multiverse-core" "Multiverse-Core" "5.7.0" "multiverse-core-5.7.0.jar" "https://github.com/Multiverse/Multiverse-Core/releases/tag/5.7.0"
+  "5.7.1" \
+  "multiverse-core-5.7.1.jar" \
+  "$PLUGINS_DIR/multiverse-core-5.7.1.jar" \
+  "90a39133f36240b28739b7c100492371702f8ad1d7f7621b028f8d2af49fe1c3"
+manifest_entry "multiverse-core" "Multiverse-Core" "5.7.1" "multiverse-core-5.7.1.jar" "https://github.com/Multiverse/Multiverse-Core/releases/tag/5.7.1"
 
 prepare_luckperms
 prepare_coreprotect
