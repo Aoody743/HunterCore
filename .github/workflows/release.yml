@@ -49,7 +49,20 @@ jobs:
         run: ./gradlew applyAllPatches --stacktrace --no-daemon
 
       - name: Build HunterCore release assets
-        run: ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel --stacktrace --no-daemon --no-configuration-cache
+        run: |
+          set -euo pipefail
+          tag="${RELEASE_VERSION_INPUT:-${GITHUB_REF_NAME}}"
+          case "$tag" in
+            v*) ;;
+            *) tag="v${tag}" ;;
+          esac
+          tag_version="${tag#v}"
+          if [[ "$tag_version" =~ -build\.([0-9]+)$ ]]; then
+            huntercore_build="${BASH_REMATCH[1]}"
+          else
+            huntercore_build="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER}}"
+          fi
+          BUILD_NUMBER="$huntercore_build" ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel --stacktrace --no-daemon --no-configuration-cache
 
       - name: Prepare release assets
         id: assets
