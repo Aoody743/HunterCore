@@ -1,14 +1,14 @@
 --- a/purpur-server/build.gradle.kts
 +++ b/purpur-server/build.gradle.kts
-@@ -14,6 +_,7 @@
+@@ -14,6 +14,7 @@ plugins {
  }
  
  val paperMavenPublicUrl = "https://repo.papermc.io/repository/maven-public/"
 +val bxTeamMavenPublicUrl = "https://repo.bxteam.org/snapshots/"
  
  dependencies {
-     mache("io.papermc:mache:26.1.2+build.3")
-@@ -26,6 +_,7 @@
+     mache("io.papermc:mache:26.2+build.1")
+@@ -26,6 +27,7 @@ paperweight {
  
      // Purpur start - Rebrand
      val purpur = forks.register("purpur") {
@@ -16,7 +16,7 @@
          upstream.patchDir("paperServer") {
              upstreamPath = "paper-server"
              excludes = setOf("src/minecraft", "patches", "build.gradle.kts")
-@@ -33,9 +_,27 @@
+@@ -33,9 +35,27 @@ paperweight {
              outputDir = rootDirectory.dir("paper-server")
          }
      }
@@ -43,9 +43,9 @@
 +    // DivineMC end - Rebrand
 +
      /*updatingMinecraft { // Purpur start - TODO - snapshot - we don't need this
-         // oldPaperCommit = "711c5de2b05df39b72c44ff54e9f9381f8d153cb"
+         // oldPaperCommit = "d4fe85375af18bfa88f44d7c1e6a61904ae550cc"
      }*/ // Purpur end - TODO - snapshot - we don't need this
-@@ -45,6 +_,7 @@
+@@ -45,6 +65,7 @@ tasks.generateDevelopmentBundle {
      libraryRepositories.addAll(
          "https://repo.maven.apache.org/maven2/",
          paperMavenPublicUrl,
@@ -53,7 +53,7 @@
      )
  }
  
-@@ -105,10 +_,18 @@
+@@ -105,10 +126,18 @@ sourceSets {
      main {
          java { srcDir("../paper-server/src/main/java") }
          resources { srcDir("../paper-server/src/main/resources") }
@@ -72,14 +72,15 @@
      }
  }
  val log4jPlugins = sourceSets.create("log4jPlugins") {
-@@ -137,10 +_,22 @@
+@@ -137,10 +166,19 @@ abstract class MockitoAgentProvider : CommandLineArgumentProvider {
  }
  
  dependencies {
 -    implementation(project(":purpur-api")) // Purpur
 +    implementation(project(":divinemc-api")) // DivineMC - Rebrand
-+
-+    // DivineMC start - Dependencies
+     implementation("ca.spottedleaf:leafpile:1.0.0")
+-    implementation("org.jline:jline-terminal-ffm:3.27.1") // use ffm on java 22+
+-    implementation("org.jline:jline-terminal-jni:3.27.1") // fall back to jni on java 21
 +    implementation ("com.github.Carleslc.Simple-YAML:Simple-Yaml:1.8.4") {
 +        exclude(group="org.yaml", module="snakeyaml")
 +    }
@@ -88,17 +89,13 @@
 +    implementation("net.openhft:zero-allocation-hashing:0.16")
 +    implementation("org.agrona:agrona:2.2.4")
 +    implementation("net.objecthunter:exp4j:0.4.8")
-+    // DivineMC end - Dependencies
-+
-     implementation("ca.spottedleaf:concurrentutil:0.0.10")
--    implementation("org.jline:jline-terminal-ffm:3.27.1") // use ffm on java 22+
--    implementation("org.jline:jline-terminal-jni:3.27.1") // fall back to jni on java 21
-+    implementation("org.jline:jline-terminal-ffm:3.29.0") // use ffm on java 22+ // DivineMC - Bump dependencies
-+    implementation("org.jline:jline-terminal-jni:3.29.0") // fall back to jni on java 21 // DivineMC - Bump dependencies
++    implementation("ca.spottedleaf:concurrentutil:0.0.10")
++    implementation("org.jline:jline-terminal-ffm:3.29.0") // use ffm on java 22+
++    implementation("org.jline:jline-terminal-jni:3.29.0") // fall back to jni on java 21
      implementation("net.minecrell:terminalconsoleappender:1.3.0")
      implementation("net.kyori:adventure-text-serializer-ansi")
  
-@@ -170,7 +_,12 @@
+@@ -170,7 +208,12 @@ dependencies {
      // Deps that were previously in the API but have now been moved here for backwards compat, eventually to be removed
      runtimeOnly("commons-lang:commons-lang:2.6")
      runtimeOnly("org.xerial:sqlite-jdbc:3.49.1.0")
@@ -112,7 +109,7 @@
      runtimeOnly("com.lmax:disruptor:3.4.4")
      implementation("com.googlecode.json-simple:json-simple:1.1.1") { // change to runtimeOnly once Timings is removed
          isTransitive = false // includes junit
-@@ -191,6 +_,16 @@
+@@ -191,30 +234,46 @@ dependencies {
      implementation("me.lucko:spark-paper:1.10.152")
  }
  
@@ -129,26 +126,36 @@
  tasks.jar {
      manifest {
          val git = Git(rootProject.layout.projectDirectory.path)
-@@ -201,20 +_,22 @@
-         val implementationVersion = "$mcVersion-${build ?: "DEV"}-$gitHash"
+         val mcVersion = rootProject.providers.gradleProperty("mcVersion").get()
+-        val build = System.getenv("BUILD_NUMBER") ?: null
++        val build = System.getenv("BUILD_NUMBER")
++            ?: System.getenv("GITHUB_RUN_NUMBER")
++            ?: rootProject.providers.gradleProperty("huntercoreBuildNumber").orNull
++        val huntercoreVersion = rootProject.providers.gradleProperty("huntercoreVersion").get()
+         val buildTime = if (build != null) Instant.now() else Instant.EPOCH // Purpur
+         val gitHash = git.exec(providers, "rev-parse", "--short=7", "HEAD").get().trim()
+-        val implementationVersion = "$mcVersion-${build ?: "DEV"}-$gitHash"
++        val huntercoreVersionLabel = if (build.isNullOrBlank()) huntercoreVersion else "$huntercoreVersion-build.$build"
++        val implementationVersion = "$huntercoreVersionLabel-mc.$mcVersion-$gitHash"
          val date = git.exec(providers, "show", "-s", "--format=%ci", gitHash).get().trim()
          val gitBranch = git.exec(providers, "rev-parse", "--abbrev-ref", "HEAD").get().trim()
 +        val channel = rootProject.providers.gradleProperty("channel").get() // DivineMC - Channel
          attributes(
              "Main-Class" to "org.bukkit.craftbukkit.Main",
 -            "Implementation-Title" to "Purpur", // Purpur
-+            "Implementation-Title" to "DivineMC", // DivineMC - Rebrand
++            "Implementation-Title" to "HunterCore",
              "Implementation-Version" to implementationVersion,
              "Implementation-Vendor" to date,
 -            "Specification-Title" to "Purpur", // Purpur
-+            "Specification-Title" to "DivineMC", // DivineMC - Rebrand
-             "Specification-Version" to project.version,
+-            "Specification-Version" to project.version,
 -            "Specification-Vendor" to "Purpur Team", // Purpur
 -            "Brand-Id" to "purpurmc:purpur", // Purpur
 -            "Brand-Name" to "Purpur", // Purpur
-+            "Specification-Vendor" to "BX Team", // DivineMC - Rebrand
-+            "Brand-Id" to "bxteam:divinemc", // DivineMC - Rebrand
-+            "Brand-Name" to "DivineMC", // DivineMC - Rebrand
++            "Specification-Title" to "HunterCore",
++            "Specification-Version" to huntercoreVersionLabel,
++            "Specification-Vendor" to "HunterCore",
++            "Brand-Id" to "huntercore:huntercore",
++            "Brand-Name" to "HunterCore",
              "Build-Number" to (build ?: ""),
              "Build-Time" to buildTime.toString(),
              "Git-Branch" to gitBranch,

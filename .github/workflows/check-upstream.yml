@@ -6,7 +6,7 @@ on:
       upstream_branch:
         description: DivineMC upstream branch or ref
         required: true
-        default: ver/26.1.2
+        default: ver/26.2
         type: string
       dry_run_merge:
         description: Run a no-commit merge check

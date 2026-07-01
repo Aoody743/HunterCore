@@ -38,9 +38,10 @@ public class Globals {
 
     public static void setupGlobals(ServerLevel world) {
         if (!DivineConfig.MiscCategory.enableSecureSeed) return;
-
-        long[] seed = world.getServer().getWorldGenSettings().options().featureSeed();
-        System.arraycopy(seed, 0, worldSeed, 0, WORLD_SEED_LONGS);
+        long fallbackSeed = world.getSeed();
+        for (int i = 0; i < WORLD_SEED_LONGS; i++) {
+            worldSeed[i] = fallbackSeed;
+        }
         int worldIndex = Iterables.indexOf(world.getServer().levelKeys(), it -> it == world.dimension());
         if (worldIndex == -1)
             worldIndex = world.getServer().levelKeys().size(); // if we are in world construction it may not have been added to the map yet
