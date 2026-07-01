@@ -137,7 +137,8 @@ public final class HunterPreferences {
         changed |= this.setDefault("bundled-plugins.update-existing", true);
         changed |= this.setDefault("bundled-plugins.write-disabled-marker", true);
         for (final HunterBundledPluginRecord plugin : bundledPlugins) {
-            changed |= this.setDefault("bundled-plugins.plugins." + normalize(plugin.id()), true);
+            final boolean enabledByDefault = !normalize(plugin.id()).equals("coreprotect");
+            changed |= this.setDefault("bundled-plugins.plugins." + normalize(plugin.id()), enabledByDefault);
         }
 
         changed |= this.setDefault("modules.tps-display.enabled", true);

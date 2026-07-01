@@ -54,6 +54,8 @@ HunterAuth builtin
 HunterTools builtin
 ```
 
+On the current 26.2 experimental line, `CoreProtect 23.2` is still bundled but defaults to disabled in fresh `preferences.yml` because its latest upstream release does not yet advertise 26.2 support. Everything else in the default bundled set is enabled by default.
+
 External plugins are prepared by:
 
 ```bash

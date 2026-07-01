@@ -43,7 +43,7 @@ gradle.lifecycle.beforeProject {
     val divinemcChannel = providers.gradleProperty("channel").get().trim()
     val divinemcBuildNumber = providers.environmentVariable("BUILD_NUMBER").orNull?.trim()?.toInt()
     val versionString = if (divinemcBuildNumber == null) {
-        "$mcVersion.local-SNAPSHOT"
+        mcVersion
     } else {
         "$mcVersion.build.$divinemcBuildNumber-${divinemcChannel.lowercase()}"
     }
