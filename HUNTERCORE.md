@@ -42,6 +42,7 @@ ViaRewind 4.1.2
 BlueMap 5.22
 Chunky 1.5.3
 PlaceholderAPI 2.12.2
+SkinsRestorer 15.12.4
 Vault 1.7.3
 ProtocolLib 5.4.0
 WorldEdit 7.4.3
@@ -162,7 +163,7 @@ Create web users from console or an op account:
 
 BlueMap is bundled for the web map, and Chunky is bundled for chunk pre-generation/performance prep. HunterCore prepares `plugins/BlueMap/core.conf` with `accept-download: true` on first startup so BlueMap can download Mojang client resources and start rendering without a manual config edit.
 
-PlaceholderAPI, Vault, ProtocolLib, WorldEdit, and WorldGuard are bundled as a common server foundation for placeholders, economy/permission bridging, packet/protocol extensions, map editing, and region protection. HunterTools provides lightweight built-in MOTD and utility commands without bundling EssentialsX or MiniMOTD. Each bundled plugin can still be disabled under `bundled-plugins.plugins.<plugin-id>`.
+PlaceholderAPI, SkinsRestorer, Vault, ProtocolLib, WorldEdit, and WorldGuard are bundled as a common server foundation for placeholders, offline-mode skin restoration, economy/permission bridging, packet/protocol extensions, map editing, and region protection. HunterTools provides lightweight built-in MOTD and utility commands without bundling EssentialsX or MiniMOTD. Each bundled plugin can still be disabled under `bundled-plugins.plugins.<plugin-id>`.
 
 ## Optimizations
 

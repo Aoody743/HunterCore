@@ -58,6 +58,9 @@ const state = {
   refreshTimer: null,
   lang: detectLanguage(),
   lastData: null,
+  selectedPlugin: '',
+  selectedActor: '',
+  selectedWebUser: '',
   page: 'map',
   mode: panelMode(),
   aiChatProfiles: [],
@@ -1095,7 +1098,21 @@ function setCommandPlaceholder() {
 }
 
 function dataItem(left, right = '', meta = '') {
-  return `<div class="dataItem"><span>${esc(left)}${meta ? `<small>${esc(meta)}</small>` : ''}</span><strong>${esc(right)}</strong></div>`;
+  return `<article class="dataItem workbenchCard">
+    <div class="cardCopy">
+      <span>${esc(left)}</span>
+      ${meta ? `<small>${esc(meta)}</small>` : ''}
+    </div>
+    <strong>${esc(right)}</strong>
+  </article>`;
+}
+
+function summaryCard(label, value, meta = '', tone = 'neutral') {
+  return `<article class="summaryCard summaryCard--${esc(tone)}">
+    <small>${esc(label)}</small>
+    <strong>${esc(value)}</strong>
+    ${meta ? `<span>${esc(meta)}</span>` : ''}
+  </article>`;
 }
 
 function toggleItem(left, checked, attrs = '', disabled = false) {
@@ -1232,7 +1249,7 @@ function actorLine(actor) {
       <textarea class="actorPersonaInput" rows="2" data-actor-ai-persona="true" aria-label="${esc(aiLabel)}" placeholder="${esc(aiPlaceholder)}">${esc(actor.aiPersona || '')}</textarea>
       <button type="button" data-actor-ai-save="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">${esc(t('actors.saveAi'))}</button>`
     : '';
-  return `<div class="dataItem">
+  return `<article class="dataItem actorCard ${state.selectedActor === actor.id ? 'isSelected' : ''}" data-actor-select="${esc(actor.id)}">
     <span>${esc(actor.displayName)}<small>${metaLine}</small></span>
     <div class="actorActions">
       <input class="actorCommandInput" value="${esc(clickCommand)}" placeholder="${esc(t('actors.clickPlaceholder'))}" data-actor-command-input="true">
@@ -1241,7 +1258,7 @@ function actorLine(actor) {
       ${actorAiControls}
       <button type="button" data-actor-remove="true" data-actor-module="${esc(actor.module)}" data-actor-id="${esc(actor.id)}">${esc(t('action.remove'))}</button>
     </div>
-  </div>`;
+  </article>`;
 }
 
 function allowedLine(user) {
@@ -1250,24 +1267,24 @@ function allowedLine(user) {
 }
 
 function webUserLine(user) {
-  return `<div class="dataItem">
+  return `<article class="dataItem accessCard ${state.selectedWebUser === user.id ? 'isSelected' : ''}" data-user-select="${esc(user.id)}">
     <span>${esc(user.displayName)}<small>${esc(roleLabel(user.role))} · ${user.passwordConfigured ? t('webUsers.webPasswordSet') : t('webUsers.hunterAuthOnly')} · ${user.commandExecution ? t('webUsers.commandsOn') : t('webUsers.commandsOff')} · ${esc(allowedLine(user))}</small></span>
     <span class="userActions">
       <button type="button" data-user-edit="${esc(user.id)}">${esc(t('action.edit'))}</button>
       <button type="button" data-user-remove="${esc(user.id)}">${esc(t('action.remove'))}</button>
     </span>
-  </div>`;
+  </article>`;
 }
 
 function aiApprovalLine(approval) {
   const who = approval.requestedBy ? approval.requestedBy : '--';
-  return `<div class="dataItem">
+  return `<article class="dataItem accessCard">
     <span>${esc(approval.fakePlayerName)}<small>${esc(approval.label)} · ${esc(approval.detail)} · ${esc(who)} · ${approval.expiresInSeconds}s</small></span>
     <span class="userActions">
       <button type="button" data-ai-approval="${esc(approval.fakePlayerName)}" data-ai-action="approve">${esc(t('ai.approve'))}</button>
       <button type="button" data-ai-approval="${esc(approval.fakePlayerName)}" data-ai-action="deny">${esc(t('ai.deny'))}</button>
     </span>
-  </div>`;
+  </article>`;
 }
 
 function pluginLine(plugin, admin) {
@@ -1450,6 +1467,14 @@ async function refreshChat() {
 }
 
 function renderOverview(data) {
+  const playerMeta = data.players ? `${data.players.length} visible` : t('players.loginRequired');
+  $('overviewHero').innerHTML = [
+    summaryCard('TPS', Number(data.server?.tps1 || 0).toFixed(2), `${Number(data.server?.mspt || 0).toFixed(1)} MSPT`, Number(data.server?.tps1 || 0) >= 18 ? 'good' : Number(data.server?.tps1 || 0) >= 15 ? 'warn' : 'bad'),
+    summaryCard(t('metric.online'), `${data.server?.online || 0}/${data.server?.maxPlayers || 0}`, playerMeta),
+    summaryCard(t('metric.memory'), data.server?.memory || '--', data.health?.status ? statusLabel(data.health.status) : '--', data.health?.status === 'critical' ? 'bad' : data.health?.status === 'warning' ? 'warn' : 'good'),
+    summaryCard(t('optimization.mode'), data.optimization?.mode || '--', `${data.optimization?.coreWorkers || '--'} core workers`)
+  ].join('');
+
   $('worlds').innerHTML = (data.worlds || [])
     .map((world) => dataItem(
       world.name,
@@ -1469,6 +1494,13 @@ function renderOverview(data) {
     dataItem(t('optimization.webPanelWorkers'), data.optimization.webPanelWorkers),
     dataItem(t('optimization.experimentalRegionTickingAllowed'), String(Boolean(data.optimization.experimentalRegionTickingAllowed))),
     dataItem(t('optimization.managedThreading'), String(Boolean(data.optimization.managedThreading)))
+  ].join('');
+
+  $('runtimeHero').innerHTML = [
+    summaryCard(t('runtime.throttle'), data.optimization?.aiThrottleFactor || '--', `${data.optimization?.fakePlayerRuntimeIntervalSeconds || '--'}s`),
+    summaryCard(t('runtime.queueThreads'), (data.queues || []).filter((queue) => queue.active).length || 0, `${(data.queues || []).length} queues`),
+    summaryCard(t('queues.title'), (data.queues || []).reduce((total, queue) => total + Number(queue.queued || 0), 0), 'queued jobs'),
+    summaryCard(t('hotpaths.title'), (data.hotPaths || []).length || 0, 'current samples')
   ].join('');
 
   $('runtimeBudgetList').innerHTML = [
@@ -1517,6 +1549,7 @@ function renderOverview(data) {
     $('pluginCountBadge').textContent = filteredPlugins ? t('plugins.count', { count: filteredPlugins.length }) : '--';
   }
   if (data.plugins) state.plugins = data.plugins;
+  renderPluginInspector(filteredPlugins || []);
 }
 
 function renderActorWorlds(worlds) {
@@ -1526,10 +1559,86 @@ function renderActorWorlds(worlds) {
   if (names.includes(selected)) $('actorWorld').value = selected;
 }
 
+function renderPluginInspector(plugins) {
+  const inspector = $('pluginInspector');
+  if (!inspector) return;
+  const list = plugins || [];
+  if (!list.length) {
+    inspector.classList.add('mutedState');
+    inspector.innerHTML = '<p>Select a plugin to inspect.</p>';
+    state.selectedPlugin = '';
+    return;
+  }
+  const selected = list.find((plugin) => plugin.name === state.selectedPlugin) || list[0];
+  state.selectedPlugin = selected.name;
+  inspector.classList.remove('mutedState');
+  inspector.innerHTML = `
+    <h3>${esc(selected.name)}</h3>
+    <p class="subtleLine">${esc(selected.description || pluginRiskLabel(selected))}</p>
+    <div class="compactList">
+      ${dataItem('Status', pluginStatusLabel(selected.status || (selected.loaded !== false ? (selected.enabled ? 'enabled' : 'disabled') : 'installed')))}
+      ${dataItem('Version', selected.version || '--', selected.apiVersion ? `API ${selected.apiVersion}` : '')}
+      ${dataItem('Source', selected.sourceJar || '--', selected.main || '--')}
+      ${dataItem('Authors', selected.authors?.join(', ') || '--', selected.website || '--')}
+      ${dataItem('Dependencies', selected.dependencies?.join(', ') || '--', selected.softDependencies?.length ? `soft: ${selected.softDependencies.join(', ')}` : '')}
+    </div>`;
+}
+
+function renderActorInspector(actors) {
+  const inspector = $('actorInspector');
+  if (!inspector) return;
+  const list = actors || [];
+  if (!list.length) {
+    inspector.classList.add('mutedState');
+    inspector.innerHTML = '<p>Select an actor to inspect.</p>';
+    state.selectedActor = '';
+    return;
+  }
+  const selected = list.find((actor) => actor.id === state.selectedActor) || list[0];
+  state.selectedActor = selected.id;
+  const location = selected.world
+    ? `${selected.world} ${Number(selected.x).toFixed(1)} ${Number(selected.y).toFixed(1)} ${Number(selected.z).toFixed(1)}`
+    : t('actors.notConfigured');
+  inspector.classList.remove('mutedState');
+  inspector.innerHTML = `
+    <h3>${esc(selected.displayName)}</h3>
+    <p class="subtleLine">${esc(selected.module)} · ${esc(selected.kind || selected.pose || '--')}</p>
+    <div class="compactList">
+      ${dataItem('State', selected.live ? t('actors.live') : t('actors.configured'), selected.aiEnabled ? t('actors.aiEnabled') : '--')}
+      ${dataItem('Location', location)}
+      ${dataItem(t('actors.clickCommand'), selected.clickCommand || '--')}
+      ${dataItem(t('actors.aiStatus'), selected.aiStatus || '--', selected.aiPersona || selected.pose || '--')}
+    </div>`;
+}
+
+function renderWebUserInspector(users) {
+  const inspector = $('webUserInspector');
+  if (!inspector) return;
+  const list = users || [];
+  if (!list.length) {
+    inspector.classList.add('mutedState');
+    inspector.innerHTML = '<p>Select a web role to inspect.</p>';
+    state.selectedWebUser = '';
+    return;
+  }
+  const selected = list.find((user) => user.id === state.selectedWebUser) || list[0];
+  state.selectedWebUser = selected.id;
+  inspector.classList.remove('mutedState');
+  inspector.innerHTML = `
+    <h3>${esc(selected.displayName)}</h3>
+    <p class="subtleLine">${esc(roleLabel(selected.role))}</p>
+    <div class="compactList">
+      ${dataItem('Commands', selected.commandExecution ? t('webUsers.commandsOn') : t('webUsers.commandsOff'))}
+      ${dataItem('Password', selected.passwordConfigured ? t('webUsers.webPasswordSet') : t('webUsers.hunterAuthOnly'))}
+      ${dataItem('Allowed', allowedLine(selected), selected.allowedCommandsConfigured ? 'custom' : 'inherit')}
+    </div>`;
+}
+
 function renderActors(actors) {
   if (!state.session?.admin) return;
   $('actorList').classList.remove('mutedState');
   $('actorList').innerHTML = actors?.length ? actors.map(actorLine).join('') : `<p class="mutedState">${esc(t('actors.none'))}</p>`;
+  renderActorInspector(actors);
 }
 
 function renderOperations(modules) {
@@ -1550,6 +1659,7 @@ function renderWebUsers(users) {
   state.webUsers = users || [];
   $('webUserList').classList.remove('mutedState');
   $('webUserList').innerHTML = state.webUsers.length ? state.webUsers.map(webUserLine).join('') : `<p class="mutedState">${esc(t('webUsers.none'))}</p>`;
+  renderWebUserInspector(state.webUsers);
 }
 
 function renderWebSettings(settings) {
@@ -2158,6 +2268,12 @@ function bindEvents() {
 
   $('actorList').addEventListener('click', async (event) => {
     const target = event.target;
+    const card = target instanceof Element ? target.closest('[data-actor-select]') : null;
+    if (card?.dataset.actorSelect) {
+      state.selectedActor = card.dataset.actorSelect;
+      renderActorInspector(state.lastData?.actors || []);
+      if (!(target instanceof HTMLButtonElement)) return;
+    }
     if (!(target instanceof HTMLButtonElement)) return;
     try {
       const payload = { module: target.dataset.actorModule, id: target.dataset.actorId };
@@ -2459,6 +2575,12 @@ function bindEvents() {
 
   $('webUserList').addEventListener('click', async (event) => {
     const target = event.target;
+    const card = target instanceof Element ? target.closest('[data-user-select]') : null;
+    if (card?.dataset.userSelect) {
+      state.selectedWebUser = card.dataset.userSelect;
+      renderWebUserInspector(state.webUsers);
+      if (!(target instanceof HTMLButtonElement)) return;
+    }
     if (!(target instanceof HTMLButtonElement)) return;
     if (target.dataset.userEdit) {
       editWebUser(target.dataset.userEdit);
@@ -2483,6 +2605,13 @@ function bindEvents() {
 
   $('pluginList').addEventListener('click', async (event) => {
     const target = event.target;
+    const row = target instanceof Element ? target.closest('.pluginItem, [data-plugin-select]') : null;
+    const pluginName = row?.querySelector?.('[data-plugin-name]')?.dataset?.pluginName || row?.dataset?.pluginSelect || '';
+    if (pluginName) {
+      state.selectedPlugin = pluginName;
+      renderPluginInspector(state.plugins);
+      if (!(target instanceof HTMLButtonElement)) return;
+    }
     if (!(target instanceof HTMLButtonElement) || !target.dataset.pluginAction) return;
     try {
       const payload = {

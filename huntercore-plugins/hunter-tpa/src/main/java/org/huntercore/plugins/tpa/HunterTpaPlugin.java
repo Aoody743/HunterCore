@@ -52,6 +52,7 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
     private static final String TELEPORT_GUI_TITLE = ChatColor.DARK_AQUA + "HunterTPA · Teleport";
     private static final String HOMES_GUI_TITLE = ChatColor.DARK_GREEN + "HunterTPA · 我的家";
     private static final String DELETE_HOME_GUI_TITLE = ChatColor.DARK_RED + "HunterTPA · Delete Home";
+    private static final String REQUESTS_GUI_TITLE = ChatColor.DARK_PURPLE + "HunterTPA · Requests";
 
     private final Map<UUID, TeleportRequest> incoming = new HashMap<>();
     private final Map<UUID, UUID> outgoing = new HashMap<>();
@@ -125,9 +126,11 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         inventory.setItem(45, item(Material.RED_BED, this.text("我的家", "My Homes"), List.of("/homes")));
         inventory.setItem(46, item(Material.COMPASS, "Spawn", List.of("/spawn")));
         inventory.setItem(47, item(Material.CLOCK, "Back", List.of("/back")));
+        inventory.setItem(48, this.requestsMenuItem(player));
         inventory.setItem(49, item(this.requestsDisabled(player) ? Material.REDSTONE_BLOCK : Material.EMERALD_BLOCK, this.requestsDisabled(player) ? this.text("TPA 已关闭", "TPA disabled") : this.text("TPA 已开启", "TPA enabled"), List.of(this.text("点击切换是否接收传送请求。", "Click to toggle incoming teleport requests."))));
         inventory.setItem(51, item(Material.GRASS_BLOCK, "RTP", List.of(this.text("随机传送到当前世界的安全位置。", "Random teleport to a safe location in this world."))));
         inventory.setItem(53, item(Material.BARRIER, this.text("关闭", "Close"), List.of()));
+        inventory.setItem(52, this.outgoingRequestItem(player));
         int slot = 9;
         for (final Player online : Bukkit.getOnlinePlayers()) {
             if (slot >= 45) {
@@ -194,6 +197,73 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         inventory.setItem(13, item(Material.RED_BED, home, List.of(this.text("即将删除这个家。", "This home will be deleted."))));
         inventory.setItem(15, item(Material.RED_WOOL, this.text("取消", "Cancel"), List.of(this.text("返回家列表。", "Return to homes."))));
         player.openInventory(inventory);
+    }
+
+    private boolean openRequestsGui(final Player player) {
+        final Inventory inventory = Bukkit.createInventory(player, 27, REQUESTS_GUI_TITLE);
+        final TeleportRequest incomingRequest = this.incoming.get(player.getUniqueId());
+        final TeleportRequest outgoingRequest = this.outgoingRequestFor(player);
+
+        inventory.setItem(4, item(Material.ENCHANTED_BOOK, this.text("Requests", "Requests"), List.of(
+            incomingRequest == null ? this.text("No incoming request.", "No incoming request.") : this.requestSummary(incomingRequest, true),
+            outgoingRequest == null ? this.text("No outgoing request.", "No outgoing request.") : this.requestSummary(outgoingRequest, false)
+        )));
+        inventory.setItem(11, incomingRequest == null
+            ? item(Material.GRAY_DYE, this.text("Accept", "Accept"), List.of(this.text("No incoming request.", "No incoming request.")))
+            : item(Material.LIME_WOOL, this.text("Accept", "Accept"), List.of(this.requestSummary(incomingRequest, true))));
+        inventory.setItem(13, incomingRequest == null
+            ? item(Material.GRAY_DYE, this.text("Inbox", "Inbox"), List.of(this.text("Nothing to review.", "Nothing to review.")))
+            : item(Material.PLAYER_HEAD, this.text("Requester", "Requester"), List.of(this.requestSummary(incomingRequest, true))));
+        inventory.setItem(15, incomingRequest == null
+            ? item(Material.GRAY_DYE, this.text("Deny", "Deny"), List.of(this.text("No incoming request.", "No incoming request.")))
+            : item(Material.RED_WOOL, this.text("Deny", "Deny"), List.of(this.requestSummary(incomingRequest, true))));
+        inventory.setItem(21, outgoingRequest == null
+            ? item(Material.GRAY_DYE, this.text("Outgoing", "Outgoing"), List.of(this.text("No outgoing request.", "No outgoing request.")))
+            : item(Material.CLOCK, this.text("Cancel outgoing", "Cancel outgoing"), List.of(this.requestSummary(outgoingRequest, false))));
+        inventory.setItem(23, item(Material.COMPASS, this.text("Refresh", "Refresh"), List.of(this.text("Reload the request state.", "Reload the request state."))));
+        inventory.setItem(26, item(Material.ARROW, this.text("Back", "Back"), List.of("/tpgui")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private ItemStack requestsMenuItem(final Player player) {
+        final TeleportRequest incomingRequest = this.incoming.get(player.getUniqueId());
+        return item(
+            incomingRequest == null ? Material.BOOK : Material.ENCHANTED_BOOK,
+            this.text("Requests", "Requests"),
+            List.of(incomingRequest == null ? this.text("Open the request inbox.", "Open the request inbox.") : this.requestSummary(incomingRequest, true))
+        );
+    }
+
+    private ItemStack outgoingRequestItem(final Player player) {
+        final TeleportRequest outgoingRequest = this.outgoingRequestFor(player);
+        return item(
+            outgoingRequest == null ? Material.GRAY_DYE : Material.CLOCK,
+            this.text("Outgoing", "Outgoing"),
+            List.of(outgoingRequest == null ? this.text("No outgoing request.", "No outgoing request.") : this.requestSummary(outgoingRequest, false))
+        );
+    }
+
+    private @Nullable TeleportRequest outgoingRequestFor(final Player player) {
+        final UUID targetId = this.outgoing.get(player.getUniqueId());
+        if (targetId == null) {
+            return null;
+        }
+        final TeleportRequest request = this.incoming.get(targetId);
+        if (request == null || !request.requester().equals(player.getUniqueId()) || request.isExpired()) {
+            return null;
+        }
+        return request;
+    }
+
+    private String requestSummary(final TeleportRequest request, final boolean incomingView) {
+        final UUID otherId = incomingView ? request.requester() : request.target();
+        final Player other = Bukkit.getPlayer(otherId);
+        final String direction = request.type() == TeleportType.TO_TARGET
+            ? (incomingView ? "to you" : "to target")
+            : (incomingView ? "to requester" : "to you");
+        final long seconds = Math.max(0L, (request.expiresAt() - System.currentTimeMillis() + 999L) / 1000L);
+        return (other == null ? "Unknown" : other.getName()) + " · " + direction + " · " + seconds + "s";
     }
 
     private boolean requestTeleport(final Player requester, final String[] args, final TeleportType type) {
@@ -400,7 +470,7 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             return;
         }
         final String title = event.getView().getTitle();
-        if (!title.equals(TELEPORT_GUI_TITLE) && !title.equals(HOMES_GUI_TITLE) && !title.equals(DELETE_HOME_GUI_TITLE)) {
+        if (!title.equals(TELEPORT_GUI_TITLE) && !title.equals(HOMES_GUI_TITLE) && !title.equals(DELETE_HOME_GUI_TITLE) && !title.equals(REQUESTS_GUI_TITLE)) {
             return;
         }
         event.setCancelled(true);
@@ -413,6 +483,8 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             this.handleTeleportGuiClick(player, clicked, name, event.getClick());
         } else if (title.equals(DELETE_HOME_GUI_TITLE)) {
             this.handleDeleteHomeGuiClick(player, clicked);
+        } else if (title.equals(REQUESTS_GUI_TITLE)) {
+            this.handleRequestsGuiClick(player, clicked);
         } else {
             this.handleHomesGuiClick(player, clicked, name, event.getClick());
         }
@@ -423,10 +495,12 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             case RED_BED -> this.openHomesGui(player);
             case COMPASS -> player.performCommand("spawn");
             case CLOCK -> player.performCommand("back");
+            case BOOK, ENCHANTED_BOOK -> this.openRequestsGui(player);
             case REDSTONE_BLOCK, EMERALD_BLOCK -> {
                 this.toggleRequests(player);
                 this.openTeleportGui(player);
             }
+            case GRAY_DYE -> this.openRequestsGui(player);
             case GRASS_BLOCK -> this.randomTeleport(player);
             case BARRIER -> {
                 this.playGuiSound(player, Sound.UI_BUTTON_CLICK);
@@ -440,6 +514,27 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
                 }
                 player.closeInventory();
             }
+            default -> {
+            }
+        }
+    }
+
+    private void handleRequestsGuiClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case LIME_WOOL -> {
+                this.answerRequest(player, new String[0], true);
+                this.openRequestsGui(player);
+            }
+            case RED_WOOL -> {
+                this.answerRequest(player, new String[0], false);
+                this.openRequestsGui(player);
+            }
+            case CLOCK -> {
+                this.cancelRequest(player);
+                this.openRequestsGui(player);
+            }
+            case COMPASS, GRAY_DYE -> this.openRequestsGui(player);
+            case ARROW -> this.openTeleportGui(player);
             default -> {
             }
         }

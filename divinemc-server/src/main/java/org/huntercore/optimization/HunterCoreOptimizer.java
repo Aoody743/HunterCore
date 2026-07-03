@@ -48,7 +48,7 @@ public final class HunterCoreOptimizer {
         }
 
         try {
-            final YamlConfiguration config = YamlConfiguration.loadConfiguration(preferencesPath.toFile());
+            final YamlConfiguration config = HunterPreferences.loadConfigurationSafely(preferencesPath, false);
             if (!config.getBoolean("optimizations.cpu.enabled", true)) {
                 System.setProperty(PROP_MANAGED, "false");
                 lastSnapshot = new OptimizationSnapshot(false, MODE_SINGLE_THREAD, CPU, Map.of(), "disabled in preferences.yml");

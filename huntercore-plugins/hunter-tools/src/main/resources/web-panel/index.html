@@ -131,6 +131,7 @@
         </div>
         <span id="sessionBadge" class="roleBadge">Guest</span>
       </div>
+      <div id="overviewHero" class="summaryGrid"></div>
       <div class="overviewGrid">
         <section class="panel">
           <h3 data-i18n="worlds.title">Worlds</h3>
@@ -154,6 +155,7 @@
           <h2 data-i18n="runtime.title">Runtime Budgets</h2>
         </div>
       </div>
+      <div id="runtimeHero" class="summaryGrid"></div>
       <div class="overviewGrid">
         <section class="panel">
           <h3 data-i18n="runtime.title">Runtime Budgets</h3>
@@ -192,7 +194,10 @@
             <option value="actionable" data-i18n="plugins.filter.actionable">Actionable</option>
           </select>
         </div>
-        <div id="pluginList" class="pluginGrid mutedState" data-i18n="plugins.loginRequired">Login to view plugin detail.</div>
+        <div class="workspaceSplit">
+          <div id="pluginList" class="pluginGrid mutedState" data-i18n="plugins.loginRequired">Login to view plugin detail.</div>
+          <aside id="pluginInspector" class="detailInspector mutedState">Select a plugin to inspect.</aside>
+        </div>
       </section>
     </section>
 
@@ -244,7 +249,10 @@
               <button type="submit" class="primaryButton" data-i18n="actors.spawn">Spawn</button>
             </div>
           </form>
-          <div id="actorList" class="dataList mutedState" data-i18n="admin.required">Admin session required.</div>
+          <div class="workspaceSplit">
+            <div id="actorList" class="dataList mutedState" data-i18n="admin.required">Admin session required.</div>
+            <aside id="actorInspector" class="detailInspector mutedState">Select an actor to inspect.</aside>
+          </div>
         </section>
       </div>
     </section>
@@ -466,7 +474,10 @@
               <button type="submit" class="primaryButton" data-i18n="webUsers.save">Save role</button>
             </div>
           </form>
-          <div id="webUserList" class="dataList mutedState" data-i18n="admin.required">Admin session required.</div>
+          <div class="workspaceSplit">
+            <div id="webUserList" class="dataList mutedState" data-i18n="admin.required">Admin session required.</div>
+            <aside id="webUserInspector" class="detailInspector mutedState">Select a web role to inspect.</aside>
+          </div>
         </section>
         </div>
       </div>

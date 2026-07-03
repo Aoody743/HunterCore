@@ -18,6 +18,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.huntercore.api.HunterLanguage;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -39,7 +40,7 @@ final class HunterToolsPreferences {
 
     static HunterToolsPreferences loadOrCreate(final JavaPlugin plugin) {
         final Path path = Bukkit.getPluginsFolder().toPath().resolve("HunterCore").resolve("preferences.yml");
-        final YamlConfiguration config = Files.exists(path) ? YamlConfiguration.loadConfiguration(path.toFile()) : new YamlConfiguration();
+        final YamlConfiguration config = loadConfigurationSafely(plugin, path, true);
         final HunterToolsPreferences preferences = new HunterToolsPreferences(plugin, path, config);
         if (preferences.applyDefaults() || !Files.exists(path)) {
             preferences.saveNow();
@@ -50,7 +51,7 @@ final class HunterToolsPreferences {
     void reload() {
         this.flushPendingSaves();
         synchronized (this.lock) {
-            this.config = Files.exists(this.path) ? YamlConfiguration.loadConfiguration(this.path.toFile()) : new YamlConfiguration();
+            this.config = loadConfigurationSafely(this.plugin, this.path, true);
             if (this.applyDefaults()) {
                 this.saveNow();
             }
@@ -1097,5 +1098,42 @@ final class HunterToolsPreferences {
             }
         }
         return UUID.nameUUIDFromBytes(("huntercore:" + module + ":" + id).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static YamlConfiguration loadConfigurationSafely(final JavaPlugin plugin, final Path path, final boolean backupInvalid) {
+        final YamlConfiguration config = new YamlConfiguration();
+        if (!Files.exists(path)) {
+            return config;
+        }
+        try {
+            final String text = Files.readString(path, StandardCharsets.UTF_8);
+            if (text.isBlank()) {
+                return config;
+            }
+            config.loadFromString(text);
+            return config;
+        } catch (final InvalidConfigurationException | IllegalArgumentException ex) {
+            if (backupInvalid) {
+                backupInvalidConfig(plugin, path);
+            }
+            plugin.getLogger().warning("HunterCore preferences file " + path + " is invalid YAML; using defaults" + (backupInvalid ? " and backing it up" : ""));
+            return new YamlConfiguration();
+        } catch (final IOException ex) {
+            plugin.getLogger().warning("Failed to read HunterCore preferences file " + path + ": " + ex.getMessage());
+            return new YamlConfiguration();
+        }
+    }
+
+    private static void backupInvalidConfig(final JavaPlugin plugin, final Path path) {
+        try {
+            final String fileName = path.getFileName().toString();
+            final int dot = fileName.lastIndexOf('.');
+            final String base = dot >= 0 ? fileName.substring(0, dot) : fileName;
+            final String ext = dot >= 0 ? fileName.substring(dot) : "";
+            final String backupName = base + ".invalid-" + System.currentTimeMillis() + ext;
+            Files.move(path, path.resolveSibling(backupName), StandardCopyOption.REPLACE_EXISTING);
+        } catch (final IOException ex) {
+            plugin.getLogger().warning("Failed to back up invalid HunterCore preferences file " + path + ": " + ex.getMessage());
+        }
     }
 }

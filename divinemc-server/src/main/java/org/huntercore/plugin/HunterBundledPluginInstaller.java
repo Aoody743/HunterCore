@@ -232,12 +232,15 @@ public final class HunterBundledPluginInstaller {
             if (Files.exists(target)) {
                 currentHash = sha256(target);
                 if (plugin.sha256() != null && plugin.sha256().equalsIgnoreCase(currentHash)) {
+                    deleteStaleSiblingJars(pluginDirectory, plugin, target);
                     return new InstallResult(plugin, InstallState.UNCHANGED, "already installed");
                 }
                 if (!updateExisting) {
                     return new InstallResult(plugin, InstallState.SKIPPED, "existing jar present and update-existing=false");
                 }
             }
+
+            deleteStaleSiblingJars(pluginDirectory, plugin, target);
 
             final Path temp = Files.createTempFile(pluginDirectory, plugin.id() + "-", ".jar.tmp");
             try {
@@ -314,6 +317,25 @@ public final class HunterBundledPluginInstaller {
 
         @Override
         public void write(final int b) {
+        }
+    }
+
+    private static void deleteStaleSiblingJars(final Path pluginDirectory, final HunterBundledPluginRecord plugin, final Path target) throws IOException {
+        final String prefix = plugin.name().toLowerCase(Locale.ROOT);
+        try (var paths = Files.list(pluginDirectory)) {
+            for (final Path path : paths.toList()) {
+                final String fileName = path.getFileName().toString();
+                if (!fileName.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                    continue;
+                }
+                if (path.equals(target)) {
+                    continue;
+                }
+                if (!fileName.toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                    continue;
+                }
+                Files.deleteIfExists(path);
+            }
         }
     }
 }

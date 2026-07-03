@@ -1,18 +1,23 @@
 package org.huntercore.config;
 
+import com.mojang.logging.LogUtils;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.huntercore.api.HunterLanguage;
 import org.huntercore.plugin.HunterBundledPluginRecord;
+import org.slf4j.Logger;
 
 public final class HunterPreferences {
     public static final String DIRECTORY_NAME = "HunterCore";
     public static final String FILE_NAME = "preferences.yml";
+    private static final Logger LOGGER = LogUtils.getClassLogger();
 
     private final Path path;
     private final YamlConfiguration config;
@@ -27,9 +32,7 @@ public final class HunterPreferences {
         final Path path = configDirectory.resolve(FILE_NAME);
         Files.createDirectories(configDirectory);
 
-        final YamlConfiguration config = Files.exists(path)
-            ? YamlConfiguration.loadConfiguration(path.toFile())
-            : new YamlConfiguration();
+        final YamlConfiguration config = loadConfigurationSafely(path, true);
         final HunterPreferences preferences = new HunterPreferences(path, config);
         boolean changed = preferences.applyDefaults(bundledPlugins);
         changed |= preferences.migrateLegacyBundledConfig(pluginDirectory, bundledPlugins);
@@ -268,7 +271,13 @@ public final class HunterPreferences {
             return false;
         }
 
-        final YamlConfiguration legacy = YamlConfiguration.loadConfiguration(legacyPath.toFile());
+        final YamlConfiguration legacy;
+        try {
+            legacy = loadConfigurationSafely(legacyPath, true);
+        } catch (final IOException ex) {
+            LOGGER.warn("Failed to load legacy HunterCore bundled plugin preferences from {}", legacyPath, ex);
+            return false;
+        }
         boolean changed = false;
         if (legacy.contains("enabled") && !this.config.contains("bundled-plugins.enabled")) {
             this.config.set("bundled-plugins.enabled", legacy.getBoolean("enabled", true));
@@ -319,5 +328,41 @@ public final class HunterPreferences {
 
     public static String normalize(final String id) {
         return id.toLowerCase(Locale.ROOT).replace('_', '-');
+    }
+
+    public static YamlConfiguration loadConfigurationSafely(final Path path, final boolean backupInvalid) throws IOException {
+        final YamlConfiguration config = new YamlConfiguration();
+        if (!Files.exists(path)) {
+            return config;
+        }
+
+        final String text = Files.readString(path, StandardCharsets.UTF_8);
+        if (text.isBlank()) {
+            return config;
+        }
+
+        try {
+            config.loadFromString(text);
+            return config;
+        } catch (final InvalidConfigurationException | IllegalArgumentException ex) {
+            if (backupInvalid) {
+                backupInvalidConfig(path);
+            }
+            LOGGER.warn("HunterCore preferences file {} is invalid YAML; using defaults{}", path, backupInvalid ? " and backing it up" : "", ex);
+            return new YamlConfiguration();
+        }
+    }
+
+    private static void backupInvalidConfig(final Path path) throws IOException {
+        if (!Files.exists(path)) {
+            return;
+        }
+        final String fileName = path.getFileName().toString();
+        final int dot = fileName.lastIndexOf('.');
+        final String base = dot >= 0 ? fileName.substring(0, dot) : fileName;
+        final String ext = dot >= 0 ? fileName.substring(dot) : "";
+        final String backupName = base + ".invalid-" + System.currentTimeMillis() + ext;
+        final Path backupPath = path.resolveSibling(backupName);
+        Files.move(path, backupPath, StandardCopyOption.REPLACE_EXISTING);
     }
 }

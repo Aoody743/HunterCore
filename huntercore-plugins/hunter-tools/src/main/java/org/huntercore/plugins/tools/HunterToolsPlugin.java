@@ -87,12 +87,17 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private static final String INVENTORY_PREVIEW_TITLE = ChatColor.DARK_AQUA + "HunterCore · 背包预览";
     private static final String SETTINGS_MENU_TITLE = ChatColor.DARK_AQUA + "HunterCore · 设置";
     private static final String ADMIN_MENU_TITLE = ChatColor.DARK_RED + "HunterCore · 管理员中心";
+    private static final String ADMIN_SYSTEM_TITLE = ChatColor.DARK_RED + "HunterCore Admin · System";
+    private static final String ADMIN_MODULES_TITLE = ChatColor.DARK_RED + "HunterCore Admin · Modules";
+    private static final String ADMIN_PREFERENCES_TITLE = ChatColor.DARK_RED + "HunterCore Admin · Preferences";
+    private static final String ADMIN_OPTIMIZE_TITLE = ChatColor.DARK_RED + "HunterCore Admin · Optimize";
     private static final String[] SIDEBAR_KEYS = {
         "§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a", "§b", "§c", "§d", "§e", "§f"
     };
 
     private final Map<UUID, SidebarBoard> sidebars = new HashMap<>();
     private final Map<UUID, Location> backLocations = new HashMap<>();
+    private final Map<UUID, GuiChatSession> guiChatSessions = new HashMap<>();
     private HunterToolsPreferences preferences;
     private HunterActorManager actorManager;
     private HunterRealFakePlayerManager realFakePlayerManager;
@@ -106,6 +111,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private BukkitTask metricsTask;
     private BukkitTask actionbarTask;
     private BukkitTask sidebarTask;
+    private static final String ACTOR_LIST_TITLE_PREFIX = "HC Actors ";
+    private static final String ACTOR_DETAIL_TITLE_PREFIX = "HC Actor ";
+    private static final String STORY_WORKBENCH_TITLE = "HC Story Workbench";
 
     @Override
     public void onEnable() {
@@ -188,14 +196,14 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft" -> this.craft(sender);
             case "enderchest" -> this.enderChest(sender, args);
             case "trash" -> this.trash(sender);
-            case "menu" -> this.openMainMenu(sender);
-            case "profile", "playerinfo", "me" -> this.openProfileMenu(sender);
-            case "settings" -> this.openSettingsMenu(sender);
-            case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminMenu(sender) : this.admin(sender, args);
+            case "menu" -> this.openMainMenuWorkbench(sender);
+            case "profile", "playerinfo", "me" -> this.openProfileWorkbench(sender);
+            case "settings" -> this.openSettingsWorkbench(sender);
+            case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminWorkbench(sender) : this.admin(sender, args);
             case "player" -> this.realFakePlayer(sender, "player", args);
             case "npc" -> this.npc(sender, "npc", args);
             case "start" -> this.storyModeManager != null && this.storyModeManager.startCommand(sender);
-            case "story" -> this.storyModeManager != null && this.storyModeManager.command(sender, "story", args);
+            case "story" -> args.length == 0 && sender instanceof Player ? this.openStoryWorkbench((Player) sender) : this.storyModeManager != null && this.storyModeManager.command(sender, "story", args);
             default -> false;
         };
     }
@@ -234,6 +242,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     public void onQuit(final PlayerQuitEvent event) {
         this.sidebars.remove(event.getPlayer().getUniqueId());
         this.backLocations.remove(event.getPlayer().getUniqueId());
+        this.guiChatSessions.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -269,12 +278,15 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case CRAFTING_TABLE -> player.performCommand("craft");
             case ENDER_CHEST -> player.performCommand("enderchest");
             case CHEST -> player.performCommand("trash");
-            case LEVER -> player.performCommand("settings");
-            case PLAYER_HEAD -> this.openProfileMenu(player);
+            case LEVER -> this.openSettingsWorkbench(player);
+            case PLAYER_HEAD -> this.openProfileWorkbench(player);
             case BOOK -> player.performCommand("info");
             case DIAMOND -> player.sendMessage(ChatColor.AQUA + "Shop/Donate: " + ChatColor.WHITE + this.preferences.stringValue("modules.menu.shop-url", "Not configured"));
             case FILLED_MAP -> player.sendMessage(ChatColor.AQUA + "BlueMap: " + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.map-url", "Not configured"));
-            case COMMAND_BLOCK -> this.openAdminMenu(player);
+            case ARMOR_STAND -> this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
+            case VILLAGER_SPAWN_EGG -> this.openActorListWorkbench(player, NPCS);
+            case ENCHANTED_BOOK -> this.openStoryWorkbench(player);
+            case COMMAND_BLOCK -> this.openAdminWorkbench(player);
             case BARRIER -> player.closeInventory();
             default -> {
             }
@@ -287,7 +299,17 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return;
         }
         final String title = event.getView().getTitle();
-        if (!title.equals(PROFILE_MENU_TITLE) && !title.equals(INVENTORY_PREVIEW_TITLE) && !title.equals(SETTINGS_MENU_TITLE) && !title.equals(ADMIN_MENU_TITLE)) {
+        if (!title.equals(PROFILE_MENU_TITLE)
+            && !title.equals(INVENTORY_PREVIEW_TITLE)
+            && !title.equals(SETTINGS_MENU_TITLE)
+            && !title.equals(ADMIN_MENU_TITLE)
+            && !title.equals(ADMIN_SYSTEM_TITLE)
+            && !title.equals(ADMIN_MODULES_TITLE)
+            && !title.equals(ADMIN_PREFERENCES_TITLE)
+            && !title.equals(ADMIN_OPTIMIZE_TITLE)
+            && !title.startsWith(ACTOR_LIST_TITLE_PREFIX)
+            && !title.startsWith(ACTOR_DETAIL_TITLE_PREFIX)
+            && !title.equals(STORY_WORKBENCH_TITLE)) {
             return;
         }
         event.setCancelled(true);
@@ -295,16 +317,30 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (clicked == null || clicked.getType().isAir() || !clicked.hasItemMeta()) {
             return;
         }
-        if (title.equals(PROFILE_MENU_TITLE)) {
-            this.handleProfileClick(player, clicked);
+        if (title.startsWith(ACTOR_LIST_TITLE_PREFIX)) {
+            this.handleActorListWorkbenchClick(player, clicked, title);
+        } else if (title.startsWith(ACTOR_DETAIL_TITLE_PREFIX)) {
+            this.handleActorDetailWorkbenchClick(player, clicked, title);
+        } else if (title.equals(STORY_WORKBENCH_TITLE)) {
+            this.handleStoryWorkbenchClick(player, clicked);
+        } else if (title.equals(PROFILE_MENU_TITLE)) {
+            this.handleProfileWorkbenchClick(player, clicked);
         } else if (title.equals(INVENTORY_PREVIEW_TITLE)) {
             if (clicked.getType() == Material.BARRIER) {
-                this.openProfileMenu(player);
+                this.openProfileWorkbench(player);
             }
         } else if (title.equals(SETTINGS_MENU_TITLE)) {
-            this.handleSettingsClick(player, clicked);
+            this.handleSettingsWorkbenchClick(player, clicked);
+        } else if (title.equals(ADMIN_SYSTEM_TITLE)) {
+            this.handleAdminSystemWorkbenchClick(player, clicked);
+        } else if (title.equals(ADMIN_MODULES_TITLE)) {
+            this.handleAdminModulesWorkbenchClick(player, clicked, event.getRawSlot());
+        } else if (title.equals(ADMIN_PREFERENCES_TITLE)) {
+            this.handleAdminPreferencesWorkbenchClick(player, clicked);
+        } else if (title.equals(ADMIN_OPTIMIZE_TITLE)) {
+            this.handleAdminOptimizeWorkbenchClick(player, clicked);
         } else {
-            this.handleAdminClick(player, clicked);
+            this.handleAdminWorkbenchClick(player, clicked);
         }
     }
 
@@ -479,6 +515,554 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
     }
 
+    private boolean openMainMenuWorkbench(final CommandSender sender) {
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage(ChatColor.RED + "Only players can open the GUI.");
+            return true;
+        }
+        final Inventory inventory = Bukkit.createInventory(player, 54, MAIN_MENU_TITLE);
+        inventory.setItem(10, this.menuItem(Material.ENDER_PEARL, "Teleport", List.of("HunterTPA workbench")));
+        inventory.setItem(11, this.menuItem(Material.RED_BED, "Homes", List.of("Home list, delete, travel")));
+        inventory.setItem(12, this.menuItem(Material.COMPASS, "Spawn", List.of("Teleport to spawn")));
+        inventory.setItem(13, this.menuItem(Material.CLOCK, "Back", List.of("Return to previous location")));
+        inventory.setItem(14, this.menuItem(Material.CRAFTING_TABLE, "Crafting", List.of("Portable crafting table")));
+        inventory.setItem(15, this.menuItem(Material.ENDER_CHEST, "Ender Chest", List.of("Open your ender chest")));
+        inventory.setItem(16, this.menuItem(Material.CHEST, "Trash", List.of("Disposable inventory")));
+        inventory.setItem(28, this.menuItem(Material.PLAYER_HEAD, "Profile", List.of("Stats, inventory preview, utility")));
+        inventory.setItem(29, this.menuItem(Material.LEVER, "Settings", List.of("TPA toggle, language, panel")));
+        inventory.setItem(30, this.menuItem(Material.ARMOR_STAND, "PlayerBots", List.of("List and control fake players")));
+        inventory.setItem(31, this.menuItem(Material.VILLAGER_SPAWN_EGG, "NPCs", List.of("List and control NPCs")));
+        inventory.setItem(32, this.menuItem(Material.ENCHANTED_BOOK, "Story Mode", List.of("Status, start, stop, meltdown")));
+        inventory.setItem(33, this.menuItem(Material.BOOK, "Server Info", List.of("/info")));
+        inventory.setItem(34, this.menuItem(Material.FILLED_MAP, "Web Panel", List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))));
+        if (player.hasPermission("huntertools.command.admin")) {
+            inventory.setItem(40, this.menuItem(Material.COMMAND_BLOCK, "Admin", List.of("Runtime, modules, broadcast")));
+        }
+        inventory.setItem(49, this.menuItem(Material.BARRIER, "Close", List.of()));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private boolean openProfileWorkbench(final CommandSender sender) {
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage(ChatColor.RED + "Only players can open the profile GUI.");
+            return true;
+        }
+        final Inventory inventory = Bukkit.createInventory(player, 54, PROFILE_MENU_TITLE);
+        final Location location = player.getLocation();
+        final int playTicks = player.getStatistic(Statistic.PLAY_ONE_MINUTE);
+        final long playMinutes = Math.max(0L, playTicks / 20L / 60L);
+        inventory.setItem(4, this.menuItem(Material.PLAYER_HEAD, player.getName(), List.of(
+            "Level " + player.getLevel() + " | Exp " + Math.round(player.getExp() * 100.0F) + "%",
+            "Health " + Math.round(player.getHealth()) + "/" + Math.round(this.maxHealth(player)),
+            "Food " + player.getFoodLevel() + "/20",
+            "World " + player.getWorld().getName(),
+            "XYZ " + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ(),
+            "Play time " + playMinutes + "m"
+        )));
+        inventory.setItem(20, this.menuItem(Material.EXPERIENCE_BOTTLE, "Progress", List.of("Ping " + player.getPing() + "ms", "Jump " + player.getStatistic(Statistic.JUMP))));
+        inventory.setItem(21, this.menuItem(Material.TOTEM_OF_UNDYING, "Survival", List.of("Kills " + player.getStatistic(Statistic.PLAYER_KILLS), "Deaths " + player.getStatistic(Statistic.DEATHS))));
+        inventory.setItem(22, this.menuItem(Material.MAP, "Position", List.of(player.getWorld().getName(), location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ())));
+        inventory.setItem(37, this.menuItem(Material.CHEST, "Inventory Preview", List.of("Read only inventory preview")));
+        inventory.setItem(38, this.menuItem(Material.ENDER_CHEST, "Ender Chest", List.of("Open ender chest")));
+        inventory.setItem(39, this.menuItem(Material.RED_BED, "Homes", List.of("Open homes workbench")));
+        inventory.setItem(40, this.menuItem(Material.ENDER_PEARL, "Teleport", List.of("Open teleport workbench")));
+        inventory.setItem(41, this.menuItem(Material.ARMOR_STAND, "PlayerBots", List.of("Open fake player workbench")));
+        inventory.setItem(42, this.menuItem(Material.VILLAGER_SPAWN_EGG, "NPCs", List.of("Open NPC workbench")));
+        inventory.setItem(43, this.menuItem(Material.LEVER, "Settings", List.of("Open settings workbench")));
+        inventory.setItem(49, this.menuItem(Material.ARROW, "Back", List.of("/menu")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private boolean openSettingsWorkbench(final CommandSender sender) {
+        if (!(sender instanceof final Player player)) {
+            sender.sendMessage(ChatColor.RED + "Only players can open the settings GUI.");
+            return true;
+        }
+        final Inventory inventory = Bukkit.createInventory(player, 27, SETTINGS_MENU_TITLE);
+        inventory.setItem(10, this.menuItem(Material.ENDER_PEARL, "Toggle TPA", List.of("Enable or disable incoming requests")));
+        inventory.setItem(12, this.menuItem(Material.NAME_TAG, "Language", List.of("Toggle HunterCore global language")));
+        inventory.setItem(14, this.menuItem(Material.FILLED_MAP, "Web Panel", List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))));
+        inventory.setItem(16, this.menuItem(Material.ENCHANTED_BOOK, "Story Mode", List.of("Open story workbench")));
+        inventory.setItem(22, this.menuItem(Material.ARROW, "Back", List.of("/menu")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private boolean openAdminWorkbench(final CommandSender sender) {
+        if (!(sender instanceof final Player player)) {
+            return this.admin(sender, new String[0]);
+        }
+        if (!this.require(player, "huntertools.command.admin")) {
+            return true;
+        }
+        final Runtime runtime = Runtime.getRuntime();
+        final long usedMb = (runtime.totalMemory() - runtime.freeMemory()) / 1024L / 1024L;
+        final long maxMb = runtime.maxMemory() / 1024L / 1024L;
+        final Inventory inventory = Bukkit.createInventory(player, 54, ADMIN_MENU_TITLE);
+        inventory.setItem(4, this.menuItem(Material.COMMAND_BLOCK, "Runtime", List.of(
+            "Online " + Bukkit.getOnlinePlayers().size() + "/" + Bukkit.getMaxPlayers(),
+            "TPS " + String.format(Locale.ROOT, "%.2f", this.snapshot.tps1()),
+            "MSPT " + String.format(Locale.ROOT, "%.2f", this.snapshot.mspt()),
+            "Memory " + usedMb + "/" + maxMb + " MB"
+        )));
+        inventory.setItem(19, this.menuItem(Material.PLAYER_HEAD, "PlayerBots", List.of("Open fake player workbench")));
+        inventory.setItem(20, this.menuItem(Material.VILLAGER_SPAWN_EGG, "NPCs", List.of("Open NPC workbench")));
+        inventory.setItem(21, this.menuItem(Material.ENCHANTED_BOOK, "Story", List.of("Open story workbench")));
+        inventory.setItem(22, this.menuItem(Material.PAPER, "Plugins", List.of("/hc admin plugins")));
+        inventory.setItem(23, this.menuItem(Material.BEACON, "AI Status", List.of("/hc admin ai status")));
+        inventory.setItem(24, this.menuItem(Material.REDSTONE, "TPS / Memory", List.of("/htps", "/hc admin memory")));
+        inventory.setItem(25, this.menuItem(Material.TARGET, "System", List.of("Runtime, memory, workers, threads")));
+        inventory.setItem(26, this.menuItem(Material.COMPARATOR, "Modules", List.of("Toggle HunterCore modules")));
+        inventory.setItem(29, this.menuItem(Material.BELL, "Broadcast", List.of("Controlled chat input")));
+        inventory.setItem(30, this.menuItem(Material.SUNFLOWER, "Day + Clear", List.of("Set day and clear weather")));
+        inventory.setItem(31, this.menuItem(Material.LIGHTNING_ROD, "Thunder", List.of("Set thunder in current world")));
+        inventory.setItem(32, this.menuItem(Material.REPEATER, "Reload Core", List.of("Reload HunterCore preferences")));
+        inventory.setItem(33, this.menuItem(Material.BLAZE_POWDER, "Force GC", List.of("Run /hc admin gc")));
+        inventory.setItem(34, this.menuItem(Material.SPYGLASS, "Web Panel", List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))));
+        inventory.setItem(39, this.menuItem(Material.BOOK, "Preferences", List.of("Readonly HunterCore preferences summary")));
+        inventory.setItem(40, this.menuItem(Material.OBSERVER, "Optimize", List.of("Choose CPU optimization mode")));
+        inventory.setItem(49, this.menuItem(Material.ARROW, "Back", List.of("/menu")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private void handleProfileWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case CHEST -> this.openInventoryPreview(player);
+            case ENDER_CHEST -> player.performCommand("enderchest");
+            case RED_BED -> player.performCommand("homes");
+            case ENDER_PEARL -> player.performCommand("tpgui");
+            case ARMOR_STAND -> this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
+            case VILLAGER_SPAWN_EGG -> this.openActorListWorkbench(player, NPCS);
+            case LEVER -> this.openSettingsWorkbench(player);
+            case ARROW -> this.openMainMenuWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void handleSettingsWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case ENDER_PEARL -> player.performCommand("tptoggle");
+            case NAME_TAG -> this.toggleLanguage(player);
+            case FILLED_MAP -> player.sendMessage(ChatColor.AQUA + "Web Panel: " + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"));
+            case ENCHANTED_BOOK -> this.openStoryWorkbench(player);
+            case ARROW -> this.openMainMenuWorkbench(player);
+            default -> player.sendMessage(ChatColor.GRAY + "This settings entry is reserved for future work.");
+        }
+    }
+
+    private void handleAdminWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case PLAYER_HEAD -> this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
+            case VILLAGER_SPAWN_EGG -> this.openActorListWorkbench(player, NPCS);
+            case ENCHANTED_BOOK -> this.openStoryWorkbench(player);
+            case PAPER -> player.performCommand("hc admin plugins");
+            case BEACON -> player.performCommand("hc admin ai status");
+            case REDSTONE -> player.performCommand("htps");
+            case TARGET -> this.openAdminSystemWorkbench(player);
+            case COMPARATOR -> this.openAdminModulesWorkbench(player);
+            case BELL -> this.beginGuiChat(player, new GuiChatSession("broadcast", null, null), "Type the broadcast message in chat.", "Type 'cancel' to abort.");
+            case SUNFLOWER -> {
+                this.time(player, "day", new String[0]);
+                this.weather(player, "sun", new String[0]);
+            }
+            case LIGHTNING_ROD -> this.weather(player, "thunder", new String[0]);
+            case REPEATER -> this.adminReload(player);
+            case BLAZE_POWDER -> player.performCommand("hc admin gc");
+            case SPYGLASS -> player.sendMessage(ChatColor.AQUA + "Web Panel: " + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"));
+            case BOOK -> this.openAdminPreferencesWorkbench(player);
+            case OBSERVER -> this.openAdminOptimizeWorkbench(player);
+            case ARROW -> this.openMainMenuWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openAdminSystemWorkbench(final Player player) {
+        final Runtime runtime = Runtime.getRuntime();
+        final long usedMb = (runtime.totalMemory() - runtime.freeMemory()) / 1024L / 1024L;
+        final long maxMb = runtime.maxMemory() / 1024L / 1024L;
+        final ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+        final Inventory inventory = Bukkit.createInventory(player, 27, ADMIN_SYSTEM_TITLE);
+        inventory.setItem(4, this.menuItem(Material.TARGET, "System", List.of(
+            "Online " + Bukkit.getOnlinePlayers().size() + "/" + Bukkit.getMaxPlayers(),
+            "TPS " + String.format(Locale.ROOT, "%.2f", this.snapshot.tps1()),
+            "MSPT " + String.format(Locale.ROOT, "%.2f", this.snapshot.mspt())
+        )));
+        inventory.setItem(10, this.menuItem(Material.REDSTONE, "Memory", List.of(
+            "Used " + usedMb + " MB",
+            "Max " + maxMb + " MB",
+            this.snapshot.memoryLine()
+        )));
+        inventory.setItem(12, this.menuItem(Material.REPEATER, "Threads", List.of(
+            "Live " + bean.getThreadCount(),
+            "Daemon " + bean.getDaemonThreadCount(),
+            "Peak " + bean.getPeakThreadCount()
+        )));
+        inventory.setItem(14, this.menuItem(Material.OBSERVER, "Workers", List.of(
+            "HunterTools " + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4),
+            "WebPanel " + this.preferences.intValue("optimizations.hunter-tools.web-panel-workers", 4),
+            "CPU mode " + this.preferences.stringValue("optimizations.cpu.mode", "single-thread")
+        )));
+        inventory.setItem(16, this.menuItem(Material.ARMOR_STAND, "Actors", List.of(
+            "PlayerBots " + (this.realFakePlayerManager == null ? 0 : this.realFakePlayerManager.liveCount()),
+            "NPCs " + (this.actorManager == null ? 0 : this.actorManager.liveCount(NPCS))
+        )));
+        inventory.setItem(22, this.menuItem(Material.BLAZE_POWDER, "Force GC", List.of("Run garbage collection now")));
+        inventory.setItem(26, this.menuItem(Material.ARROW, "Back", List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminSystemWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case BLAZE_POWDER -> this.adminGc(player);
+            case ARROW -> this.openAdminWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openAdminModulesWorkbench(final Player player) {
+        final Inventory inventory = Bukkit.createInventory(player, 54, ADMIN_MODULES_TITLE);
+        inventory.setItem(4, this.menuItem(Material.COMPARATOR, "Modules", List.of("Click a module slot to toggle on/off.")));
+        int slot = 9;
+        for (final String module : MODULES) {
+            if (slot >= 45) {
+                break;
+            }
+            final boolean enabled = this.preferences.moduleEnabled(module);
+            inventory.setItem(slot++, this.menuItem(enabled ? Material.LIME_DYE : Material.GRAY_DYE, module, List.of(
+                enabled ? "Enabled" : "Disabled",
+                "Click to toggle"
+            )));
+        }
+        inventory.setItem(49, this.menuItem(Material.ARROW, "Back", List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminModulesWorkbenchClick(final Player player, final ItemStack clicked, final int slot) {
+        if (clicked.getType() == Material.ARROW) {
+            this.openAdminWorkbench(player);
+            return;
+        }
+        if (slot < 9 || slot >= 45) {
+            return;
+        }
+        final String module = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
+        if (!MODULES.contains(module)) {
+            return;
+        }
+        this.preferences.setModuleEnabled(module, !this.preferences.moduleEnabled(module));
+        this.preferences.save(this.workerExecutor);
+        this.startTasks();
+        if (this.actorManager != null && (module.equals(FAKE_PLAYERS) || module.equals(NPCS))) {
+            this.actorManager.reload();
+        }
+        if (this.webPanelManager != null && module.equals(WEB_PANEL)) {
+            this.webPanelManager.restart();
+        }
+        player.sendMessage(ChatColor.GREEN + "Module " + module + " set to " + this.preferences.moduleEnabled(module) + ".");
+        this.openAdminModulesWorkbench(player);
+    }
+
+    private void openAdminPreferencesWorkbench(final Player player) {
+        final Inventory inventory = Bukkit.createInventory(player, 54, ADMIN_PREFERENCES_TITLE);
+        inventory.setItem(4, this.menuItem(Material.BOOK, "Preferences", List.of(this.preferences.file().getName(), "Readonly summary of current HunterCore state")));
+        inventory.setItem(19, this.menuItem(Material.SPYGLASS, "Web", List.of(
+            this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1") + ":" + this.preferences.intValue("modules.web-panel.port", 8088),
+            this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088")
+        )));
+        inventory.setItem(20, this.menuItem(Material.PAPER, "MOTD", List.of(
+            this.preferences.stringValue("modules.motd.line-1", ""),
+            this.preferences.stringValue("modules.motd.line-2", "")
+        )));
+        inventory.setItem(21, this.menuItem(Material.OBSERVER, "Optimize", List.of(
+            this.preferences.stringValue("optimizations.cpu.mode", "single-thread"),
+            "Workers " + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4)
+        )));
+        inventory.setItem(22, this.menuItem(Material.BEACON, "AI", List.of(
+            "Enabled " + this.preferences.moduleEnabled(AI),
+            this.preferences.stringValue("modules.ai.model", "gpt-4o-mini")
+        )));
+        inventory.setItem(23, this.menuItem(Material.ENCHANTED_BOOK, "Story", List.of(
+            "Enabled " + this.preferences.booleanValue("modules.story-mode.enabled", false),
+            "Default remains off"
+        )));
+        inventory.setItem(24, this.menuItem(Material.COMPARATOR, "Modules", List.of("Open the module toggle workbench")));
+        inventory.setItem(49, this.menuItem(Material.ARROW, "Back", List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminPreferencesWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case COMPARATOR -> this.openAdminModulesWorkbench(player);
+            case OBSERVER -> this.openAdminOptimizeWorkbench(player);
+            case ARROW -> this.openAdminWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openAdminOptimizeWorkbench(final Player player) {
+        final String current = this.preferences.stringValue("optimizations.cpu.mode", "single-thread");
+        final Inventory inventory = Bukkit.createInventory(player, 27, ADMIN_OPTIMIZE_TITLE);
+        inventory.setItem(4, this.menuItem(Material.OBSERVER, "CPU Optimize", List.of(
+            "Current mode: " + current,
+            "Restart server for full core-thread effect"
+        )));
+        inventory.setItem(10, this.menuItem(Material.IRON_INGOT, "single-thread", List.of("Stability-first mode")));
+        inventory.setItem(12, this.menuItem(Material.CLOCK, "high-clock", List.of("Good for fast CPUs")));
+        inventory.setItem(14, this.menuItem(Material.DIAMOND, "high-core", List.of("Good for many-core CPUs")));
+        inventory.setItem(16, this.menuItem(Material.REDSTONE_BLOCK, "multi-thread", List.of("Most aggressive threading")));
+        inventory.setItem(22, this.menuItem(Material.PAPER, "Status", List.of("Show current optimize status")));
+        inventory.setItem(26, this.menuItem(Material.ARROW, "Back", List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminOptimizeWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case IRON_INGOT -> this.setCpuModeQuick(player, "single-thread");
+            case CLOCK -> this.setCpuModeQuick(player, "high-clock");
+            case DIAMOND -> this.setCpuModeQuick(player, "high-core");
+            case REDSTONE_BLOCK -> this.setCpuModeQuick(player, "multi-thread");
+            case PAPER -> this.adminOptimize(player, new String[] {"optimize", "status"});
+            case ARROW -> this.openAdminWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void setCpuModeQuick(final Player player, final String mode) {
+        final boolean asyncEnabled = !mode.equals("single-thread");
+        this.preferences.setValue("optimizations.cpu.mode", mode);
+        this.preferences.setValue("optimizations.hunter-tools.async-rendering", asyncEnabled);
+        this.preferences.setValue("optimizations.hunter-tools.async-save", asyncEnabled);
+        this.preferences.setValue("optimizations.hunter-tools.actor-async-load", asyncEnabled);
+        this.preferences.setValue("optimizations.hunter-tools.actor-batch-save", asyncEnabled);
+        this.preferences.setValue("optimizations.hunter-tools.render-workers", this.preferences.defaultWorkerCount());
+        this.preferences.setValue("optimizations.hunter-tools.web-panel-workers", this.preferences.defaultWorkerCount());
+        this.preferences.save(this.workerExecutor);
+        player.sendMessage(ChatColor.GREEN + "CPU mode saved as " + mode + ". Restart for full effect.");
+        this.openAdminOptimizeWorkbench(player);
+    }
+
+    private void openActorListWorkbench(final Player player, final String module) {
+        final boolean players = module.equals(REAL_FAKE_PLAYERS);
+        final String title = ACTOR_LIST_TITLE_PREFIX + (players ? "PlayerBots" : "NPCs");
+        final Inventory inventory = Bukkit.createInventory(player, 54, title);
+        inventory.setItem(4, this.menuItem(players ? Material.ARMOR_STAND : Material.VILLAGER_SPAWN_EGG, players ? "PlayerBots" : "NPCs", List.of("Click one entry to open its workbench.")));
+        int slot = 9;
+        if (players) {
+            for (final HunterRealFakePlayerManager.RealFakePlayerView view : this.realFakePlayerViews()) {
+                if (slot >= 45) {
+                    break;
+                }
+                inventory.setItem(slot++, this.menuItem(Material.PLAYER_HEAD, view.id(), List.of(
+                    view.world() + " " + (int) view.x() + ", " + (int) view.y() + ", " + (int) view.z(),
+                    "AI " + (view.aiEnabled() ? "enabled" : "disabled") + " | " + view.gameMode(),
+                    view.aiStatus().isBlank() ? "No recent AI status." : view.aiStatus()
+                )));
+            }
+            inventory.setItem(53, this.menuItem(Material.LIME_DYE, "Spawn PlayerBot", List.of("Controlled chat input")));
+        } else {
+            for (final HunterActorManager.ActorView view : this.actorViews(module)) {
+                if (slot >= 45) {
+                    break;
+                }
+                inventory.setItem(slot++, this.menuItem(Material.PLAYER_HEAD, view.id(), List.of(
+                    view.world() + " " + (int) view.x() + ", " + (int) view.y() + ", " + (int) view.z(),
+                    view.kind() + " | AI " + (view.aiEnabled() ? "enabled" : "disabled"),
+                    view.clickCommand().isBlank() ? "No click command." : "Click command configured."
+                )));
+            }
+        }
+        inventory.setItem(45, this.menuItem(Material.EMERALD, "List Text", List.of(players ? "/player list" : "/npc list")));
+        inventory.setItem(49, this.menuItem(Material.ARROW, "Back", List.of("/menu")));
+        player.openInventory(inventory);
+    }
+
+    private void handleActorListWorkbenchClick(final Player player, final ItemStack clicked, final String title) {
+        final String module = title.endsWith("PlayerBots") ? REAL_FAKE_PLAYERS : NPCS;
+        switch (clicked.getType()) {
+            case PLAYER_HEAD -> {
+                final String id = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
+                this.openActorDetailWorkbench(player, module, id);
+            }
+            case LIME_DYE -> this.beginGuiChat(player, new GuiChatSession("spawn-player", REAL_FAKE_PLAYERS, null), "Type the new fake player name in chat.", "Type 'cancel' to abort.");
+            case EMERALD -> player.performCommand(module.equals(REAL_FAKE_PLAYERS) ? "player list" : "npc list");
+            case ARROW -> this.openMainMenuWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openActorDetailWorkbench(final Player player, final String module, final String id) {
+        final boolean players = module.equals(REAL_FAKE_PLAYERS);
+        final String title = ACTOR_DETAIL_TITLE_PREFIX + module + ":" + id;
+        final Inventory inventory = Bukkit.createInventory(player, 54, title);
+        inventory.setItem(4, this.menuItem(Material.PLAYER_HEAD, id, List.of("GUI workbench for this actor.")));
+        inventory.setItem(19, this.menuItem(Material.ENDER_PEARL, "Teleport To Actor", List.of(players ? "/player tp " + id : "/npc tp " + id)));
+        inventory.setItem(20, this.menuItem(Material.COMPASS, "Teleport Actor Here", List.of(players ? "/player tphere " + id : "/npc tphere " + id)));
+        inventory.setItem(21, this.menuItem(Material.LEVER, "Toggle AI", List.of(players ? "/player ai " + id + " on|off" : "Toggle stored NPC AI")));
+        inventory.setItem(22, this.menuItem(Material.NAME_TAG, "Click Command", List.of("Controlled chat input", "Type 'clear' to remove")));
+        inventory.setItem(23, this.menuItem(Material.PAPER, "Info", List.of(players ? "/player info " + id : "/npc info " + id)));
+        inventory.setItem(24, this.menuItem(Material.RED_WOOL, "Remove Actor", List.of("Immediate remove action")));
+        inventory.setItem(29, this.menuItem(Material.PLAYER_HEAD, "Skin", List.of("Controlled chat input", "Minecraft name or clear")));
+        if (players) {
+            inventory.setItem(30, this.menuItem(Material.ENCHANTED_BOOK, "AI Goal", List.of("Controlled chat input")));
+        }
+        inventory.setItem(49, this.menuItem(Material.ARROW, "Back", List.of("Return to actor list")));
+        player.openInventory(inventory);
+    }
+
+    private void handleActorDetailWorkbenchClick(final Player player, final ItemStack clicked, final String title) {
+        final String encoded = title.substring(ACTOR_DETAIL_TITLE_PREFIX.length());
+        final int separator = encoded.indexOf(':');
+        if (separator < 0) {
+            return;
+        }
+        final String module = encoded.substring(0, separator);
+        final String id = encoded.substring(separator + 1);
+        switch (clicked.getType()) {
+            case ENDER_PEARL -> player.performCommand((module.equals(REAL_FAKE_PLAYERS) ? "player tp " : "npc tp ") + id);
+            case COMPASS -> player.performCommand((module.equals(REAL_FAKE_PLAYERS) ? "player tphere " : "npc tphere ") + id);
+            case LEVER -> this.toggleActorAi(player, module, id);
+            case NAME_TAG -> this.beginGuiChat(player, new GuiChatSession("actor-click", module, id), "Type the click command in chat.", "Type 'clear' to remove or 'cancel' to abort.");
+            case PAPER -> player.performCommand((module.equals(REAL_FAKE_PLAYERS) ? "player info " : "npc info ") + id);
+            case RED_WOOL -> player.performCommand((module.equals(REAL_FAKE_PLAYERS) ? "player remove " : "npc remove ") + id);
+            case PLAYER_HEAD -> this.beginGuiChat(player, new GuiChatSession("actor-skin", module, id), "Type the skin source in chat.", "Use a Minecraft name, or type 'clear'.");
+            case ENCHANTED_BOOK -> {
+                if (module.equals(REAL_FAKE_PLAYERS)) {
+                    this.beginGuiChat(player, new GuiChatSession("actor-goal", module, id), "Type the new AI goal in chat.", "Type 'cancel' to abort.");
+                }
+            }
+            case ARROW -> this.openActorListWorkbench(player, module);
+            default -> {
+            }
+        }
+    }
+
+    private boolean openStoryWorkbench(final Player player) {
+        final Inventory inventory = Bukkit.createInventory(player, 27, STORY_WORKBENCH_TITLE);
+        inventory.setItem(4, this.menuItem(Material.ENCHANTED_BOOK, "Story Mode", List.of(
+            this.preferences.booleanValue("modules.story-mode.enabled", false) ? "Enabled in preferences." : "Disabled in preferences.",
+            "Story mode stays disabled by default."
+        )));
+        inventory.setItem(10, this.menuItem(Material.LIME_DYE, "Enable", List.of("/story enable")));
+        inventory.setItem(11, this.menuItem(Material.EMERALD_BLOCK, "Start", List.of("/start")));
+        inventory.setItem(12, this.menuItem(Material.PAPER, "Status", List.of("/story status")));
+        inventory.setItem(14, this.menuItem(Material.ORANGE_DYE, "Line Auto", List.of("/story line auto")));
+        inventory.setItem(15, this.menuItem(Material.BARRIER, "Stop", List.of("/story stop")));
+        inventory.setItem(16, this.menuItem(Material.REDSTONE_BLOCK, "Meltdown", List.of("/story meltdown")));
+        inventory.setItem(22, this.menuItem(Material.ARROW, "Back", List.of("/menu")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private void handleStoryWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case LIME_DYE -> player.performCommand("story enable");
+            case EMERALD_BLOCK -> player.performCommand("start");
+            case PAPER -> player.performCommand("story status");
+            case ORANGE_DYE -> player.performCommand("story line auto");
+            case BARRIER -> player.performCommand("story stop");
+            case REDSTONE_BLOCK -> player.performCommand("story meltdown");
+            case ARROW -> this.openMainMenuWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void beginGuiChat(final Player player, final GuiChatSession session, final String... instructions) {
+        this.guiChatSessions.put(player.getUniqueId(), session);
+        player.closeInventory();
+        for (final String instruction : instructions) {
+            player.sendMessage(ChatColor.AQUA + "[HunterCore] " + ChatColor.WHITE + instruction);
+        }
+    }
+
+    private void handleGuiChatInput(final Player player, final GuiChatSession session, final String message) {
+        final String trimmed = message == null ? "" : message.trim();
+        if (trimmed.equalsIgnoreCase("cancel")) {
+            player.sendMessage(ChatColor.YELLOW + "GUI input cancelled.");
+            this.reopenAfterGuiChat(player, session);
+            return;
+        }
+        switch (session.kind()) {
+            case "broadcast" -> this.broadcast(player, new String[] {trimmed});
+            case "spawn-player" -> player.performCommand("player spawn " + trimmed);
+            case "actor-click" -> player.performCommand((session.module().equals(REAL_FAKE_PLAYERS) ? "player click " : "npc click ")
+                + session.id() + (trimmed.equalsIgnoreCase("clear") ? " clear" : " " + trimmed));
+            case "actor-skin" -> player.performCommand((session.module().equals(REAL_FAKE_PLAYERS) ? "player skin " : "npc skin ")
+                + session.id() + " " + trimmed);
+            case "actor-goal" -> player.performCommand("player ai " + session.id() + " goal " + trimmed);
+            default -> player.sendMessage(ChatColor.RED + "Unknown GUI input action.");
+        }
+        this.reopenAfterGuiChat(player, session);
+    }
+
+    private void reopenAfterGuiChat(final Player player, final GuiChatSession session) {
+        if ("spawn-player".equals(session.kind())) {
+            this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
+            return;
+        }
+        if (session.module() != null && session.id() != null) {
+            this.openActorDetailWorkbench(player, session.module(), session.id());
+            return;
+        }
+        this.openAdminWorkbench(player);
+    }
+
+    private void toggleActorAi(final Player player, final String module, final String id) {
+        if (module.equals(REAL_FAKE_PLAYERS)) {
+            final HunterRealFakePlayerManager.RealFakePlayerView view = this.realFakePlayerView(id);
+            if (view == null) {
+                player.sendMessage(ChatColor.RED + "Actor not found: " + id);
+                return;
+            }
+            player.performCommand("player ai " + id + " " + (view.aiEnabled() ? "off" : "on"));
+        } else {
+            final HunterActorManager.ActorView view = this.actorView(module, id);
+            if (view == null) {
+                player.sendMessage(ChatColor.RED + "Actor not found: " + id);
+                return;
+            }
+            this.setActorAi(module, id, !view.aiEnabled(), view.aiPersona());
+            player.sendMessage(ChatColor.GREEN + "Actor AI " + (!view.aiEnabled() ? "enabled" : "disabled") + ": " + id);
+        }
+        this.openActorDetailWorkbench(player, module, id);
+    }
+
+    private void toggleLanguage(final Player player) {
+        final String current = this.preferences.language();
+        final String next = current.equalsIgnoreCase("zh_cn") ? "en_us" : "zh_cn";
+        this.preferences.setValue("language", next);
+        this.preferences.save(this.workerExecutor);
+        player.sendMessage(ChatColor.GREEN + "HunterCore language switched to " + next + ".");
+        this.openSettingsWorkbench(player);
+    }
+
+    private @Nullable HunterActorManager.ActorView actorView(final String module, final String id) {
+        for (final HunterActorManager.ActorView view : this.actorViews(module)) {
+            if (view.id().equalsIgnoreCase(id)) {
+                return view;
+            }
+        }
+        return null;
+    }
+
+    private @Nullable HunterRealFakePlayerManager.RealFakePlayerView realFakePlayerView(final String id) {
+        for (final HunterRealFakePlayerManager.RealFakePlayerView view : this.realFakePlayerViews()) {
+            if (view.id().equalsIgnoreCase(id)) {
+                return view;
+            }
+        }
+        return null;
+    }
+
     private static ItemStack cloneOrEmpty(final ItemStack stack) {
         return stack == null || stack.getType().isAir() ? new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE) : stack.clone();
     }
@@ -573,6 +1157,12 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     @SuppressWarnings("deprecation")
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPlayerChat(final AsyncPlayerChatEvent event) {
+        final GuiChatSession guiChat = this.guiChatSessions.remove(event.getPlayer().getUniqueId());
+        if (guiChat != null) {
+            event.setCancelled(true);
+            this.getServer().getScheduler().runTask(this, () -> this.handleGuiChatInput(event.getPlayer(), guiChat, event.getMessage()));
+            return;
+        }
         if (this.aiManager != null) {
             this.aiManager.observeChat(event.getPlayer(), event.getMessage());
         }
@@ -637,7 +1227,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean executeHunterCoreCommand(final CommandSender sender, final String label, final String[] args) {
         return switch (label) {
-            case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminMenu(sender) : this.admin(sender, args);
+            case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminWorkbench(sender) : this.admin(sender, args);
             case "tps", "htps" -> this.showTps(sender);
             case "heal" -> this.heal(sender, args);
             case "feed" -> this.feed(sender, args);
@@ -655,9 +1245,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "craft", "workbench", "wb" -> this.craft(sender);
             case "enderchest", "ec" -> this.enderChest(sender, args);
             case "trash", "disposal" -> this.trash(sender);
-            case "menu", "gui" -> this.openMainMenu(sender);
-            case "profile", "me", "playerinfo" -> this.openProfileMenu(sender);
-            case "settings", "prefs" -> this.openSettingsMenu(sender);
+            case "menu", "gui" -> this.openMainMenuWorkbench(sender);
+            case "profile", "me", "playerinfo" -> this.openProfileWorkbench(sender);
+            case "settings", "prefs" -> this.openSettingsWorkbench(sender);
             default -> false;
         };
     }
@@ -2053,6 +2643,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length == 0) {
+            if (sender instanceof final Player player) {
+                this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
+                return true;
+            }
             this.sendHelp(sender, "player");
             return true;
         }
@@ -2064,6 +2658,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         if (args.length == 0) {
+            if (sender instanceof final Player player) {
+                this.openActorListWorkbench(player, NPCS);
+                return true;
+            }
             this.sendHelp(sender, "npc");
             return true;
         }
@@ -2532,6 +3130,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     }
 
     private record PlayerView(UUID uuid, String name, String world, int ping) {
+    }
+
+    private record GuiChatSession(String kind, @Nullable String module, @Nullable String id) {
     }
 
     private static final class SidebarBoard {

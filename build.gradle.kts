@@ -348,8 +348,8 @@ tasks.register("packageHunterCoreRelease") {
         releaseAsset.parentFile.mkdirs()
         Files.copy(output.toPath(), releaseAsset.toPath(), StandardCopyOption.REPLACE_EXISTING)
         val size = output.length()
-        check(size < 100_000_000L) {
-            "HunterCore release jar is ${"%.2f".format(size / 1_000_000.0)} MB, expected less than 100 MB"
+        check(size < 110_000_000L) {
+            "HunterCore release jar is ${"%.2f".format(size / 1_000_000.0)} MB, expected less than 110 MB"
         }
         println("HunterCore release jar: ${output.name} (${"%.2f".format(size / 1_000_000.0)} MB)")
     }

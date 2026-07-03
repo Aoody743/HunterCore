@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob globstar
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${1:-"$ROOT_DIR/build/huntercore/bundled-plugins"}"
@@ -115,8 +116,8 @@ download_github_release_asset() {
     rm -rf "$tmp_dir"
     mkdir -p "$tmp_dir"
     gh release download "$tag" --repo "$repo" --pattern "$pattern" --dir "$tmp_dir" --clobber
-    local downloaded
-    downloaded="$(find "$tmp_dir" -maxdepth 1 -type f -name "$pattern" -print -quit)"
+    local downloaded_candidates=("$tmp_dir"/$pattern)
+    local downloaded="${downloaded_candidates[0]-}"
     if [[ -z "$downloaded" ]]; then
       echo "GitHub release asset $repo $tag $pattern was not downloaded." >&2
       exit 1
@@ -192,7 +193,8 @@ prepare_luckperms() {
   rm -rf "$extracted"
   mkdir -p "$extracted"
   unzip -q "$zip_file" -d "$extracted"
-  jar_path="$(find "$extracted" -path '*/bukkit/loader/build/libs/LuckPerms-Bukkit-*.jar' -type f -print -quit)"
+  local jar_candidates=("$extracted"/**/bukkit/loader/build/libs/LuckPerms-Bukkit-*.jar)
+  jar_path="${jar_candidates[0]-}"
   if [[ -z "$jar_path" ]]; then
     echo "LuckPerms Bukkit jar was not found in artifact $artifact_id." >&2
     exit 1
@@ -235,7 +237,13 @@ prepare_coreprotect() {
 
   local jar_path="$source_dir/target/CoreProtect-$version.jar"
   if [[ ! -f "$jar_path" ]]; then
-    jar_path="$(find "$source_dir/target" -maxdepth 1 -type f -name 'CoreProtect-*.jar' ! -name '*sources*' ! -name 'original-*' -print -quit)"
+    local coreprotect_candidates=("$source_dir"/target/CoreProtect-*.jar)
+    for candidate in "${coreprotect_candidates[@]}"; do
+      if [[ "$candidate" != *sources* && "$(basename "$candidate")" != original-* ]]; then
+        jar_path="$candidate"
+        break
+      fi
+    done
   fi
   if [[ -z "$jar_path" || ! -f "$jar_path" ]]; then
     echo "CoreProtect jar was not produced by Maven." >&2
@@ -292,6 +300,12 @@ download_file_sha512 \
   "$PLUGINS_DIR/PlaceholderAPI-2.12.2.jar" \
   "94addf996ba45e16dbded3fcaf05e8b442212ce0d577f7edc42b743ad9532c1e24115263976126d36f27c0868ab1c03c40c2d13947985124b92dabca4527dddb"
 manifest_entry "placeholderapi" "PlaceholderAPI" "2.12.2" "PlaceholderAPI-2.12.2.jar" "https://modrinth.com/plugin/placeholderapi/version/2.12.2"
+
+download_file \
+  "https://github.com/SkinsRestorer/SkinsRestorer/releases/download/15.12.4/SkinsRestorer.jar" \
+  "$PLUGINS_DIR/SkinsRestorer-15.12.4.jar" \
+  "56fed7d9fa5862356851307cdb20707adb5d43f0dd6451a0225ebbd03e8d04a0"
+manifest_entry "skinsrestorer" "SkinsRestorer" "15.12.4" "SkinsRestorer-15.12.4.jar" "https://github.com/SkinsRestorer/SkinsRestorer/releases/tag/15.12.4"
 
 download_github_release_asset \
   "MilkBowl/Vault" \

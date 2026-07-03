@@ -59,6 +59,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private static final int ITERATIONS = 120_000;
     private static final int KEY_BITS = 256;
     private static final String GUI_TITLE = "HunterAuth Workbench";
+    private static final String PASSWORD_GUI_TITLE = "HunterAuth Password";
     private static final Set<String> ALLOWED_COMMANDS = Set.of("/login", "/l", "/register", "/reg");
     private static final Map<Integer, Integer> PIN_DIGIT_SLOTS = Map.of(
         10, 1, 11, 2, 12, 3,
@@ -126,7 +127,9 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             case "register" -> this.register(player, args);
             case "login" -> this.login(player, args);
             case "logout" -> this.logout(player);
-            case "changepassword" -> this.changePassword(player, args);
+            case "changepassword" -> args.length == 0 && this.guiEnabled()
+                ? this.openPasswordGui(player)
+                : this.changePassword(player, args);
             default -> false;
         };
     }
@@ -228,16 +231,21 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             return;
         }
         final boolean authGui = this.isAuthGui(event.getView().title());
+        final boolean passwordGui = this.isPasswordGui(event.getView().title());
         if (!this.isAuthenticated(player) && !authGui) {
             event.setCancelled(true);
             player.sendMessage(this.text("请先登录再操作背包。", "Please log in before using inventories."));
             this.openAuthGuiSoon(player);
             return;
         }
-        if (!authGui) {
+        if (!authGui && !passwordGui) {
             return;
         }
         event.setCancelled(true);
+        if (passwordGui) {
+            this.handlePasswordGuiClick(player, event.getRawSlot());
+            return;
+        }
         if (this.isAuthenticated(player)) {
             player.closeInventory();
             return;
@@ -458,6 +466,26 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         return true;
     }
 
+    private boolean openPasswordGui(final Player player) {
+        if (this.shouldBypass()) {
+            player.sendMessage(this.text("HunterAuth is disabled or bypassed while the server is in online mode.", "HunterAuth is disabled or bypassed while the server is in online mode."));
+            return true;
+        }
+        if (!this.isRegistered(player)) {
+            player.sendMessage(this.text("You are not registered.", "You are not registered."));
+            return true;
+        }
+        if (!this.isAuthenticated(player)) {
+            this.openAuthGui(player);
+            player.sendMessage(this.text("Log in first, then change your password.", "Log in first, then change your password."));
+            return true;
+        }
+        final Inventory inventory = Bukkit.createInventory(player, 27, ComponentTitle.HUNTER_AUTH_PASSWORD);
+        this.renderPasswordGui(player, inventory);
+        player.openInventory(inventory);
+        return true;
+    }
+
     private void openAuthGui(final Player player) {
         if (!this.guiEnabled() || this.isAuthenticated(player)) {
             return;
@@ -530,6 +558,32 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         inventory.setItem(43, item(Material.PAPER, this.text("命令帮助", "Command help"), List.of("/login <password>", "/register <password> <password>", "/changepassword <old> <new>")));
     }
 
+    private void renderPasswordGui(final Player player, final Inventory inventory) {
+        inventory.clear();
+        for (int i = 0; i < inventory.getSize(); i++) {
+            inventory.setItem(i, item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of()));
+        }
+        inventory.setItem(4, item(Material.TRIPWIRE_HOOK, this.text("Change password", "Change password"), List.of(
+            this.text("Logged in as: ", "Logged in as: ") + player.getName(),
+            this.text("Open the secure input flow below to rotate the account password.", "Open the secure input flow below to rotate the account password.")
+        )));
+        inventory.setItem(11, item(Material.OAK_SIGN, this.text("Secure chat input", "Secure chat input"), List.of(
+            "/changepassword <old> <new>",
+            this.text("Type oldPassword newPassword in chat. Type cancel to abort.", "Type oldPassword newPassword in chat. Type cancel to abort.")
+        )));
+        inventory.setItem(15, item(Material.PAPER, this.text("Command help", "Command help"), List.of("/changepassword <old> <new>")));
+        inventory.setItem(22, item(Material.BARRIER, this.text("Close", "Close"), List.of(this.text("Close this panel.", "Close this panel."))));
+    }
+
+    private void handlePasswordGuiClick(final Player player, final int slot) {
+        switch (slot) {
+            case 11 -> this.startGuiInput(player, InputMode.CHANGE_PASSWORD);
+            case 22 -> player.closeInventory();
+            default -> {
+            }
+        }
+    }
+
     private void submitGuiPassword(final Player player, final GuiSession session, final Inventory inventory) {
         final String password = session.current();
         if (password.isBlank()) {
@@ -557,14 +611,37 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private void startGuiInput(final Player player, final InputMode mode) {
         player.closeInventory();
         this.pendingInputs.put(player.getUniqueId(), new PendingInput(mode));
+        if (mode == InputMode.CHANGE_PASSWORD) {
+            player.sendMessage(this.text("Type oldPassword newPassword in chat. Type cancel to abort.", "Type oldPassword newPassword in chat. Type cancel to abort."));
+            return;
+        }
         player.sendMessage(mode == InputMode.LOGIN
             ? this.text("请直接在聊天栏输入密码，不会广播。也可以使用 /login <password>。", "Type your password in chat; it will not be broadcast. You can also use /login <password>.")
             : this.text("请在聊天栏输入两次密码，用空格分开，不会广播。也可以使用 /register <password> <password>。", "Type password twice separated by a space; it will not be broadcast. You can also use /register <password> <password>."));
     }
 
     private void handlePendingInput(final Player player, final PendingInput pending, final String message) {
+        if (message.equalsIgnoreCase("cancel")) {
+            player.sendMessage(this.text("Cancelled the current input flow.", "Cancelled the current input flow."));
+            if (pending.mode() == InputMode.CHANGE_PASSWORD) {
+                this.openPasswordGui(player);
+            } else {
+                this.openAuthGuiSoon(player);
+            }
+            return;
+        }
         if (pending.mode() == InputMode.LOGIN) {
             this.login(player, new String[] {message});
+            return;
+        }
+        if (pending.mode() == InputMode.CHANGE_PASSWORD) {
+            final String[] parts = message.split("\\s+", 2);
+            if (parts.length != 2) {
+                player.sendMessage(this.text("Password change needs oldPassword newPassword separated by a space.", "Password change needs oldPassword newPassword separated by a space."));
+                this.pendingInputs.put(player.getUniqueId(), pending);
+                return;
+            }
+            this.changePassword(player, parts);
             return;
         }
         final String[] parts = message.split("\\s+", 2);
@@ -643,6 +720,10 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private boolean isRegistered(final Player player) {
         return this.isRegistered(player.getUniqueId());
+    }
+
+    private boolean isPasswordGui(final Component title) {
+        return PlainTextComponentSerializer.plainText().serialize(title).equals(PASSWORD_GUI_TITLE);
     }
 
     private synchronized boolean isRegistered(final UUID uuid) {
@@ -838,7 +919,8 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private enum InputMode {
         LOGIN,
-        REGISTER
+        REGISTER,
+        CHANGE_PASSWORD
     }
 
     private record PendingInput(InputMode mode) {
@@ -895,6 +977,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private static final class ComponentTitle {
         private static final Component HUNTER_AUTH = Component.text(GUI_TITLE);
+        private static final Component HUNTER_AUTH_PASSWORD = Component.text(PASSWORD_GUI_TITLE);
 
         private ComponentTitle() {
         }
