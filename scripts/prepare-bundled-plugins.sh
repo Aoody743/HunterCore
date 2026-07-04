@@ -297,12 +297,6 @@ download_file \
   "44bdb908e2fb4ff1b974d5313d048a625a21555a9844cfb86256a98e8e1c6bd1"
 manifest_entry "floodgate" "Floodgate" "2.2.5-b138" "floodgate-spigot-2.2.5-b138.jar" "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/138"
 
-download_file_sha512 \
-  "https://cdn.modrinth.com/data/XRJBgd3p/versions/ulQJdHkG/NoChatReports-2.7.8.jar" \
-  "$PLUGINS_DIR/NoChatReports-2.7.8.jar" \
-  "d51ade789a7a1b29c714118101e3b3298262558e46d99872271f98bf2adb18e767554b46bf37d982f88c23ca63105639353c42f3e8d36a930a8799f81d30e606"
-manifest_entry "nochatreports" "NoChatReports" "2.7.8" "NoChatReports-2.7.8.jar" "https://modrinth.com/plugin/nochatreports-spigot-paper/version/ulQJdHkG"
-
 download_file \
   "https://ci.loohpjames.com/job/ImageFrame/191/artifact/common/target/ImageFrame-2026.1.4.0.jar" \
   "$PLUGINS_DIR/ImageFrame-2026.1.4.0.jar" \

@@ -530,10 +530,12 @@ index 3578ece216827fd5d8c1206c689fc608e97b50df..d5934daaf5afbc1165817cc19389a8c0
      protected void doTick(final ServerLevel level, final T body) {
          double followRange = body.getAttributeValue(Attributes.FOLLOW_RANGE);
          AABB boundingBox = body.getBoundingBox().inflate(followRange, followRange, followRange);
--        List<LivingEntity> livingEntities = level.getEntitiesOfClass(LivingEntity.class, boundingBox, mob -> mob != body && mob.isAlive());
--        livingEntities.sort(Comparator.comparingDouble(body::distanceToSqr));
-+        it.unimi.dsi.fastutil.objects.ObjectArrayList<LivingEntity> livingEntities = (it.unimi.dsi.fastutil.objects.ObjectArrayList<LivingEntity>) level.getEntitiesOfClass(LivingEntity.class, boundingBox, mob -> mob != body && mob.isAlive()); // DivineMC - Optimize collections
-+        livingEntities.unstableSort(Comparator.comparingDouble(body::distanceToSqr)); // DivineMC - Optimize collections
++        List<LivingEntity> livingEntities = level.getEntitiesOfClass(LivingEntity.class, boundingBox, mob -> mob != body && mob.isAlive());
++        if (livingEntities instanceof it.unimi.dsi.fastutil.objects.ObjectArrayList<LivingEntity> fastLivingEntities) { // DivineMC - Optimize collections
++            fastLivingEntities.unstableSort(Comparator.comparingDouble(body::distanceToSqr));
++        } else {
++            livingEntities.sort(Comparator.comparingDouble(body::distanceToSqr));
++        }
          Brain<?> brain = body.getBrain();
          brain.setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, livingEntities);
          brain.setMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES, new NearestVisibleLivingEntities(level, body, livingEntities));

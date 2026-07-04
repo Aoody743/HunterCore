@@ -144,15 +144,16 @@ public final class HunterPreferences {
         changed |= this.setDefault("bundled-plugins.auto-update", true);
         changed |= this.setDefault("bundled-plugins.write-disabled-marker", true);
         for (final HunterBundledPluginRecord plugin : bundledPlugins) {
-            final boolean enabledByDefault = !normalize(plugin.id()).equals("coreprotect");
+            final String pluginId = normalize(plugin.id());
+            final boolean enabledByDefault = !pluginId.equals("coreprotect");
             changed |= this.setDefault("bundled-plugins.plugins." + normalize(plugin.id()), enabledByDefault);
         }
 
-        changed |= this.setDefault("modules.tps-display.enabled", true);
-        changed |= this.setDefault("modules.tps-display.actionbar", true);
+        changed |= this.setDefault("modules.tps-display.enabled", false);
+        changed |= this.setDefault("modules.tps-display.actionbar", false);
         changed |= this.setDefault("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%");
         changed |= this.setDefault("modules.tps-display.interval-ticks", 40);
-        changed |= this.setDefault("modules.sidebar.enabled", true);
+        changed |= this.setDefault("modules.sidebar.enabled", false);
         changed |= this.setDefault("modules.sidebar.title", "&6HunterCore");
         changed |= this.setDefault("modules.sidebar.lines", List.of(
             "&7TPS: %tps_color%%tps%",
@@ -241,7 +242,7 @@ public final class HunterPreferences {
         changed |= this.setDefault("modules.web-panel.users.player.allowed-commands", List.of("help", "list", "me", "msg", "tell", "spawn", "tps", "htps"));
 
         changed |= this.setDefault("optimizations.cpu.enabled", true);
-        changed |= this.setDefault("optimizations.cpu.mode", "single-thread");
+        changed |= this.setDefault("optimizations.cpu.mode", "multi-thread");
         changed |= this.setDefault("optimizations.cpu.prefer-existing-jvm-flags", true);
         changed |= this.setDefault("optimizations.cpu.allow-experimental-region-ticking", false);
         changed |= this.setDefault("optimizations.cpu.paper-worker-threads", "auto");

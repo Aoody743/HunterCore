@@ -240,6 +240,49 @@ const translations = {
     'assets.generatePrompt': '生成提示词',
     'assets.validate': '部署检查',
     'assets.publish': '发布资源包',
+    'assets.packs': '资源包',
+    'assets.images': '图片',
+    'assets.presets': '预设',
+    'assets.items': '物品',
+    'assets.emptyPacks': '还没有上传资源包。',
+    'assets.emptyImages': '还没有上传图片。',
+    'assets.emptyPresets': '还没有上传预设。',
+    'assets.emptyItems': '还没有自定义物品。',
+    'assets.itemId': '物品 ID',
+    'assets.itemIdPlaceholder': '唯一 ID，例如 frost_sword',
+    'assets.itemNameZh': '中文显示名',
+    'assets.itemNameZhPlaceholder': '玩家看到的中文名',
+    'assets.itemNameEn': '英文显示名',
+    'assets.itemNameEnPlaceholder': '玩家看到的英文名',
+    'assets.material': '基础材质',
+    'assets.materialPlaceholder': 'Minecraft 材质，例如 PAPER',
+    'assets.customModelData': 'CustomModelData',
+    'assets.customModelDataPlaceholder': '模型编号，例如 1001',
+    'assets.amount': '数量',
+    'assets.amountPlaceholder': '默认 1',
+    'assets.category': '分类',
+    'assets.categoryPlaceholder': 'weapons / tools / ui',
+    'assets.packFile': '资源包文件',
+    'assets.packFilePlaceholder': '已上传的 zip 文件名',
+    'assets.permission': '权限节点',
+    'assets.permissionPlaceholder': '留空或 hunterassets.item.example',
+    'assets.iconPath': '图标路径',
+    'assets.iconPathPlaceholder': '资源包内路径，例如 icons/example.png',
+    'assets.description': '说明',
+    'assets.descriptionPlaceholder': '这个物品的用途',
+    'assets.loreZh': '中文 Lore',
+    'assets.loreZhPlaceholder': '每行一条中文 Lore',
+    'assets.loreEn': '英文 Lore',
+    'assets.loreEnPlaceholder': '每行一条英文 Lore',
+    'assets.promptUseCase': '用途，例如 weapon / badge / menu icon',
+    'assets.promptTheme': '主题，例如 ice dragon / sci-fi / fantasy',
+    'assets.promptCategory': '资源分类，例如 items',
+    'assets.promptStyle': '风格，例如 Minecraft pixel art',
+    'assets.promptPalette': '色板，例如 blue silver high contrast',
+    'assets.promptMaterialFeel': '材质感，例如 metal / cloth / crystal',
+    'assets.promptResolution': '分辨率，例如 16x16 / 32x32',
+    'assets.publishFile': '要发布的资源包 zip 文件名',
+    'assets.publishBaseUrl': '资源包公开访问根地址',
     'titles.eyebrow': '原生称号系统',
     'titles.title': '称号',
     'titles.manage': '称号定义',
@@ -247,9 +290,35 @@ const translations = {
     'titles.save': '保存称号',
     'titles.apply': '应用',
     'titles.moduleToggle': '启用称号模块',
+    'titles.id': '称号 ID',
+    'titles.idPlaceholder': '唯一 ID，例如 builder',
+    'titles.displayName': '显示名',
+    'titles.displayNamePlaceholder': '面板里看到的名称，例如 Builder',
+    'titles.prefix': '聊天前缀',
+    'titles.prefixPlaceholder': '支持 & 颜色，例如 &b[Builder] ',
+    'titles.priority': '优先级',
+    'titles.priorityPlaceholder': '数字越大优先级越高',
+    'titles.permission': '权限节点',
+    'titles.permissionPlaceholder': '留空或 huntercore.title.builder',
+    'titles.description': '说明',
+    'titles.descriptionPlaceholder': '这个称号的用途或发放条件',
+    'titles.assignPlayer': '玩家名',
+    'titles.assignPlayerPlaceholder': '要发放/撤销称号的玩家名',
+    'titles.assignTitle': '称号 ID',
+    'titles.assignTitlePlaceholder': '例如 builder',
     'console.title': '命令控制台',
     'console.placeholder': 'list',
     'console.run': '运行',
+    'action.run': '运行',
+    'commandCenter.heal': '治疗',
+    'commandCenter.fly': '飞行',
+    'commandCenter.gamemode': '游戏模式',
+    'commandCenter.speed': '速度',
+    'commandCenter.broadcast': '广播',
+    'commandCenter.ncr': '聊天举报保护',
+    'commandCenter.optimize': '优化模式',
+    'commandCenter.playerOptional': '玩家名，留空为自己',
+    'commandCenter.message': '广播内容',
     'quick.saveAll': '保存全部',
     'quick.clearWeather': '晴天',
     'quick.day': '白天',
@@ -298,6 +367,10 @@ const translations = {
     'settings.title': '设置',
     'settings.tab.web': '网页面板',
     'settings.tab.webHint': '名称、F3 和面板地址',
+    'settings.tab.bundles': '内置插件',
+    'settings.tab.bundlesHint': 'Geyser、资源和兼容项',
+    'settings.tab.geyser': 'Geyser',
+    'settings.tab.geyserHint': '基岩版端口和登录模式',
     'settings.tab.display': '游戏显示',
     'settings.tab.displayHint': '侧边栏与 TPS 文案',
     'settings.tab.motd': 'MOTD',
@@ -323,6 +396,39 @@ const translations = {
     'webSettings.externalUrl': '公开面板域名，例如 https://panel.example.com',
     'webSettings.mapUrl': '地图地址，例如 http://%host%:8100/',
     'webSettings.publicMap': '公开地图',
+    'bundles.title': '内置插件',
+    'bundles.geyser': 'Geyser 跨平台',
+    'bundles.floodgate': 'Floodgate 登录桥',
+    'bundles.resourcePackEnabled': '启用资源包',
+    'bundles.resourcePackRequired': '强制资源包',
+    'bundles.sendOnJoin': '进服发送资源包',
+    'bundles.resourcePackUrl': '资源包下载 URL',
+    'bundles.resourcePackSha1': '资源包 SHA1，可留空',
+    'noChatReports.title': '聊天举报保护',
+    'noChatReports.enabled': '禁用玩家聊天举报',
+    'noChatReports.addQueryData': '向客户端显示保护状态',
+    'noChatReports.convertToGameMessage': '聊天转为游戏消息',
+    'noChatReports.demandOnClient': '要求客户端安装 No Chat Reports',
+    'noChatReports.debugLog': '调试日志',
+    'noChatReports.disconnectMessage': '要求客户端 Mod 时的踢出提示',
+    'noChatReports.disconnectMessagePlaceholder': '例如：请安装 No Chat Reports 后再进入服务器',
+    'noChatReports.save': '保存聊天保护',
+    'geyser.title': 'Geyser',
+    'geyser.bedrockAddress': '基岩版监听地址',
+    'geyser.bedrockAddressPlaceholder': '0.0.0.0 表示所有网卡',
+    'geyser.bedrockPort': '基岩版端口',
+    'geyser.bedrockPortPlaceholder': '默认 19132',
+    'geyser.authType': 'Java 登录模式',
+    'geyser.serverName': '基岩版服务器名',
+    'geyser.serverNamePlaceholder': '基岩版服务器列表显示名',
+    'geyser.primaryMotd': '主 MOTD',
+    'geyser.primaryMotdPlaceholder': '第一行服务器描述',
+    'geyser.secondaryMotd': '副 MOTD',
+    'geyser.secondaryMotdPlaceholder': '第二行服务器描述',
+    'geyser.passthroughMotd': '跟随 Java MOTD',
+    'geyser.passthroughPlayers': '跟随 Java 在线人数',
+    'geyser.save': '保存 Geyser 设置',
+    'geyser.status': '配置：{config}；基岩地址：{address}:{port}；登录模式：{auth}。',
     'auth.title': 'HunterAuth',
     'auth.enabled': '登录保护',
     'auth.registrationRequired': '必须创建账号密码',
@@ -634,6 +740,49 @@ const translations = {
     'assets.generatePrompt': 'Generate prompts',
     'assets.validate': 'Validate',
     'assets.publish': 'Publish pack',
+    'assets.packs': 'Resource packs',
+    'assets.images': 'Images',
+    'assets.presets': 'Presets',
+    'assets.items': 'Items',
+    'assets.emptyPacks': 'No resource packs uploaded yet.',
+    'assets.emptyImages': 'No images uploaded yet.',
+    'assets.emptyPresets': 'No presets uploaded yet.',
+    'assets.emptyItems': 'No custom items yet.',
+    'assets.itemId': 'Item ID',
+    'assets.itemIdPlaceholder': 'Unique ID, e.g. frost_sword',
+    'assets.itemNameZh': 'Chinese display name',
+    'assets.itemNameZhPlaceholder': 'Chinese name shown to players',
+    'assets.itemNameEn': 'English display name',
+    'assets.itemNameEnPlaceholder': 'English name shown to players',
+    'assets.material': 'Base material',
+    'assets.materialPlaceholder': 'Minecraft material, e.g. PAPER',
+    'assets.customModelData': 'CustomModelData',
+    'assets.customModelDataPlaceholder': 'Model number, e.g. 1001',
+    'assets.amount': 'Amount',
+    'assets.amountPlaceholder': 'Default 1',
+    'assets.category': 'Category',
+    'assets.categoryPlaceholder': 'weapons / tools / ui',
+    'assets.packFile': 'Resource pack file',
+    'assets.packFilePlaceholder': 'Uploaded zip file name',
+    'assets.permission': 'Permission node',
+    'assets.permissionPlaceholder': 'Blank or hunterassets.item.example',
+    'assets.iconPath': 'Icon path',
+    'assets.iconPathPlaceholder': 'Path inside the pack, e.g. icons/example.png',
+    'assets.description': 'Description',
+    'assets.descriptionPlaceholder': 'What this item is for',
+    'assets.loreZh': 'Chinese lore',
+    'assets.loreZhPlaceholder': 'One Chinese lore line per row',
+    'assets.loreEn': 'English lore',
+    'assets.loreEnPlaceholder': 'One English lore line per row',
+    'assets.promptUseCase': 'Use case, e.g. weapon / badge / menu icon',
+    'assets.promptTheme': 'Theme, e.g. ice dragon / sci-fi / fantasy',
+    'assets.promptCategory': 'Asset category, e.g. items',
+    'assets.promptStyle': 'Style, e.g. Minecraft pixel art',
+    'assets.promptPalette': 'Palette, e.g. blue silver high contrast',
+    'assets.promptMaterialFeel': 'Material feel, e.g. metal / cloth / crystal',
+    'assets.promptResolution': 'Resolution, e.g. 16x16 / 32x32',
+    'assets.publishFile': 'Resource pack zip file to publish',
+    'assets.publishBaseUrl': 'Public base URL for the pack',
     'titles.eyebrow': 'Native title system',
     'titles.title': 'Titles',
     'titles.manage': 'Title Definitions',
@@ -641,9 +790,35 @@ const translations = {
     'titles.save': 'Save title',
     'titles.apply': 'Apply',
     'titles.moduleToggle': 'Enable titles module',
+    'titles.id': 'Title ID',
+    'titles.idPlaceholder': 'Unique ID, e.g. builder',
+    'titles.displayName': 'Display name',
+    'titles.displayNamePlaceholder': 'Panel name, e.g. Builder',
+    'titles.prefix': 'Chat prefix',
+    'titles.prefixPlaceholder': 'Supports & colors, e.g. &b[Builder] ',
+    'titles.priority': 'Priority',
+    'titles.priorityPlaceholder': 'Higher numbers win first',
+    'titles.permission': 'Permission node',
+    'titles.permissionPlaceholder': 'Blank or huntercore.title.builder',
+    'titles.description': 'Description',
+    'titles.descriptionPlaceholder': 'When this title should be used',
+    'titles.assignPlayer': 'Player name',
+    'titles.assignPlayerPlaceholder': 'Player to grant or revoke from',
+    'titles.assignTitle': 'Title ID',
+    'titles.assignTitlePlaceholder': 'e.g. builder',
     'console.title': 'Command console',
     'console.placeholder': 'list',
     'console.run': 'Run',
+    'action.run': 'Run',
+    'commandCenter.heal': 'Heal',
+    'commandCenter.fly': 'Fly',
+    'commandCenter.gamemode': 'Gamemode',
+    'commandCenter.speed': 'Speed',
+    'commandCenter.broadcast': 'Broadcast',
+    'commandCenter.ncr': 'Chat Reports',
+    'commandCenter.optimize': 'Optimize',
+    'commandCenter.playerOptional': 'Player name, blank for self',
+    'commandCenter.message': 'Broadcast message',
     'quick.saveAll': 'Save all',
     'quick.clearWeather': 'Clear weather',
     'quick.day': 'Day',
@@ -692,6 +867,10 @@ const translations = {
     'settings.title': 'Settings',
     'settings.tab.web': 'Web panel',
     'settings.tab.webHint': 'Name, F3 and panel address',
+    'settings.tab.bundles': 'Bundled plugins',
+    'settings.tab.bundlesHint': 'Geyser, assets and compatibility',
+    'settings.tab.geyser': 'Geyser',
+    'settings.tab.geyserHint': 'Bedrock port and login mode',
     'settings.tab.display': 'Game display',
     'settings.tab.displayHint': 'Sidebar and TPS text',
     'settings.tab.motd': 'MOTD',
@@ -717,6 +896,40 @@ const translations = {
     'webSettings.externalUrl': 'Public panel domain, e.g. https://panel.example.com',
     'webSettings.mapUrl': 'Map URL, for example http://%host%:8100/',
     'webSettings.publicMap': 'public map',
+    'bundles.title': 'Bundled plugins',
+    'bundles.geyser': 'Geyser cross-platform',
+    'bundles.floodgate': 'Floodgate login bridge',
+    'bundles.resourcePackEnabled': 'Enable resource pack',
+    'bundles.resourcePackRequired': 'Require resource pack',
+    'bundles.sendOnJoin': 'Send pack on join',
+    'bundles.resourcePackUrl': 'Resource pack download URL',
+    'bundles.resourcePackSha1': 'Resource pack SHA1, optional',
+    'bundles.ncrLine': 'Built-in NoChatReports: {builtin}. This is handled by HunterCore directly.',
+    'noChatReports.title': 'Chat report protection',
+    'noChatReports.enabled': 'Disable player chat reports',
+    'noChatReports.addQueryData': 'Advertise protection to clients',
+    'noChatReports.convertToGameMessage': 'Convert chat to game messages',
+    'noChatReports.demandOnClient': 'Require client No Chat Reports mod',
+    'noChatReports.debugLog': 'Debug log',
+    'noChatReports.disconnectMessage': 'Kick message when client mod is required',
+    'noChatReports.disconnectMessagePlaceholder': 'Example: install No Chat Reports before joining',
+    'noChatReports.save': 'Save chat protection',
+    'geyser.title': 'Geyser',
+    'geyser.bedrockAddress': 'Bedrock bind address',
+    'geyser.bedrockAddressPlaceholder': '0.0.0.0 listens on all interfaces',
+    'geyser.bedrockPort': 'Bedrock port',
+    'geyser.bedrockPortPlaceholder': 'Default 19132',
+    'geyser.authType': 'Java login mode',
+    'geyser.serverName': 'Bedrock server name',
+    'geyser.serverNamePlaceholder': 'Name shown in the Bedrock server list',
+    'geyser.primaryMotd': 'Primary MOTD',
+    'geyser.primaryMotdPlaceholder': 'First server description line',
+    'geyser.secondaryMotd': 'Secondary MOTD',
+    'geyser.secondaryMotdPlaceholder': 'Second server description line',
+    'geyser.passthroughMotd': 'Passthrough Java MOTD',
+    'geyser.passthroughPlayers': 'Passthrough Java player counts',
+    'geyser.save': 'Save Geyser settings',
+    'geyser.status': 'Config: {config}; Bedrock address: {address}:{port}; login mode: {auth}.',
     'auth.title': 'HunterAuth',
     'auth.enabled': 'Login protection',
     'auth.registrationRequired': 'Require account password',
@@ -1616,9 +1829,9 @@ function renderAssets(assets) {
     summaryCard('Validation', (validation.errors || []).length, `${(validation.warnings || []).length} warnings`, (validation.errors || []).length ? 'bad' : (validation.warnings || []).length ? 'warn' : 'good'),
     summaryCard('Pack URL', assets.resourcePack?.url || '--', assets.resourcePack?.enabled ? 'enabled' : 'disabled')
   ].join('');
-  $('assetsPackList').innerHTML = (assets.packs || []).map((file) => dataItem(file.name, formatBytes(file.size || 0))).join('') || `<p class="mutedState">No packs yet.</p>`;
-  $('assetsImageList').innerHTML = (assets.images || []).map((file) => dataItem(file.name, formatBytes(file.size || 0))).join('') || `<p class="mutedState">No images yet.</p>`;
-  $('assetsPresetList').innerHTML = (assets.presets || []).map((file) => dataItem(file.name, formatBytes(file.size || 0))).join('') || `<p class="mutedState">No presets yet.</p>`;
+  $('assetsPackList').innerHTML = assetFileBlock(t('assets.packs'), assets.packs || [], t('assets.emptyPacks'));
+  $('assetsImageList').innerHTML = assetFileBlock(t('assets.images'), assets.images || [], t('assets.emptyImages'));
+  $('assetsPresetList').innerHTML = assetFileBlock(t('assets.presets'), assets.presets || [], t('assets.emptyPresets'));
   $('assetsItemList').innerHTML = (assets.items || []).map((item) => `
     <article class="pluginItem">
       <div class="pluginTop"><span>${esc(item.name || item.id)}<small>${esc(item.id)} · ${esc(item.material)} · CMD ${esc(item.customModelData)}</small></span></div>
@@ -1628,11 +1841,19 @@ function renderAssets(assets) {
         <button type="button" data-asset-remove="${esc(item.id)}">Remove</button>
       </div>
     </article>
-  `).join('') || `<p class="mutedState">No custom items yet.</p>`;
+  `).join('') || `<p class="mutedState">${esc(t('assets.emptyItems'))}</p>`;
   $('assetsValidationList').innerHTML = [
     ...(validation.errors || []).map((line) => dataItem('Error', line)),
     ...(validation.warnings || []).map((line) => dataItem('Warning', line))
   ].join('') || `<p class="mutedState">No validation issues.</p>`;
+}
+
+function assetFileBlock(title, files, emptyText) {
+  const rows = files.map((file) => dataItem(file.name, formatBytes(file.size || 0))).join('');
+  return `<div class="assetListBlock">
+    <div class="listHeader"><h4>${esc(title)}</h4><span>${files.length}</span></div>
+    ${rows || `<p class="mutedState">${esc(emptyText)}</p>`}
+  </div>`;
 }
 
 function renderTitles(titles) {
@@ -1697,6 +1918,7 @@ function pluginWorkbenchCards(plugins, thirdParty) {
   const status = (names) => pluginStatusLabel(find(names)?.status || 'missing');
   const bundled = thirdParty?.bundled || {};
   const geyser = thirdParty?.geyser || {};
+  const ncr = thirdParty?.noChatReports || {};
   return [
     summaryCard('Cross-Platform', [
       `Geyser ${status(['geyser-spigot', 'geyser'])}`,
@@ -1706,7 +1928,7 @@ function pluginWorkbenchCards(plugins, thirdParty) {
       `ViaRewind ${status(['viarewind'])}`,
       `Via Legacy ${status(['viarewind-legacy-support'])}`
     ].join(' · '), geyser.configPresent ? `${geyser.bedrockAddress || '0.0.0.0'}:${geyser.bedrockPort || 19132} · ${geyser.javaAuthType || 'floodgate'}` : 'Geyser config pending'),
-    summaryCard('Chat & Privacy', `NoChatReports ${status(['nochatreports'])}`, bundled.noChatReports ? 'Bundled on next install' : 'Bundled off'),
+    summaryCard('Chat & Privacy', `Built-in NCR ${ncr.builtinEnabled ? 'enabled' : 'disabled'}`, 'HunterCore core protection'),
     summaryCard('Custom Content', `HunterAssets ${status(['hunterassets', 'hunter-assets'])} · ImageFrame ${status(['imageframe'])}`, `${bundled.hunterAssets ? 'HunterAssets on' : 'HunterAssets off'} · ${bundled.imageFrame ? 'ImageFrame on' : 'ImageFrame off'}`)
   ].join('');
 }
@@ -1837,7 +2059,6 @@ function renderWebSettings(settings) {
   const geyser = thirdParty.geyser || {};
   $('bundleGeyser').checked = Boolean(bundled.geyser);
   $('bundleFloodgate').checked = Boolean(bundled.floodgate);
-  $('bundleNoChatReports').checked = Boolean(bundled.noChatReports);
   $('bundleHunterAssets').checked = Boolean(bundled.hunterAssets);
   $('bundleImageFrame').checked = Boolean(bundled.imageFrame);
   $('bundleViaLegacy').checked = Boolean(bundled.viaLegacy);
@@ -1847,6 +2068,13 @@ function renderWebSettings(settings) {
   $('assetsSendOnJoin').checked = Boolean(hunterAssets.sendOnJoin);
   $('assetsResourcePackUrl').value = hunterAssets.url || '';
   $('assetsResourcePackSha1').value = hunterAssets.sha1 || '';
+  const ncr = thirdParty.noChatReports || {};
+  $('noChatReportsEnabled').checked = Boolean(ncr.builtinEnabled);
+  $('noChatReportsAddQueryData').checked = ncr.addQueryData !== false;
+  $('noChatReportsConvertToGameMessage').checked = ncr.convertToGameMessage !== false;
+  $('noChatReportsDemandOnClient').checked = Boolean(ncr.demandOnClient);
+  $('noChatReportsDebugLog').checked = Boolean(ncr.debugLog);
+  $('noChatReportsDisconnectMessage').value = ncr.disconnectMessage || '';
   $('geyserBedrockAddress').value = geyser.bedrockAddress || '0.0.0.0';
   $('geyserBedrockPort').value = geyser.bedrockPort ?? 19132;
   $('geyserJavaAuthType').value = geyser.javaAuthType || 'floodgate';
@@ -1855,6 +2083,19 @@ function renderWebSettings(settings) {
   $('geyserPassthroughMotd').checked = Boolean(geyser.passthroughMotd);
   $('geyserPassthroughPlayerCounts').checked = Boolean(geyser.passthroughPlayerCounts);
   $('geyserServerName').value = geyser.serverName || '';
+  if ($('noChatReportsLine')) {
+    $('noChatReportsLine').textContent = t('bundles.ncrLine', {
+      builtin: ncr.builtinEnabled ? 'on' : 'off'
+    });
+  }
+  if ($('geyserStatusLine')) {
+    $('geyserStatusLine').textContent = t('geyser.status', {
+      config: geyser.configPresent ? 'ready' : 'will be created',
+      address: geyser.bedrockAddress || '0.0.0.0',
+      port: geyser.bedrockPort || 19132,
+      auth: geyser.javaAuthType || 'floodgate'
+    });
+  }
 }
 
 function renderAiApprovals(approvals) {
@@ -2111,6 +2352,18 @@ async function runCommand(command) {
   const result = await json('/api/command', { method: 'POST', body: payload });
   setOutput(result.message || t('command.dispatched'), result.output || '');
   await refresh();
+}
+
+function commandFromTemplate(form) {
+  let command = form.dataset.commandTemplate || '';
+  const values = Object.fromEntries(new FormData(form).entries());
+  Object.entries(values).forEach(([key, value]) => {
+    command = command.replaceAll(`{${key}}`, String(value || '').trim());
+  });
+  return command
+    .replace(/\{[^}]+}/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function editWebUser(id) {
@@ -2393,6 +2646,20 @@ function bindEvents() {
     });
   });
 
+  $$('.commandAction[data-command-template]').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const command = commandFromTemplate(form);
+      if (!command) return;
+      $('commandInput').value = command;
+      try {
+        await runCommand(command);
+      } catch (error) {
+        setOutput(t('command.error', { message: error.message }));
+      }
+    });
+  });
+
   $('actorModule').addEventListener('change', updateActorKind);
 
   $('actorForm').addEventListener('submit', async (event) => {
@@ -2533,10 +2800,15 @@ function bindEvents() {
       clearApiKey: String($('webClearApiKey').checked),
       bundleGeyser: String($('bundleGeyser').checked),
       bundleFloodgate: String($('bundleFloodgate').checked),
-      bundleNoChatReports: String($('bundleNoChatReports').checked),
       bundleHunterAssets: String($('bundleHunterAssets').checked),
       bundleImageFrame: String($('bundleImageFrame').checked),
       bundleViaLegacy: String($('bundleViaLegacy').checked),
+      noChatReportsEnabled: String($('noChatReportsEnabled').checked),
+      noChatReportsAddQueryData: String($('noChatReportsAddQueryData').checked),
+      noChatReportsConvertToGameMessage: String($('noChatReportsConvertToGameMessage').checked),
+      noChatReportsDemandOnClient: String($('noChatReportsDemandOnClient').checked),
+      noChatReportsDebugLog: String($('noChatReportsDebugLog').checked),
+      noChatReportsDisconnectMessage: $('noChatReportsDisconnectMessage').value,
       assetsResourcePackEnabled: String($('assetsResourcePackEnabled').checked),
       assetsResourcePackRequired: String($('assetsResourcePackRequired').checked),
       assetsSendOnJoin: String($('assetsSendOnJoin').checked),

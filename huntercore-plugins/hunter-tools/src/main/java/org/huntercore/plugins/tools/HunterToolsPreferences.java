@@ -509,7 +509,7 @@ final class HunterToolsPreferences {
         boolean changed = false;
         changed |= this.setDefault("language", HunterLanguage.DEFAULT);
         changed |= this.setDefault("modules.tps-display.enabled", false);
-        changed |= this.setDefault("modules.tps-display.actionbar", true);
+        changed |= this.setDefault("modules.tps-display.actionbar", false);
         changed |= this.setDefault("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%");
         changed |= this.setDefault("modules.tps-display.interval-ticks", 40);
         changed |= this.setDefault("modules.sidebar.enabled", false);
@@ -702,7 +702,7 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.web-panel.users.player.command-execution", true);
         changed |= this.setDefault("modules.web-panel.users.player.allowed-commands", defaultWebPlayerCommands());
         changed |= this.setDefault("optimizations.cpu.enabled", true);
-        changed |= this.setDefault("optimizations.cpu.mode", "single-thread");
+        changed |= this.setDefault("optimizations.cpu.mode", "multi-thread");
         changed |= this.setDefault("optimizations.cpu.prefer-existing-jvm-flags", true);
         changed |= this.setDefault("optimizations.cpu.allow-experimental-region-ticking", false);
         changed |= this.setDefault("optimizations.cpu.paper-worker-threads", "auto");
@@ -755,7 +755,7 @@ final class HunterToolsPreferences {
     }
 
     static List<String> managementCommands() {
-        return List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module", "optimize", "motd", "web", "ai");
+        return List.of("reload", "modules", "plugins", "memory", "gc", "threads", "command", "module", "optimize", "nochatreports", "motd", "web", "ai");
     }
 
     private static int defaultStoryPhaseDuration(final String phaseId) {

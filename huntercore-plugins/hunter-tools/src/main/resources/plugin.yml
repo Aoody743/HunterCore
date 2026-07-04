@@ -123,8 +123,8 @@ commands:
     aliases: [prefs]
     permission: huntertools.command.settings
   admin:
-    description: Open the HunterCore admin GUI or run an admin shortcut.
-    usage: /admin
+    description: Run HunterCore admin shortcuts. The admin GUI is available from /hc.
+    usage: /admin <help|reload|modules|module|command|plugins|memory|gc|threads|optimize|ncr|motd|web|ai>
     permission: huntertools.command.admin
   player:
     description: Manage HunterCore real ServerPlayer bots.

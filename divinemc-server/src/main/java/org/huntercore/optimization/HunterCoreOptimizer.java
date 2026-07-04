@@ -15,7 +15,7 @@ public final class HunterCoreOptimizer {
     public static final String MODE_HIGH_CLOCK = "high-clock";
     public static final String MODE_HIGH_CORE = "high-core";
     public static final String MODE_MULTI_THREAD = "multi-thread";
-    public static final String DEFAULT_MODE = MODE_SINGLE_THREAD;
+    public static final String DEFAULT_MODE = MODE_MULTI_THREAD;
 
     private static final Logger LOGGER = LogUtils.getClassLogger();
     private static final int CPU = Math.max(1, Runtime.getRuntime().availableProcessors());
@@ -283,7 +283,7 @@ public final class HunterCoreOptimizer {
         if (MODE_HIGH_CORE.equals(mode)) {
             return clamp((int) Math.round(CPU * 0.65D), 3, 20);
         }
-        return clamp((int) Math.round(CPU * 0.50D), 2, 16);
+        return clamp((int) Math.round(CPU * 0.60D), 2, 16);
     }
 
     private static int pathfindingThreads(final String mode) {
@@ -296,7 +296,7 @@ public final class HunterCoreOptimizer {
         if (MODE_HIGH_CORE.equals(mode)) {
             return clamp((int) Math.round(CPU * 0.35D), 2, 10);
         }
-        return clamp((int) Math.round(CPU * 0.25D), 1, 8);
+        return clamp((int) Math.round(CPU * 0.35D), 2, 8);
     }
 
     private static int trackerThreads(final String mode) {
@@ -309,7 +309,7 @@ public final class HunterCoreOptimizer {
         if (MODE_HIGH_CORE.equals(mode)) {
             return clamp((int) Math.round(CPU * 0.35D), 2, 10);
         }
-        return clamp((int) Math.round(CPU * 0.25D), 1, 8);
+        return clamp((int) Math.round(CPU * 0.35D), 2, 8);
     }
 
     private static int chunkSendThreads(final String mode) {
@@ -322,7 +322,7 @@ public final class HunterCoreOptimizer {
         if (MODE_HIGH_CORE.equals(mode)) {
             return clamp((int) Math.round(CPU * 0.30D), 2, 8);
         }
-        return clamp((int) Math.round(CPU * 0.25D), 1, 8);
+        return clamp((int) Math.round(CPU * 0.35D), 2, 8);
     }
 
     private static int regionTickThreads(final String mode) {

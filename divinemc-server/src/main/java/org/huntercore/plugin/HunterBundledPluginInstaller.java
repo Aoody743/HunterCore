@@ -135,18 +135,31 @@ public final class HunterBundledPluginInstaller {
             yaml.set("bedrock.address", yaml.getString("bedrock.address", "0.0.0.0"));
             yaml.set("bedrock.port", yaml.getInt("bedrock.port", 19132));
             yaml.set("bedrock.clone-remote-port", yaml.getBoolean("bedrock.clone-remote-port", false));
-            yaml.set("java.auth-type", yaml.getString("java.auth-type", preferences.bundledPluginEnabled("floodgate") ? "floodgate" : "online"));
+            yaml.set("remote.address", yaml.getString("remote.address", "127.0.0.1"));
+            yaml.set("remote.port", yaml.getInt("remote.port", 25565));
+            yaml.set("remote.auth-type", geyserAuthType(yaml, preferences));
+            yaml.set("java.auth-type", geyserAuthType(yaml, preferences));
             yaml.set("motd.primary-motd", yaml.getString("motd.primary-motd", "HunterCore"));
             yaml.set("motd.secondary-motd", yaml.getString("motd.secondary-motd", "Bedrock ready"));
             yaml.set("motd.passthrough-motd", yaml.getBoolean("motd.passthrough-motd", true));
             yaml.set("motd.passthrough-player-counts", yaml.getBoolean("motd.passthrough-player-counts", true));
             yaml.set("gameplay.server-name", yaml.getString("gameplay.server-name", "HunterCore"));
-            yaml.set("advanced.floodgate-key-file", yaml.getString("advanced.floodgate-key-file", "key.pem"));
+            yaml.set("floodgate-key-file", yaml.getString("floodgate-key-file", "../floodgate/key.pem"));
+            yaml.set("advanced.floodgate-key-file", yaml.getString("advanced.floodgate-key-file", "../floodgate/key.pem"));
             yaml.save(config.toFile());
             LOGGER.info("HunterCore prepared Geyser-Spigot config defaults.");
         } catch (final IOException ex) {
             LOGGER.warn("HunterCore could not prepare Geyser config", ex);
         }
+    }
+
+    private static String geyserAuthType(final YamlConfiguration yaml, final HunterPreferences preferences) {
+        final String fallback = preferences.bundledPluginEnabled("floodgate") ? "floodgate" : "online";
+        final String remote = yaml.getString("remote.auth-type", "");
+        if (remote != null && !remote.isBlank()) {
+            return remote;
+        }
+        return yaml.getString("java.auth-type", fallback);
     }
 
     private static List<HunterBundledPluginRecord> loadManifests() {
@@ -243,6 +256,11 @@ public final class HunterBundledPluginInstaller {
         final HunterPreferences preferences
     ) {
         if (!preferences.bundledPluginEnabled(plugin.id())) {
+            try {
+                removeDisabledPluginJar(pluginDirectory, plugin);
+            } catch (final IOException ex) {
+                return new InstallResult(plugin, InstallState.FAILED, "failed to remove disabled bundled jar: " + ex.getMessage());
+            }
             return new InstallResult(plugin, InstallState.DISABLED, "disabled in plugins/HunterCore/preferences.yml");
         }
         try {
@@ -368,5 +386,11 @@ public final class HunterBundledPluginInstaller {
                 Files.deleteIfExists(path);
             }
         }
+    }
+
+    private static void removeDisabledPluginJar(final Path pluginDirectory, final HunterBundledPluginRecord plugin) throws IOException {
+        final Path target = pluginDirectory.resolve(plugin.fileName());
+        deleteStaleSiblingJars(pluginDirectory, plugin, target);
+        Files.deleteIfExists(target);
     }
 }

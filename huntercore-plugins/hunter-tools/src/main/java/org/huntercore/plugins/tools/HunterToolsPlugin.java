@@ -205,7 +205,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "menu" -> this.openMainMenuWorkbench(sender);
             case "profile", "playerinfo", "me" -> this.openProfileWorkbench(sender);
             case "settings" -> this.openSettingsWorkbench(sender);
-            case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminWorkbench(sender) : this.admin(sender, args);
+            case "admin" -> this.admin(sender, args);
             case "player" -> this.realFakePlayer(sender, "player", args);
             case "npc" -> this.npc(sender, "npc", args);
             case "start" -> this.storyModeManager != null && this.storyModeManager.startCommand(sender);
@@ -300,6 +300,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 case CRAFTING_TABLE -> player.performCommand("craft");
                 case ENDER_CHEST -> player.performCommand("enderchest");
                 case CHEST -> player.performCommand("trash");
+                case IRON_SWORD -> this.openToolsWorkbench(player);
                 case LEVER -> this.openSettingsWorkbench(player);
                 case PLAYER_HEAD -> this.openProfileWorkbench(player);
                 case BOOK -> player.performCommand("info");
@@ -308,6 +309,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 case ARMOR_STAND -> this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
                 case VILLAGER_SPAWN_EGG -> this.openActorListWorkbench(player, NPCS);
                 case ENCHANTED_BOOK -> this.openStoryWorkbench(player);
+                case KNOWLEDGE_BOOK -> this.openCommandCenterWorkbench(player, "tools");
                 case COMMAND_BLOCK -> this.openAdminWorkbench(player);
                 case BARRIER -> player.closeInventory();
                 default -> {
@@ -344,9 +346,17 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 case SETTINGS -> this.handleSettingsWorkbenchClick(player, clicked);
                 case ADMIN -> this.handleAdminWorkbenchClick(player, clicked);
                 case ADMIN_SYSTEM -> this.handleAdminSystemWorkbenchClick(player, clicked);
+                case ADMIN_PLUGINS -> this.handleAdminPluginsWorkbenchClick(player, clicked);
                 case ADMIN_MODULES -> this.handleAdminModulesWorkbenchClick(player, clicked, event.getRawSlot());
                 case ADMIN_PREFERENCES -> this.handleAdminPreferencesWorkbenchClick(player, clicked);
                 case ADMIN_OPTIMIZE -> this.handleAdminOptimizeWorkbenchClick(player, clicked);
+                case ADMIN_CHAT_REPORTS -> this.handleAdminChatReportsWorkbenchClick(player, clicked);
+                case ADMIN_AI -> this.handleAdminAiWorkbenchClick(player, clicked);
+                case ADMIN_WEB -> this.handleAdminWebWorkbenchClick(player, clicked);
+                case ADMIN_MOTD -> this.handleAdminMotdWorkbenchClick(player, clicked);
+                case ADMIN_COMMANDS -> this.handleAdminCommandsWorkbenchClick(player, clicked, holder, event.getRawSlot());
+                case TOOLS -> this.handleToolsWorkbenchClick(player, clicked);
+                case COMMAND_CENTER -> this.handleCommandCenterWorkbenchClick(player, clicked, holder, event.getRawSlot());
                 case ACTOR_LIST -> this.handleActorListWorkbenchClick(player, clicked, holder);
                 case ACTOR_DETAIL -> this.handleActorDetailWorkbenchClick(player, clicked, holder);
                 case STORY -> this.handleStoryWorkbenchClick(player, clicked);
@@ -462,6 +472,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         inventory.setItem(14, this.menuItem(Material.CRAFTING_TABLE, "随身工作台", "Crafting", List.of("/craft"), List.of("Portable crafting table")));
         inventory.setItem(15, this.menuItem(Material.ENDER_CHEST, "末影箱", "Ender Chest", List.of("/enderchest"), List.of("Open your ender chest")));
         inventory.setItem(16, this.menuItem(Material.CHEST, "垃圾桶", "Trash", List.of("/trash"), List.of("Disposable inventory")));
+        inventory.setItem(27, this.menuItem(Material.IRON_SWORD, "常用工具", "Tools", List.of("治疗、飞行、速度、时间、天气"), List.of("Heal, fly, speed, time and weather")));
         inventory.setItem(28, this.menuItem(Material.PLAYER_HEAD, "个人资料", "Profile", List.of("状态、背包预览、常用入口"), List.of("Stats, inventory preview, utility")));
         inventory.setItem(29, this.menuItem(Material.LEVER, "玩家设置", "Settings", List.of("TPA、语言、面板入口"), List.of("TPA toggle, language, panel")));
         inventory.setItem(30, this.menuItem(Material.ARMOR_STAND, "假人", "PlayerBots", List.of("查看并管理假人"), List.of("List and control fake players")));
@@ -469,12 +480,54 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         inventory.setItem(32, this.menuItem(Material.ENCHANTED_BOOK, "故事模式", "Story Mode", List.of("状态、启动、停止、实验能力"), List.of("Status, start, stop, experimental actions")));
         inventory.setItem(33, this.menuItem(Material.BOOK, "服务器信息", "Server Info", List.of("/info"), List.of("/info")));
         inventory.setItem(34, this.menuItem(Material.FILLED_MAP, "网页面板", "Web Panel", List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088")), List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))));
+        inventory.setItem(35, this.menuItem(Material.KNOWLEDGE_BOOK, "全部指令", "Command Center", List.of("所有指令都有 GUI 入口", "需要参数时会引导聊天输入"), List.of("GUI entry for every command", "Prompts in chat when arguments are needed")));
         if (player.hasPermission("huntertools.command.admin")) {
             inventory.setItem(40, this.menuItem(Material.COMMAND_BLOCK, "管理中心", "Admin", List.of("状态、模块、广播"), List.of("Runtime, modules, broadcast")));
         }
         inventory.setItem(49, this.menuItem(Material.BARRIER, "关闭", "Close", List.of(), List.of()));
         player.openInventory(inventory);
         return true;
+    }
+
+    private void openToolsWorkbench(final Player player) {
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.TOOLS, null, null, null), 54, this.guiTitle(GuiPage.TOOLS, null, null));
+        inventory.setItem(4, this.menuItem(Material.IRON_SWORD, "常用工具", "Tools", List.of(
+            "一屏覆盖 HunterTools 常用指令",
+            "需要权限的项目会沿用原指令权限"
+        ), List.of(
+            "GUI shortcuts for common HunterTools commands",
+            "Permission checks still use the underlying commands"
+        )));
+        inventory.setItem(10, this.menuItem(Material.GOLDEN_APPLE, "治疗", "Heal", List.of("/heal"), List.of("/heal")));
+        inventory.setItem(11, this.menuItem(Material.COOKED_BEEF, "饱食", "Feed", List.of("/feed"), List.of("/feed")));
+        inventory.setItem(12, this.menuItem(Material.FEATHER, "飞行开关", "Toggle Fly", List.of("/fly"), List.of("/fly")));
+        inventory.setItem(13, this.menuItem(Material.SUGAR, "速度", "Speed", List.of("点击后在聊天栏输入 1-10"), List.of("Type 1-10 in chat after clicking")));
+        inventory.setItem(14, this.menuItem(Material.LEATHER_HELMET, "生存模式", "Survival", List.of("/gms"), List.of("/gms")));
+        inventory.setItem(15, this.menuItem(Material.DIAMOND_BLOCK, "创造模式", "Creative", List.of("/gmc"), List.of("/gmc")));
+        inventory.setItem(16, this.menuItem(Material.ELYTRA, "旁观模式", "Spectator", List.of("/gmsp"), List.of("/gmsp")));
+        inventory.setItem(19, this.menuItem(Material.SUNFLOWER, "白天", "Day", List.of("/day"), List.of("/day")));
+        inventory.setItem(20, this.menuItem(Material.BLACK_BED, "夜晚", "Night", List.of("/night"), List.of("/night")));
+        inventory.setItem(21, this.menuItem(Material.YELLOW_DYE, "晴天", "Sun", List.of("/sun"), List.of("/sun")));
+        inventory.setItem(22, this.menuItem(Material.WATER_BUCKET, "下雨", "Rain", List.of("/rain"), List.of("/rain")));
+        inventory.setItem(23, this.menuItem(Material.LIGHTNING_ROD, "雷暴", "Thunder", List.of("/thunder"), List.of("/thunder")));
+        inventory.setItem(24, this.menuItem(Material.CHAINMAIL_HELMET, "戴帽子", "Hat", List.of("/hat"), List.of("/hat")));
+        inventory.setItem(25, this.menuItem(Material.COMPASS, "出生点", "Spawn", List.of("/spawn"), List.of("/spawn")));
+        inventory.setItem(28, this.menuItem(Material.RED_BED, "设置出生点", "Set Spawn", List.of("/setspawn"), List.of("/setspawn")));
+        inventory.setItem(29, this.menuItem(Material.CLOCK, "返回上一位置", "Back", List.of("/back"), List.of("/back")));
+        inventory.setItem(30, this.menuItem(Material.CRAFTING_TABLE, "随身工作台", "Craft", List.of("/craft"), List.of("/craft")));
+        inventory.setItem(31, this.menuItem(Material.ENDER_CHEST, "末影箱", "Ender Chest", List.of("/enderchest"), List.of("/enderchest")));
+        inventory.setItem(32, this.menuItem(Material.CHEST, "垃圾桶", "Trash", List.of("/trash"), List.of("/trash")));
+        inventory.setItem(33, this.menuItem(Material.BELL, "广播", "Broadcast", List.of("点击后在聊天栏输入广播内容"), List.of("Type broadcast text in chat after clicking")));
+        inventory.setItem(34, this.menuItem(Material.BARRIER, "清屏", "Clear Chat", List.of("/clearchat"), List.of("/clearchat")));
+        inventory.setItem(39, this.menuItem(Material.NETHER_STAR, "称号", "Titles", List.of("/title"), List.of("/title")));
+        inventory.setItem(40, this.menuItem(Material.PLAYER_HEAD, "个人资料", "Profile", List.of("/profile"), List.of("/profile")));
+        inventory.setItem(41, this.menuItem(Material.LEVER, "设置", "Settings", List.of("/settings"), List.of("/settings")));
+        inventory.setItem(42, this.menuItem(Material.KNOWLEDGE_BOOK, "全部指令", "Command Center", List.of("打开完整指令 GUI"), List.of("Open the full command GUI")));
+        if (player.hasPermission("huntertools.command.admin")) {
+            inventory.setItem(43, this.menuItem(Material.COMMAND_BLOCK, "管理中心", "Admin", List.of("/admin"), List.of("/admin")));
+        }
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/menu"), List.of("/menu")));
+        player.openInventory(inventory);
     }
 
     private boolean openProfileWorkbench(final CommandSender sender) {
@@ -559,7 +612,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         inventory.setItem(20, this.menuItem(Material.VILLAGER_SPAWN_EGG, "NPC", "NPCs", List.of("打开 NPC 工作台"), List.of("Open NPC workbench")));
         inventory.setItem(21, this.menuItem(Material.ENCHANTED_BOOK, "故事模式", "Story", List.of("打开故事模式工作台"), List.of("Open story workbench")));
         inventory.setItem(22, this.menuItem(Material.PAPER, "插件状态", "Plugins", List.of("/hc admin plugins"), List.of("/hc admin plugins")));
-        inventory.setItem(23, this.menuItem(Material.BEACON, "AI 状态", "AI Status", List.of("/hc admin ai status"), List.of("/hc admin ai status")));
+        inventory.setItem(23, this.menuItem(Material.BEACON, "AI 设置", "AI Settings", List.of("模型、Key、聊天、NPC、测试"), List.of("Model, key, chat, NPC and test")));
         inventory.setItem(24, this.menuItem(Material.REDSTONE, "TPS / 内存", "TPS / Memory", List.of("/htps", "/hc admin memory"), List.of("/htps", "/hc admin memory")));
         inventory.setItem(25, this.menuItem(Material.TARGET, "系统", "System", List.of("运行时、内存、线程、工作器"), List.of("Runtime, memory, workers, threads")));
         inventory.setItem(26, this.menuItem(Material.COMPARATOR, "模块", "Modules", List.of("切换 HunterCore 模块"), List.of("Toggle HunterCore modules")));
@@ -568,7 +621,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         inventory.setItem(31, this.menuItem(Material.LIGHTNING_ROD, "雷暴", "Thunder", List.of("当前世界设置雷暴"), List.of("Set thunder in current world")));
         inventory.setItem(32, this.menuItem(Material.REPEATER, "重载核心", "Reload Core", List.of("重载 HunterCore 偏好"), List.of("Reload HunterCore preferences")));
         inventory.setItem(33, this.menuItem(Material.BLAZE_POWDER, "强制 GC", "Force GC", List.of("执行 /hc admin gc"), List.of("Run /hc admin gc")));
-        inventory.setItem(34, this.menuItem(Material.SPYGLASS, "网页面板", "Web Panel", List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088")), List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))));
+        inventory.setItem(34, this.menuItem(Material.SPYGLASS, "网页面板", "Web Panel", List.of("监听、端口、地图、用户"), List.of("Bind, port, map and users")));
+        inventory.setItem(38, this.menuItem(Material.WRITABLE_BOOK, "聊天举报保护", "Chat Reports", List.of("核心聊天举报保护设置", "开箱即用"), List.of("Built-in chat report protection", "Ready out of the box")));
         inventory.setItem(39, this.menuItem(Material.BOOK, "偏好摘要", "Preferences", List.of("只读 HunterCore 偏好摘要"), List.of("Readonly HunterCore preferences summary")));
         inventory.setItem(40, this.menuItem(Material.OBSERVER, "优化模式", "Optimize", List.of("选择 CPU 优化模式"), List.of("Choose CPU optimization mode")));
         inventory.setItem(41, this.menuItem(Material.NETHER_STAR, "称号", "Titles", List.of("启用模块并为玩家分配称号"), List.of("Toggle module and assign titles to players")));
@@ -605,14 +659,323 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
     }
 
+    private void handleToolsWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case GOLDEN_APPLE -> player.performCommand("heal");
+            case COOKED_BEEF -> player.performCommand("feed");
+            case FEATHER -> player.performCommand("fly");
+            case SUGAR -> this.beginGuiChat(player, new GuiChatSession("speed", null, null),
+                this.text("请输入速度 1-10。", "Type a speed from 1 to 10."),
+                this.text("输入 cancel 取消。", "Type 'cancel' to abort."));
+            case LEATHER_HELMET -> player.performCommand("gms");
+            case DIAMOND_BLOCK -> player.performCommand("gmc");
+            case ELYTRA -> player.performCommand("gmsp");
+            case SUNFLOWER -> player.performCommand("day");
+            case BLACK_BED -> player.performCommand("night");
+            case YELLOW_DYE -> player.performCommand("sun");
+            case WATER_BUCKET -> player.performCommand("rain");
+            case LIGHTNING_ROD -> player.performCommand("thunder");
+            case CHAINMAIL_HELMET -> player.performCommand("hat");
+            case COMPASS -> player.performCommand("spawn");
+            case RED_BED -> player.performCommand("setspawn");
+            case CLOCK -> player.performCommand("back");
+            case CRAFTING_TABLE -> player.performCommand("craft");
+            case ENDER_CHEST -> player.performCommand("enderchest");
+            case CHEST -> player.performCommand("trash");
+            case BELL -> this.beginGuiChat(player, new GuiChatSession("broadcast-tools", null, null),
+                this.text("请输入广播内容。", "Type the broadcast message."),
+                this.text("输入 cancel 取消。", "Type 'cancel' to abort."));
+            case BARRIER -> player.performCommand("clearchat");
+            case NETHER_STAR -> this.openTitleWorkbench(player);
+            case PLAYER_HEAD -> this.openProfileWorkbench(player);
+            case LEVER -> this.openSettingsWorkbench(player);
+            case KNOWLEDGE_BOOK -> this.openCommandCenterWorkbench(player, "tools");
+            case COMMAND_BLOCK -> this.openAdminWorkbench(player);
+            case ARROW -> this.openMainMenuWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openCommandCenterWorkbench(final Player player, final String category) {
+        final String normalized = commandCenterCategory(category);
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.COMMAND_CENTER, null, null, normalized), 54, this.guiTitle(GuiPage.COMMAND_CENTER, null, null));
+        inventory.setItem(0, this.commandCategoryItem("tools", normalized, Material.IRON_SWORD, "工具", "Tools", "HunterTools / essentials"));
+        inventory.setItem(1, this.commandCategoryItem("teleport", normalized, Material.ENDER_PEARL, "传送", "Teleport", "TPA / homes / RTP"));
+        inventory.setItem(2, this.commandCategoryItem("admin", normalized, Material.COMMAND_BLOCK, "管理", "Admin", "/hc admin"));
+        inventory.setItem(3, this.commandCategoryItem("actors", normalized, Material.ARMOR_STAND, "假人与 NPC", "Actors", "/player /npc"));
+        inventory.setItem(4, this.commandCategoryItem("story", normalized, Material.NETHER_STAR, "称号与故事", "Titles & Story", "/title /story"));
+
+        final List<GuiCommand> commands = this.commandCenterCommands(normalized);
+        for (int index = 0; index < commands.size() && index < 36; index++) {
+            final GuiCommand command = commands.get(index);
+            inventory.setItem(9 + index, this.menuItem(
+                command.material(),
+                command.zhName(),
+                command.enName(),
+                command.zhLore(),
+                command.enLore()
+            ));
+        }
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/menu"), List.of("/menu")));
+        player.openInventory(inventory);
+    }
+
+    private ItemStack commandCategoryItem(
+        final String category,
+        final String active,
+        final Material material,
+        final String zhName,
+        final String enName,
+        final String line
+    ) {
+        return this.menuItem(
+            active.equals(category) ? Material.LIME_DYE : material,
+            zhName,
+            enName,
+            List.of(line, active.equals(category) ? "当前分类" : "点击切换"),
+            List.of(line, active.equals(category) ? "Current category" : "Click to switch")
+        );
+    }
+
+    private void handleCommandCenterWorkbenchClick(final Player player, final ItemStack clicked, final GuiHolder holder, final int slot) {
+        if (slot >= 0 && slot <= 4) {
+            final String next = switch (slot) {
+                case 0 -> "tools";
+                case 1 -> "teleport";
+                case 2 -> "admin";
+                case 3 -> "actors";
+                case 4 -> "story";
+                default -> commandCenterCategory(holder.action());
+            };
+            this.openCommandCenterWorkbench(player, next);
+            return;
+        }
+        if (clicked.getType() == Material.ARROW) {
+            this.openMainMenuWorkbench(player);
+            return;
+        }
+        if (slot < 9 || slot >= 45) {
+            return;
+        }
+        final String category = commandCenterCategory(holder.action());
+        final int index = slot - 9;
+        final List<GuiCommand> commands = this.commandCenterCommands(category);
+        if (index < 0 || index >= commands.size()) {
+            return;
+        }
+        final GuiCommand command = commands.get(index);
+        if (command.prompt()) {
+            this.beginGuiChat(player, new GuiChatSession("gui-command", command.command(), category),
+                this.text("请输入 /" + command.command() + " 后面的参数；输入 - 表示不带参数执行。", "Type the arguments after /" + command.command() + "; type - to run with no arguments."),
+                this.text(command.zhPrompt(), command.enPrompt()));
+            return;
+        }
+        if (command.command().startsWith("gui:")) {
+            this.openGuiCommandTarget(player, command.command());
+            return;
+        }
+        player.performCommand(command.command());
+    }
+
+    private void openGuiCommandTarget(final Player player, final String command) {
+        switch (command) {
+            case "gui:admin" -> this.openAdminWorkbench(player);
+            case "gui:modules" -> this.openAdminModulesWorkbench(player);
+            case "gui:commands" -> this.openAdminCommandsWorkbench(player, ESSENTIALS);
+            case "gui:optimize" -> this.openAdminOptimizeWorkbench(player);
+            case "gui:ncr" -> this.openAdminChatReportsWorkbench(player);
+            case "gui:motd" -> this.openAdminMotdWorkbench(player);
+            case "gui:web" -> this.openAdminWebWorkbench(player);
+            case "gui:ai" -> this.openAdminAiWorkbench(player);
+            case "gui:playerbots" -> this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
+            case "gui:npcs" -> this.openActorListWorkbench(player, NPCS);
+            case "gui:story" -> this.openStoryWorkbench(player);
+            case "gui:title" -> this.openTitleWorkbench(player);
+            default -> this.openCommandCenterWorkbench(player, "admin");
+        }
+    }
+
+    private List<GuiCommand> commandCenterCommands(final String category) {
+        return switch (commandCenterCategory(category)) {
+            case "teleport" -> List.of(
+                direct(Material.ENDER_PEARL, "TPA 面板", "TPA GUI", "tpgui"),
+                prompted(Material.ENDER_EYE, "请求传送到玩家", "TPA", "tpa", "输入玩家名。", "Type a player name."),
+                prompted(Material.LEAD, "请求玩家传送过来", "TPA Here", "tpahere", "输入玩家名。", "Type a player name."),
+                direct(Material.LIME_DYE, "接受请求", "Accept", "tpaccept"),
+                direct(Material.BARRIER, "拒绝请求", "Deny", "tpdeny"),
+                direct(Material.GRAY_DYE, "取消请求", "Cancel", "tpcancel"),
+                direct(Material.LEVER, "TPA 开关", "Toggle TPA", "tptoggle"),
+                direct(Material.RED_BED, "家列表", "Homes", "homes"),
+                direct(Material.OAK_DOOR, "家 GUI", "Home GUI", "homegui"),
+                prompted(Material.WHITE_BED, "回家", "Home", "home", "输入家名称，或 - 使用默认。", "Type a home name, or - for default."),
+                prompted(Material.LIME_BED, "设置家", "Set Home", "sethome", "输入家名称。", "Type a home name."),
+                prompted(Material.RED_BED, "删除家", "Delete Home", "delhome", "输入家名称。", "Type a home name."),
+                direct(Material.GRASS_BLOCK, "随机传送", "RTP", "rtp"),
+                direct(Material.COMPASS, "出生点", "Spawn", "spawn")
+            );
+            case "admin" -> List.of(
+                directGui(Material.COMMAND_BLOCK, "管理 GUI", "Admin GUI", "gui:admin"),
+                direct(Material.PAPER, "帮助", "Help", "hc admin help"),
+                direct(Material.REPEATER, "重载", "Reload", "hc admin reload"),
+                directGui(Material.COMPARATOR, "模块列表", "Modules", "gui:modules"),
+                directGui(Material.REDSTONE_TORCH, "指令开关", "Command Toggle", "gui:commands"),
+                direct(Material.BOOK, "插件状态", "Plugins", "hc admin plugins"),
+                direct(Material.REDSTONE, "内存", "Memory", "hc admin memory"),
+                direct(Material.BLAZE_POWDER, "强制 GC", "GC", "hc admin gc"),
+                direct(Material.REPEATER, "线程", "Threads", "hc admin threads"),
+                directGui(Material.OBSERVER, "优化", "Optimize", "gui:optimize"),
+                directGui(Material.WRITABLE_BOOK, "聊天举报保护", "Chat Reports", "gui:ncr"),
+                directGui(Material.OAK_SIGN, "MOTD", "MOTD", "gui:motd"),
+                directGui(Material.SPYGLASS, "网页面板", "Web Panel", "gui:web"),
+                directGui(Material.BEACON, "AI", "AI", "gui:ai")
+            );
+            case "actors" -> List.of(
+                directGui(Material.ARMOR_STAND, "假人 GUI", "PlayerBot GUI", "gui:playerbots"),
+                prompted(Material.LIME_DYE, "生成假人", "Spawn PlayerBot", "player spawn", "输入假人名。", "Type a bot name."),
+                prompted(Material.RED_WOOL, "删除假人", "Remove PlayerBot", "player remove", "输入假人名。", "Type a bot name."),
+                prompted(Material.CHEST, "查看假人背包", "PlayerBot Inventory", "player inv", "输入假人名。", "Type a bot name."),
+                prompted(Material.PLAYER_HEAD, "假人皮肤", "PlayerBot Skin", "player skin", "输入：假人名 皮肤名。", "Type: bot skin."),
+                prompted(Material.ENDER_PEARL, "传送到假人", "TP To PlayerBot", "player tp", "输入假人名。", "Type a bot name."),
+                prompted(Material.COMPASS, "假人到这里", "PlayerBot Here", "player tphere", "输入假人名。", "Type a bot name."),
+                prompted(Material.SPYGLASS, "假人看向", "PlayerBot Look", "player look", "输入：假人名 x y z。", "Type: bot x y z."),
+                prompted(Material.FEATHER, "假人移动/动作", "PlayerBot Action", "player move", "输入移动或动作参数。", "Type movement/action arguments."),
+                prompted(Material.DIAMOND_SWORD, "假人攻击/使用", "PlayerBot Use", "player attack", "输入假人名，或改用 use/drop 等子命令参数。", "Type a bot name, or use use/drop style arguments."),
+                prompted(Material.LEVER, "假人 AI", "PlayerBot AI", "player ai", "输入：假人名 on/off/goal。", "Type: bot on/off/goal."),
+                prompted(Material.PAPER, "假人详情", "PlayerBot Info", "player info", "输入假人名。", "Type a bot name."),
+                direct(Material.BARRIER, "清空假人", "Clear PlayerBots", "player clear"),
+                directGui(Material.VILLAGER_SPAWN_EGG, "NPC GUI", "NPC GUI", "gui:npcs"),
+                prompted(Material.EMERALD, "生成 NPC", "Spawn NPC", "npc spawn", "输入 NPC 名。", "Type an NPC name."),
+                prompted(Material.REDSTONE_BLOCK, "删除 NPC", "Remove NPC", "npc remove", "输入 NPC 名。", "Type an NPC name."),
+                prompted(Material.NAME_TAG, "NPC 皮肤", "NPC Skin", "npc skin", "输入：NPC 名 皮肤名。", "Type: NPC skin."),
+                prompted(Material.ENDER_EYE, "传送到 NPC", "TP To NPC", "npc tp", "输入 NPC 名。", "Type an NPC name."),
+                prompted(Material.COMPASS, "NPC 到这里", "NPC Here", "npc tphere", "输入 NPC 名。", "Type an NPC name."),
+                prompted(Material.SPYGLASS, "NPC 朝向", "NPC Look", "npc look", "输入：NPC 名 x y z。", "Type: NPC x y z."),
+                prompted(Material.ARMOR_STAND, "NPC 姿态", "NPC Pose", "npc pose", "输入：NPC 名 姿态。", "Type: NPC pose."),
+                prompted(Material.COMMAND_BLOCK, "NPC 点击命令", "NPC Click Command", "npc click", "输入：NPC 名 command/clear。", "Type: NPC command/clear."),
+                prompted(Material.PAPER, "NPC 详情", "NPC Info", "npc info", "输入 NPC 名。", "Type an NPC name."),
+                direct(Material.TNT, "清空 NPC", "Clear NPCs", "npc clear")
+            );
+            case "story" -> List.of(
+                directGui(Material.NETHER_STAR, "称号 GUI", "Title GUI", "gui:title"),
+                direct(Material.PAPER, "称号列表", "Title List", "title list"),
+                prompted(Material.LIME_DYE, "激活称号", "Activate Title", "title activate", "输入称号 ID。", "Type a title id."),
+                direct(Material.BARRIER, "清空称号", "Clear Title", "title clear"),
+                direct(Material.LEVER, "显示开关", "Toggle Title", "title toggle"),
+                prompted(Material.WRITABLE_BOOK, "创建称号", "Create Title", "title create", "输入：id 显示名 前缀。", "Type: id display prefix."),
+                prompted(Material.REDSTONE_BLOCK, "删除称号", "Delete Title", "title delete", "输入称号 ID。", "Type a title id."),
+                prompted(Material.GOLD_INGOT, "授予称号", "Grant Title", "title grant", "输入：玩家 称号ID。", "Type: player titleId."),
+                prompted(Material.IRON_INGOT, "收回称号", "Revoke Title", "title revoke", "输入：玩家 称号ID。", "Type: player titleId."),
+                prompted(Material.SPYGLASS, "预览称号", "Preview Title", "title preview", "输入：称号ID 或 玩家 称号ID。", "Type: titleId or player titleId."),
+                directGui(Material.ENCHANTED_BOOK, "故事 GUI", "Story GUI", "gui:story"),
+                direct(Material.EMERALD_BLOCK, "开始故事", "Start Story", "start"),
+                direct(Material.LIME_DYE, "启用故事", "Enable Story", "story enable"),
+                direct(Material.ORANGE_DYE, "跳过段落", "Skip Story", "story skip"),
+                direct(Material.RED_DYE, "停止故事", "Stop Story", "story stop"),
+                prompted(Material.OAK_SIGN, "故事台词", "Story Line", "story line", "输入：auto 或具体台词内容。", "Type: auto or a line of text."),
+                prompted(Material.TNT, "故事实验", "Story Meltdown", "story meltdown", "危险操作；输入确认参数。", "Dangerous action; type confirmation arguments.")
+            );
+            default -> List.of(
+                direct(Material.REDSTONE, "TPS", "TPS", "htps"),
+                prompted(Material.GOLDEN_APPLE, "治疗", "Heal", "heal", "输入玩家名，或 - 治疗自己。", "Type a player name, or - for yourself."),
+                prompted(Material.COOKED_BEEF, "饱食", "Feed", "feed", "输入玩家名，或 - 补满自己。", "Type a player name, or - for yourself."),
+                prompted(Material.FEATHER, "飞行", "Fly", "fly", "输入：玩家 on/off，或 - 切换自己。", "Type: player on/off, or - for yourself."),
+                prompted(Material.DIAMOND_BLOCK, "游戏模式", "Gamemode", "gm", "输入：survival/creative/adventure/spectator [玩家]。", "Type: survival/creative/adventure/spectator [player]."),
+                prompted(Material.LEATHER_HELMET, "生存", "Survival", "gms", "输入玩家名，或 - 作用自己。", "Type a player name, or - for yourself."),
+                prompted(Material.COMMAND_BLOCK, "创造", "Creative", "gmc", "输入玩家名，或 - 作用自己。", "Type a player name, or - for yourself."),
+                prompted(Material.IRON_CHESTPLATE, "冒险", "Adventure", "gma", "输入玩家名，或 - 作用自己。", "Type a player name, or - for yourself."),
+                prompted(Material.ELYTRA, "旁观", "Spectator", "gmsp", "输入玩家名，或 - 作用自己。", "Type a player name, or - for yourself."),
+                prompted(Material.SUNFLOWER, "白天", "Day", "day", "输入世界名，或 - 当前世界。", "Type a world name, or - for current."),
+                prompted(Material.BLACK_BED, "夜晚", "Night", "night", "输入世界名，或 - 当前世界。", "Type a world name, or - for current."),
+                prompted(Material.YELLOW_DYE, "晴天", "Sun", "sun", "输入世界名，或 - 当前世界。", "Type a world name, or - for current."),
+                prompted(Material.WATER_BUCKET, "下雨", "Rain", "rain", "输入世界名，或 - 当前世界。", "Type a world name, or - for current."),
+                prompted(Material.LIGHTNING_ROD, "雷暴", "Thunder", "thunder", "输入世界名，或 - 当前世界。", "Type a world name, or - for current."),
+                prompted(Material.BELL, "广播", "Broadcast", "broadcast", "输入广播内容。", "Type the broadcast message."),
+                direct(Material.BARRIER, "清屏", "Clear Chat", "clearchat"),
+                prompted(Material.SUGAR, "速度", "Speed", "speed", "输入：1-10 [玩家] [walk/fly]。", "Type: 1-10 [player] [walk/fly]."),
+                prompted(Material.COMPASS, "出生点", "Spawn", "spawn", "输入玩家名，或 - 传送自己。", "Type a player name, or - for yourself."),
+                direct(Material.RED_BED, "设置出生点", "Set Spawn", "setspawn"),
+                direct(Material.CLOCK, "返回", "Back", "back"),
+                direct(Material.CHAINMAIL_HELMET, "戴帽子", "Hat", "hat"),
+                direct(Material.CRAFTING_TABLE, "工作台", "Craft", "craft"),
+                prompted(Material.ENDER_CHEST, "末影箱", "Ender Chest", "enderchest", "输入玩家名，或 - 打开自己。", "Type a player name, or - for yourself."),
+                direct(Material.CHEST, "垃圾桶", "Trash", "trash"),
+                direct(Material.BOOK, "主菜单", "Menu", "menu"),
+                direct(Material.PLAYER_HEAD, "个人资料", "Profile", "profile"),
+                direct(Material.LEVER, "设置", "Settings", "settings"),
+                direct(Material.COMMAND_BLOCK, "管理", "Admin", "admin"),
+                prompted(Material.ARMOR_STAND, "假人", "Player", "player", "输入 help 或任意 /player 子命令参数。", "Type help or any /player subcommand arguments."),
+                prompted(Material.VILLAGER_SPAWN_EGG, "NPC", "NPC", "npc", "输入 help 或任意 /npc 子命令参数。", "Type help or any /npc subcommand arguments."),
+                direct(Material.EMERALD_BLOCK, "开始", "Start", "start"),
+                prompted(Material.ENCHANTED_BOOK, "故事", "Story", "story", "输入 start/status/skip/stop/line/meltdown。", "Type start/status/skip/stop/line/meltdown."),
+                prompted(Material.NETHER_STAR, "称号", "Title", "title", "输入 list/activate/clear/toggle/create/delete/grant/revoke/preview。", "Type list/activate/clear/toggle/create/delete/grant/revoke/preview.")
+            );
+        };
+    }
+
+    private static String commandCenterCategory(@Nullable final String category) {
+        final String normalized = category == null ? "" : category.toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "teleport", "admin", "actors", "story" -> normalized;
+            default -> "tools";
+        };
+    }
+
+    private static List<String> commandGateModules() {
+        return List.of(ESSENTIALS, MANAGEMENT, FAKE_PLAYERS, REAL_FAKE_PLAYERS, NPCS);
+    }
+
+    private static String commandGateModule(@Nullable final String module) {
+        final String normalized = module == null ? "" : HunterToolsPreferences.normalize(module);
+        return commandGateModules().contains(normalized) ? normalized : ESSENTIALS;
+    }
+
+    private static List<String> commandGateCommands(final String module) {
+        return switch (commandGateModule(module)) {
+            case MANAGEMENT -> HunterToolsPreferences.managementCommands();
+            case FAKE_PLAYERS, NPCS -> HunterToolsPreferences.actorCommands();
+            case REAL_FAKE_PLAYERS -> HunterToolsPreferences.realFakePlayerCommands();
+            default -> HunterToolsPreferences.essentialsCommands();
+        };
+    }
+
+    private static GuiCommand direct(final Material material, final String zhName, final String enName, final String command) {
+        return new GuiCommand(material, zhName, enName, List.of("/" + command), List.of("/" + command), command, false, "", "");
+    }
+
+    private static GuiCommand directGui(final Material material, final String zhName, final String enName, final String command) {
+        return new GuiCommand(material, zhName, enName, List.of("打开图形设置页"), List.of("Open GUI settings page"), command, false, "", "");
+    }
+
+    private static GuiCommand prompted(
+        final Material material,
+        final String zhName,
+        final String enName,
+        final String command,
+        final String zhPrompt,
+        final String enPrompt
+    ) {
+        return new GuiCommand(
+            material,
+            zhName,
+            enName,
+            List.of("/" + command + " ...", "点击后输入参数"),
+            List.of("/" + command + " ...", "Click and type arguments"),
+            command,
+            true,
+            zhPrompt,
+            enPrompt
+        );
+    }
+
     private void handleAdminWorkbenchClick(final Player player, final ItemStack clicked) {
         switch (clicked.getType()) {
             case PLAYER_HEAD -> this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
             case VILLAGER_SPAWN_EGG -> this.openActorListWorkbench(player, NPCS);
             case ENCHANTED_BOOK -> this.openStoryWorkbench(player);
-            case PAPER -> player.performCommand("hc admin plugins");
-            case BEACON -> player.performCommand("hc admin ai status");
-            case REDSTONE -> player.performCommand("htps");
+            case PAPER -> this.openAdminPluginsWorkbench(player);
+            case BEACON -> this.openAdminAiWorkbench(player);
+            case REDSTONE -> this.openAdminSystemWorkbench(player);
             case TARGET -> this.openAdminSystemWorkbench(player);
             case COMPARATOR -> this.openAdminModulesWorkbench(player);
             case BELL -> this.beginGuiChat(player, new GuiChatSession("broadcast", null, null),
@@ -625,13 +988,49 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case LIGHTNING_ROD -> this.weather(player, "thunder", new String[0]);
             case REPEATER -> this.adminReload(player);
             case BLAZE_POWDER -> player.performCommand("hc admin gc");
-            case SPYGLASS -> player.sendMessage(ChatColor.AQUA + this.text("网页面板: ", "Web Panel: ") + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"));
+            case SPYGLASS -> this.openAdminWebWorkbench(player);
+            case WRITABLE_BOOK -> this.openAdminChatReportsWorkbench(player);
             case BOOK -> this.openAdminPreferencesWorkbench(player);
             case OBSERVER -> this.openAdminOptimizeWorkbench(player);
             case NETHER_STAR -> this.openTitleWorkbench(player);
             case ARROW -> this.openMainMenuWorkbench(player);
             default -> {
             }
+        }
+    }
+
+    private void openAdminPluginsWorkbench(final Player player) {
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.ADMIN_PLUGINS, null, null, null), 54, this.guiTitle(GuiPage.ADMIN_PLUGINS, null, null));
+        inventory.setItem(4, this.menuItem(Material.PAPER, "插件状态", "Plugins", List.of(
+            "已加载 " + Bukkit.getPluginManager().getPlugins().length + " 个插件",
+            "点击条目可查看版本和主类"
+        ), List.of(
+            "Loaded " + Bukkit.getPluginManager().getPlugins().length + " plugins",
+            "Entries show version and main class"
+        )));
+        int slot = 9;
+        for (final Plugin plugin : Bukkit.getPluginManager().getPlugins()) {
+            if (slot >= 45) {
+                break;
+            }
+            final boolean enabled = plugin.isEnabled();
+            inventory.setItem(slot++, this.menuItem(enabled ? Material.LIME_DYE : Material.GRAY_DYE, plugin.getName(), plugin.getName(), List.of(
+                enabled ? "已启用" : "已关闭",
+                "版本 " + plugin.getDescription().getVersion(),
+                plugin.getDescription().getMain()
+            ), List.of(
+                enabled ? "Enabled" : "Disabled",
+                "Version " + plugin.getDescription().getVersion(),
+                plugin.getDescription().getMain()
+            )));
+        }
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/admin"), List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminPluginsWorkbenchClick(final Player player, final ItemStack clicked) {
+        if (clicked.getType() == Material.ARROW) {
+            this.openAdminWorkbench(player);
         }
     }
 
@@ -671,11 +1070,11 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         inventory.setItem(14, this.menuItem(Material.OBSERVER, "工作器", "Workers", List.of(
             "HunterTools " + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4),
             "WebPanel " + this.preferences.intValue("optimizations.hunter-tools.web-panel-workers", 4),
-            "CPU 模式 " + this.preferences.stringValue("optimizations.cpu.mode", "single-thread")
+            "CPU 模式 " + this.preferences.stringValue("optimizations.cpu.mode", "multi-thread")
         ), List.of(
             "HunterTools " + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4),
             "WebPanel " + this.preferences.intValue("optimizations.hunter-tools.web-panel-workers", 4),
-            "CPU mode " + this.preferences.stringValue("optimizations.cpu.mode", "single-thread")
+            "CPU mode " + this.preferences.stringValue("optimizations.cpu.mode", "multi-thread")
         )));
         inventory.setItem(16, this.menuItem(Material.ARMOR_STAND, "实体助手", "Actors", List.of(
             "假人 " + (this.realFakePlayerManager == null ? 0 : this.realFakePlayerManager.liveCount()),
@@ -769,10 +1168,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             this.preferences.stringValue("modules.motd.line-2", "")
         )));
         inventory.setItem(21, this.menuItem(Material.OBSERVER, "优化", "Optimize", List.of(
-            this.preferences.stringValue("optimizations.cpu.mode", "single-thread"),
+            this.preferences.stringValue("optimizations.cpu.mode", "multi-thread"),
             "工作器 " + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4)
         ), List.of(
-            this.preferences.stringValue("optimizations.cpu.mode", "single-thread"),
+            this.preferences.stringValue("optimizations.cpu.mode", "multi-thread"),
             "Workers " + this.preferences.intValue("optimizations.hunter-tools.render-workers", 4)
         )));
         inventory.setItem(22, this.menuItem(Material.BEACON, "AI", "AI", List.of(
@@ -790,14 +1189,21 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             "Default remains off"
         )));
         inventory.setItem(24, this.menuItem(Material.COMPARATOR, "模块", "Modules", List.of("打开模块切换工作台"), List.of("Open the module toggle workbench")));
+        inventory.setItem(25, this.menuItem(Material.WRITABLE_BOOK, "聊天举报保护", "Chat Reports", List.of("核心 NoChatReports 设置"), List.of("Built-in NoChatReports settings")));
+        inventory.setItem(28, this.menuItem(Material.REDSTONE_TORCH, "指令开关", "Command Gates", List.of("所有模块指令图形化开关"), List.of("GUI toggles for all module commands")));
         inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/admin"), List.of("/admin")));
         player.openInventory(inventory);
     }
 
     private void handleAdminPreferencesWorkbenchClick(final Player player, final ItemStack clicked) {
         switch (clicked.getType()) {
+            case SPYGLASS -> this.openAdminWebWorkbench(player);
+            case PAPER -> this.openAdminMotdWorkbench(player);
             case COMPARATOR -> this.openAdminModulesWorkbench(player);
             case OBSERVER -> this.openAdminOptimizeWorkbench(player);
+            case BEACON -> this.openAdminAiWorkbench(player);
+            case WRITABLE_BOOK -> this.openAdminChatReportsWorkbench(player);
+            case REDSTONE_TORCH -> this.openAdminCommandsWorkbench(player, ESSENTIALS);
             case ARROW -> this.openAdminWorkbench(player);
             default -> {
             }
@@ -805,7 +1211,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     }
 
     private void openAdminOptimizeWorkbench(final Player player) {
-        final String current = this.preferences.stringValue("optimizations.cpu.mode", "single-thread");
+        final String current = this.preferences.stringValue("optimizations.cpu.mode", "multi-thread");
         final Inventory inventory = this.createGui(new GuiHolder(GuiPage.ADMIN_OPTIMIZE, null, null, null), 27, this.guiTitle(GuiPage.ADMIN_OPTIMIZE, null, null));
         inventory.setItem(4, this.menuItem(Material.OBSERVER, "CPU 优化", "CPU Optimize", List.of(
             "当前模式: " + current,
@@ -848,6 +1254,244 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.preferences.save(this.workerExecutor);
         player.sendMessage(ChatColor.GREEN + this.text("CPU 模式已保存为 ", "CPU mode saved as ") + mode + this.text("。重启后线程效果会完整生效。", ". Restart for full effect."));
         this.openAdminOptimizeWorkbench(player);
+    }
+
+    private void openAdminChatReportsWorkbench(final Player player) {
+        final HunterNoChatReportsBridge.Settings settings = HunterNoChatReportsBridge.read();
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.ADMIN_CHAT_REPORTS, null, null, null), 27, this.guiTitle(GuiPage.ADMIN_CHAT_REPORTS, null, null));
+        inventory.setItem(4, this.menuItem(Material.WRITABLE_BOOK, "聊天举报保护", "Chat Report Protection", List.of(
+            settings.enabled() ? "核心保护已启用" : "核心保护已关闭",
+            "由 HunterCore 核心直接处理"
+        ), List.of(
+            settings.enabled() ? "Built-in protection enabled" : "Built-in protection disabled",
+            "Handled directly by HunterCore core"
+        )));
+        inventory.setItem(10, this.menuItem(settings.enabled() ? Material.LIME_DYE : Material.GRAY_DYE, "禁用聊天举报", "Disable Reports", List.of(settings.enabled() ? "点击关闭" : "点击开启"), List.of(settings.enabled() ? "Click to turn off" : "Click to turn on")));
+        inventory.setItem(11, this.menuItem(settings.addQueryData() ? Material.LIME_DYE : Material.GRAY_DYE, "客户端状态显示", "Client Query Data", List.of(settings.addQueryData() ? "点击关闭" : "点击开启"), List.of(settings.addQueryData() ? "Click to turn off" : "Click to turn on")));
+        inventory.setItem(12, this.menuItem(settings.convertToGameMessage() ? Material.LIME_DYE : Material.GRAY_DYE, "转为游戏消息", "Game Message Mode", List.of(settings.convertToGameMessage() ? "点击关闭" : "点击开启"), List.of(settings.convertToGameMessage() ? "Click to turn off" : "Click to turn on")));
+        inventory.setItem(14, this.menuItem(settings.demandOnClient() ? Material.REDSTONE_BLOCK : Material.GRAY_DYE, "要求客户端 Mod", "Require Client Mod", List.of(settings.demandOnClient() ? "点击关闭" : "点击开启"), List.of(settings.demandOnClient() ? "Click to turn off" : "Click to turn on")));
+        inventory.setItem(15, this.menuItem(settings.debugLog() ? Material.LIME_DYE : Material.GRAY_DYE, "调试日志", "Debug Log", List.of(settings.debugLog() ? "点击关闭" : "点击开启"), List.of(settings.debugLog() ? "Click to turn off" : "Click to turn on")));
+        inventory.setItem(16, this.menuItem(Material.PAPER, "踢出提示", "Kick Message", List.of(settings.disconnectMessage(), "点击后在聊天栏输入"), List.of(settings.disconnectMessage(), "Click and type in chat")));
+        inventory.setItem(22, this.menuItem(Material.ARROW, "返回", "Back", List.of("/admin"), List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminChatReportsWorkbenchClick(final Player player, final ItemStack clicked) {
+        final HunterNoChatReportsBridge.Settings settings = HunterNoChatReportsBridge.read();
+        switch (clicked.getType()) {
+            case LIME_DYE, GRAY_DYE, REDSTONE_BLOCK -> {
+                final String name = this.itemName(clicked).toLowerCase(Locale.ROOT);
+                HunterNoChatReportsBridge.Settings next = settings;
+                if (name.contains("禁用") || name.contains("disable")) {
+                    next = settings.withEnabled(!settings.enabled());
+                } else if (name.contains("客户端") || name.contains("query")) {
+                    next = settings.withAddQueryData(!settings.addQueryData());
+                } else if (name.contains("转为") || name.contains("game message")) {
+                    next = settings.withConvertToGameMessage(!settings.convertToGameMessage());
+                } else if (name.contains("要求") || name.contains("require")) {
+                    next = settings.withDemandOnClient(!settings.demandOnClient());
+                } else if (name.contains("调试") || name.contains("debug")) {
+                    next = settings.withDebugLog(!settings.debugLog());
+                }
+                HunterNoChatReportsBridge.save(next);
+                player.sendMessage(ChatColor.GREEN + this.text("聊天举报保护设置已保存。", "Chat report protection saved."));
+                this.openAdminChatReportsWorkbench(player);
+            }
+            case PAPER -> this.beginGuiChat(player, new GuiChatSession("ncr-message", null, null),
+                this.text("请输入要求客户端 Mod 时的踢出提示。", "Type the kick message used when the client mod is required."),
+                this.text("输入 cancel 取消。", "Type 'cancel' to abort."));
+            case ARROW -> this.openAdminWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openAdminAiWorkbench(final Player player) {
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.ADMIN_AI, null, null, null), 54, this.guiTitle(GuiPage.ADMIN_AI, null, null));
+        inventory.setItem(4, this.menuItem(Material.BEACON, "AI 设置", "AI Settings", List.of(
+            "模块: " + this.preferences.moduleEnabled(AI),
+            "模型: " + this.preferences.stringValue("modules.ai.model", "gpt-4o-mini"),
+            "Key: " + (this.aiApiKeyConfigured() ? "configured" : "missing")
+        ), List.of(
+            "Module: " + this.preferences.moduleEnabled(AI),
+            "Model: " + this.preferences.stringValue("modules.ai.model", "gpt-4o-mini"),
+            "Key: " + (this.aiApiKeyConfigured() ? "configured" : "missing")
+        )));
+        inventory.setItem(10, this.menuItem(this.preferences.moduleEnabled(AI) ? Material.LIME_DYE : Material.GRAY_DYE, "AI 模块", "AI Module", List.of("点击切换启用状态"), List.of("Toggle module")));
+        inventory.setItem(11, this.menuItem(this.preferences.booleanValue("modules.ai.chat.enabled", true) ? Material.LIME_DYE : Material.GRAY_DYE, "聊天 AI", "Chat AI", List.of("前缀 " + this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai")), List.of("Prefix " + this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai"))));
+        inventory.setItem(12, this.menuItem(this.preferences.booleanValue("modules.ai.npc.enabled", true) ? Material.LIME_DYE : Material.GRAY_DYE, "NPC AI", "NPC AI", List.of("点击切换 NPC 对话"), List.of("Toggle NPC AI")));
+        inventory.setItem(14, this.menuItem(Material.NAME_TAG, "模型", "Model", List.of(this.preferences.stringValue("modules.ai.model", "gpt-4o-mini"), "点击输入模型名"), List.of(this.preferences.stringValue("modules.ai.model", "gpt-4o-mini"), "Click to type model")));
+        inventory.setItem(15, this.menuItem(Material.COMPASS, "Base URL", "Base URL", List.of(this.preferences.stringValue("modules.ai.base-url", "https://api.openai.com/v1"), "点击输入地址"), List.of(this.preferences.stringValue("modules.ai.base-url", "https://api.openai.com/v1"), "Click to type URL")));
+        inventory.setItem(16, this.menuItem(Material.TRIPWIRE_HOOK, "API Key", "API Key", List.of(this.aiApiKeyConfigured() ? "已配置" : "未配置", "点击输入新 Key"), List.of(this.aiApiKeyConfigured() ? "Configured" : "Missing", "Click to type new key")));
+        inventory.setItem(19, this.menuItem(Material.BARRIER, "清除 Key", "Clear Key", List.of("清空保存的 API Key"), List.of("Clear stored API key")));
+        inventory.setItem(20, this.menuItem(Material.OAK_SIGN, "环境变量", "Env Var", List.of(this.preferences.stringValue("modules.ai.api-key-env", "OPENAI_API_KEY"), "点击输入变量名"), List.of(this.preferences.stringValue("modules.ai.api-key-env", "OPENAI_API_KEY"), "Click to type env var")));
+        inventory.setItem(21, this.menuItem(Material.WRITABLE_BOOK, "聊天前缀", "Chat Prefix", List.of(this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai"), "点击输入前缀"), List.of(this.preferences.stringValue("modules.ai.chat.trigger-prefix", "@ai"), "Click to type prefix")));
+        inventory.setItem(23, this.menuItem(Material.REDSTONE, "温度", "Temperature", List.of(String.valueOf(this.preferences.doubleValue("modules.ai.temperature", 0.7D)), "点击输入 0.0-2.0"), List.of(String.valueOf(this.preferences.doubleValue("modules.ai.temperature", 0.7D)), "Click to type 0.0-2.0")));
+        inventory.setItem(24, this.menuItem(Material.PAPER, "回复长度", "Max Tokens", List.of(String.valueOf(this.preferences.intValue("modules.ai.max-tokens", 512)), "点击输入 16-4096"), List.of(String.valueOf(this.preferences.intValue("modules.ai.max-tokens", 512)), "Click to type 16-4096")));
+        inventory.setItem(25, this.menuItem(Material.ENDER_EYE, "测试提示词", "Test Prompt", List.of("点击输入测试内容"), List.of("Click to type a test prompt")));
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/admin"), List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminAiWorkbenchClick(final Player player, final ItemStack clicked) {
+        final String name = this.itemName(clicked).toLowerCase(Locale.ROOT);
+        switch (clicked.getType()) {
+            case LIME_DYE, GRAY_DYE -> {
+                if (name.contains("聊天") || name.contains("chat")) {
+                    this.preferences.setValue("modules.ai.chat.enabled", !this.preferences.booleanValue("modules.ai.chat.enabled", true));
+                } else if (name.contains("npc")) {
+                    this.preferences.setValue("modules.ai.npc.enabled", !this.preferences.booleanValue("modules.ai.npc.enabled", true));
+                } else {
+                    this.preferences.setModuleEnabled(AI, !this.preferences.moduleEnabled(AI));
+                }
+                this.preferences.save(this.workerExecutor);
+                this.openAdminAiWorkbench(player);
+            }
+            case NAME_TAG -> this.beginGuiChat(player, new GuiChatSession("ai-model", null, null), this.text("请输入 AI 模型名。", "Type the AI model name."));
+            case COMPASS -> this.beginGuiChat(player, new GuiChatSession("ai-base-url", null, null), this.text("请输入 OpenAI-compatible Base URL。", "Type the OpenAI-compatible Base URL."));
+            case TRIPWIRE_HOOK -> this.beginGuiChat(player, new GuiChatSession("ai-key", null, null), this.text("请输入 API Key；不会在面板回显完整内容。", "Type the API key; it will not be echoed back."));
+            case BARRIER -> {
+                this.preferences.setValue("modules.ai.api-key", "");
+                this.preferences.save(this.workerExecutor);
+                this.openAdminAiWorkbench(player);
+            }
+            case OAK_SIGN -> this.beginGuiChat(player, new GuiChatSession("ai-env", null, null), this.text("请输入环境变量名。", "Type the environment variable name."));
+            case WRITABLE_BOOK -> this.beginGuiChat(player, new GuiChatSession("ai-prefix", null, null), this.text("请输入聊天 AI 触发前缀，例如 @ai。", "Type the chat AI prefix, e.g. @ai."));
+            case REDSTONE -> this.beginGuiChat(player, new GuiChatSession("ai-temperature", null, null), this.text("请输入温度 0.0-2.0。", "Type temperature 0.0-2.0."));
+            case PAPER -> this.beginGuiChat(player, new GuiChatSession("ai-max-tokens", null, null), this.text("请输入最大 tokens，16-4096。", "Type max tokens, 16-4096."));
+            case ENDER_EYE -> this.beginGuiChat(player, new GuiChatSession("ai-test", null, null), this.text("请输入要发送给 AI 的测试提示词。", "Type the test prompt to send to AI."));
+            case ARROW -> this.openAdminWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openAdminWebWorkbench(final Player player) {
+        final boolean running = this.webPanelManager != null && this.webPanelManager.running();
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.ADMIN_WEB, null, null, null), 54, this.guiTitle(GuiPage.ADMIN_WEB, null, null));
+        inventory.setItem(4, this.menuItem(Material.SPYGLASS, "网页面板", "Web Panel", List.of(
+            running ? "运行中" : "未运行",
+            this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1") + ":" + this.preferences.intValue("modules.web-panel.port", 8088),
+            this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088")
+        ), List.of(
+            running ? "Running" : "Stopped",
+            this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1") + ":" + this.preferences.intValue("modules.web-panel.port", 8088),
+            this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088")
+        )));
+        inventory.setItem(10, this.menuItem(Material.REPEATER, "重启面板", "Restart Panel", List.of("重启 HTTP 服务"), List.of("Restart HTTP service")));
+        inventory.setItem(11, this.menuItem(Material.COMPASS, "监听地址", "Bind Address", List.of(this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1")), List.of(this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1"))));
+        inventory.setItem(12, this.menuItem(Material.REDSTONE, "端口", "Port", List.of(String.valueOf(this.preferences.intValue("modules.web-panel.port", 8088))), List.of(String.valueOf(this.preferences.intValue("modules.web-panel.port", 8088)))));
+        inventory.setItem(13, this.menuItem(Material.FILLED_MAP, "地图地址", "Map URL", List.of(this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/")), List.of(this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/"))));
+        inventory.setItem(14, this.menuItem(this.preferences.booleanValue("modules.web-panel.public-map", true) ? Material.LIME_DYE : Material.GRAY_DYE, "公开地图", "Public Map", List.of("点击切换"), List.of("Toggle")));
+        inventory.setItem(19, this.menuItem(Material.PLAYER_HEAD, "创建/更新用户", "Save User", List.of("输入：用户名 admin/player 密码"), List.of("Type: username admin/player password")));
+        inventory.setItem(20, this.menuItem(Material.RED_WOOL, "删除用户", "Remove User", List.of("输入用户名"), List.of("Type username")));
+        inventory.setItem(21, this.menuItem(Material.COMMAND_BLOCK, "用户可执行命令", "Allowed Commands", List.of("输入：用户名 inherit/none/命令..."), List.of("Type: user inherit/none/commands...")));
+        inventory.setItem(22, this.menuItem(Material.LEVER, "用户命令执行", "Command Execution", List.of("输入：用户名 on/off"), List.of("Type: user on/off")));
+        inventory.setItem(23, this.menuItem(Material.BOOK, "用户列表", "Users", List.of("点击在聊天栏显示用户摘要"), List.of("Click to print user summary")));
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/admin"), List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminWebWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case REPEATER -> {
+                if (this.webPanelManager != null) {
+                    this.webPanelManager.restart();
+                }
+                this.openAdminWebWorkbench(player);
+            }
+            case COMPASS -> this.beginGuiChat(player, new GuiChatSession("web-bind", null, null), this.text("请输入监听地址，例如 127.0.0.1 或 0.0.0.0。", "Type bind address, e.g. 127.0.0.1 or 0.0.0.0."));
+            case REDSTONE -> this.beginGuiChat(player, new GuiChatSession("web-port", null, null), this.text("请输入网页端口 1-65535。", "Type web port 1-65535."));
+            case FILLED_MAP -> this.beginGuiChat(player, new GuiChatSession("web-map", null, null), this.text("请输入地图 URL，支持 %host%。", "Type map URL; %host% is supported."));
+            case LIME_DYE, GRAY_DYE -> {
+                this.preferences.setValue("modules.web-panel.public-map", !this.preferences.booleanValue("modules.web-panel.public-map", true));
+                this.preferences.save(this.workerExecutor);
+                this.openAdminWebWorkbench(player);
+            }
+            case PLAYER_HEAD -> this.beginGuiChat(player, new GuiChatSession("web-user", null, null), this.text("请输入：用户名 admin/player 密码。", "Type: username admin/player password."));
+            case RED_WOOL -> this.beginGuiChat(player, new GuiChatSession("web-remove", null, null), this.text("请输入要删除的网页用户名。", "Type the web username to remove."));
+            case COMMAND_BLOCK -> this.beginGuiChat(player, new GuiChatSession("web-allow", null, null), this.text("请输入：用户名 inherit/none/命令...。", "Type: username inherit/none/commands..."));
+            case LEVER -> this.beginGuiChat(player, new GuiChatSession("web-execution", null, null), this.text("请输入：用户名 on/off。", "Type: username on/off."));
+            case BOOK -> this.adminWeb(player, new String[] {"web", "users"});
+            case ARROW -> this.openAdminWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openAdminMotdWorkbench(final Player player) {
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.ADMIN_MOTD, null, null, null), 27, this.guiTitle(GuiPage.ADMIN_MOTD, null, null));
+        inventory.setItem(4, this.menuItem(Material.OAK_SIGN, "MOTD", "MOTD", List.of(
+            "启用: " + this.preferences.moduleEnabled(MOTD),
+            this.preferences.stringValue("modules.motd.line-1", ""),
+            this.preferences.stringValue("modules.motd.line-2", "")
+        ), List.of(
+            "Enabled: " + this.preferences.moduleEnabled(MOTD),
+            this.preferences.stringValue("modules.motd.line-1", ""),
+            this.preferences.stringValue("modules.motd.line-2", "")
+        )));
+        inventory.setItem(10, this.menuItem(this.preferences.moduleEnabled(MOTD) ? Material.LIME_DYE : Material.GRAY_DYE, "MOTD 模块", "MOTD Module", List.of("点击切换"), List.of("Toggle")));
+        inventory.setItem(12, this.menuItem(Material.PAPER, "第一行", "Line 1", List.of(this.preferences.stringValue("modules.motd.line-1", ""), "点击输入"), List.of(this.preferences.stringValue("modules.motd.line-1", ""), "Click to type")));
+        inventory.setItem(14, this.menuItem(Material.MAP, "第二行", "Line 2", List.of(this.preferences.stringValue("modules.motd.line-2", ""), "点击输入"), List.of(this.preferences.stringValue("modules.motd.line-2", ""), "Click to type")));
+        inventory.setItem(16, this.menuItem(Material.PLAYER_HEAD, "显示人数上限", "Max Players", List.of(String.valueOf(this.preferences.intValue("modules.motd.max-players", -1)), "输入数字或 default"), List.of(String.valueOf(this.preferences.intValue("modules.motd.max-players", -1)), "Type number or default")));
+        inventory.setItem(22, this.menuItem(Material.ARROW, "返回", "Back", List.of("/admin"), List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminMotdWorkbenchClick(final Player player, final ItemStack clicked) {
+        switch (clicked.getType()) {
+            case LIME_DYE, GRAY_DYE -> {
+                this.preferences.setModuleEnabled(MOTD, !this.preferences.moduleEnabled(MOTD));
+                this.preferences.save(this.workerExecutor);
+                this.openAdminMotdWorkbench(player);
+            }
+            case PAPER -> this.beginGuiChat(player, new GuiChatSession("motd-line1", null, null), this.text("请输入 MOTD 第一行，支持颜色符号。", "Type MOTD line 1; color codes are supported."));
+            case MAP -> this.beginGuiChat(player, new GuiChatSession("motd-line2", null, null), this.text("请输入 MOTD 第二行，支持颜色符号。", "Type MOTD line 2; color codes are supported."));
+            case PLAYER_HEAD -> this.beginGuiChat(player, new GuiChatSession("motd-max", null, null), this.text("请输入显示人数上限，或 default 恢复默认。", "Type max players, or default."));
+            case ARROW -> this.openAdminWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
+    private void openAdminCommandsWorkbench(final Player player, final String module) {
+        final String selected = commandGateModule(module);
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.ADMIN_COMMANDS, selected, null, null), 54, this.guiTitle(GuiPage.ADMIN_COMMANDS, selected, null));
+        final List<String> modules = commandGateModules();
+        for (int i = 0; i < modules.size(); i++) {
+            final String current = modules.get(i);
+            inventory.setItem(i, this.menuItem(selected.equals(current) ? Material.LIME_DYE : Material.COMPARATOR, current, current, List.of("点击切换分类"), List.of("Switch category")));
+        }
+        final List<String> commands = commandGateCommands(selected);
+        for (int i = 0; i < commands.size() && i < 36; i++) {
+            final String command = commands.get(i);
+            final boolean enabled = this.preferences.commandEnabled(selected, command);
+            inventory.setItem(9 + i, this.menuItem(enabled ? Material.LIME_DYE : Material.GRAY_DYE, command, command, List.of(enabled ? "已启用" : "已关闭", "点击切换"), List.of(enabled ? "Enabled" : "Disabled", "Click to toggle")));
+        }
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/admin"), List.of("/admin")));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminCommandsWorkbenchClick(final Player player, final ItemStack clicked, final GuiHolder holder, final int slot) {
+        final List<String> modules = commandGateModules();
+        if (slot >= 0 && slot < modules.size()) {
+            this.openAdminCommandsWorkbench(player, modules.get(slot));
+            return;
+        }
+        if (clicked.getType() == Material.ARROW) {
+            this.openAdminWorkbench(player);
+            return;
+        }
+        final String module = commandGateModule(holder.module());
+        final List<String> commands = commandGateCommands(module);
+        final int index = slot - 9;
+        if (index < 0 || index >= commands.size()) {
+            return;
+        }
+        final String command = commands.get(index);
+        this.preferences.setCommandEnabled(module, command, !this.preferences.commandEnabled(module, command));
+        this.preferences.save(this.workerExecutor);
+        this.openAdminCommandsWorkbench(player, module);
     }
 
     private void openActorListWorkbench(final Player player, final String module) {
@@ -1128,6 +1772,77 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         switch (session.kind()) {
             case "broadcast" -> this.broadcast(player, new String[] {trimmed});
+            case "broadcast-tools" -> this.broadcast(player, new String[] {trimmed});
+            case "speed" -> player.performCommand("speed " + trimmed);
+            case "gui-command" -> {
+                final String base = session.module() == null ? "" : session.module();
+                if (!base.isBlank()) {
+                    player.performCommand(trimmed.equals("-") ? base : base + " " + trimmed);
+                }
+            }
+            case "ncr-message" -> {
+                HunterNoChatReportsBridge.save(HunterNoChatReportsBridge.read().withDisconnectMessage(trimmed));
+                player.sendMessage(ChatColor.GREEN + this.text("聊天举报保护提示已保存。", "Chat report protection message saved."));
+            }
+            case "ai-model" -> this.saveGuiString(player, "modules.ai.model", trimmed, 128);
+            case "ai-base-url" -> this.saveGuiString(player, "modules.ai.base-url", trimmed, 512);
+            case "ai-key" -> this.saveGuiString(player, "modules.ai.api-key", trimmed, 512);
+            case "ai-env" -> this.saveGuiString(player, "modules.ai.api-key-env", trimmed, 128);
+            case "ai-prefix" -> this.saveGuiString(player, "modules.ai.chat.trigger-prefix", trimmed, 32);
+            case "ai-temperature" -> this.saveGuiDouble(player, "modules.ai.temperature", trimmed, 0.0D, 2.0D);
+            case "ai-max-tokens" -> this.saveGuiInteger(player, "modules.ai.max-tokens", trimmed, 16, 4096);
+            case "ai-test" -> {
+                player.sendMessage(ChatColor.AQUA + "HunterCore AI test request started...");
+                this.testAiPrompt(trimmed).whenComplete((response, error) -> this.getServer().getScheduler().runTask(this, () -> {
+                    if (error != null) {
+                        player.sendMessage(ChatColor.RED + "HunterCore AI test failed: " + (error.getCause() == null ? error.getMessage() : error.getCause().getMessage()));
+                    } else {
+                        player.sendMessage(ChatColor.AQUA + "AI > " + ChatColor.WHITE + response);
+                    }
+                }));
+            }
+            case "web-bind" -> this.adminWeb(player, new String[] {"web", "bind", trimmed});
+            case "web-port" -> this.adminWeb(player, new String[] {"web", "port", trimmed});
+            case "web-map" -> this.adminWeb(player, new String[] {"web", "map", trimmed});
+            case "web-user" -> {
+                final String[] parts = trimmed.split("\\s+", 3);
+                if (parts.length == 3) {
+                    this.adminWeb(player, new String[] {"web", "user", parts[0], parts[1], parts[2]});
+                } else {
+                    player.sendMessage(ChatColor.RED + this.text("格式应为：用户名 admin/player 密码。", "Format: username admin/player password."));
+                }
+            }
+            case "web-remove" -> this.adminWeb(player, new String[] {"web", "remove", trimmed});
+            case "web-allow" -> {
+                final String[] parts = trimmed.split("\\s+");
+                if (parts.length >= 2) {
+                    final String[] args = new String[parts.length + 2];
+                    args[0] = "web";
+                    args[1] = "allow";
+                    System.arraycopy(parts, 0, args, 2, parts.length);
+                    this.adminWeb(player, args);
+                } else {
+                    player.sendMessage(ChatColor.RED + this.text("格式应为：用户名 inherit/none/命令...。", "Format: username inherit/none/commands..."));
+                }
+            }
+            case "web-execution" -> {
+                final String[] parts = trimmed.split("\\s+");
+                if (parts.length == 2) {
+                    this.adminWeb(player, new String[] {"web", "execution", parts[0], parts[1]});
+                } else {
+                    player.sendMessage(ChatColor.RED + this.text("格式应为：用户名 on/off。", "Format: username on/off."));
+                }
+            }
+            case "motd-line1" -> this.saveGuiString(player, "modules.motd.line-1", trimmed, 256);
+            case "motd-line2" -> this.saveGuiString(player, "modules.motd.line-2", trimmed, 256);
+            case "motd-max" -> {
+                if (List.of("default", "off", "reset", "-").contains(HunterToolsPreferences.normalize(trimmed))) {
+                    this.preferences.setValue("modules.motd.max-players", -1);
+                    this.preferences.save(this.workerExecutor);
+                } else {
+                    this.saveGuiInteger(player, "modules.motd.max-players", trimmed, 1, 1_000_000);
+                }
+            }
             case "spawn-player" -> player.performCommand("player spawn " + trimmed);
             case "actor-click" -> player.performCommand((session.module().equals(REAL_FAKE_PLAYERS) ? "player click " : "npc click ")
                 + session.id() + (trimmed.equalsIgnoreCase("clear") ? " clear" : " " + trimmed));
@@ -1144,6 +1859,30 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
             return;
         }
+        if ("speed".equals(session.kind()) || "broadcast-tools".equals(session.kind())) {
+            this.openToolsWorkbench(player);
+            return;
+        }
+        if ("ncr-message".equals(session.kind())) {
+            this.openAdminChatReportsWorkbench(player);
+            return;
+        }
+        if (session.kind().startsWith("ai-")) {
+            this.openAdminAiWorkbench(player);
+            return;
+        }
+        if (session.kind().startsWith("web-")) {
+            this.openAdminWebWorkbench(player);
+            return;
+        }
+        if (session.kind().startsWith("motd-")) {
+            this.openAdminMotdWorkbench(player);
+            return;
+        }
+        if ("gui-command".equals(session.kind())) {
+            this.openCommandCenterWorkbench(player, session.id() == null ? "tools" : session.id());
+            return;
+        }
         if (session.module() != null && session.id() != null) {
             if (!this.actorExists(session.module(), session.id())) {
                 this.openActorListWorkbench(player, session.module());
@@ -1153,6 +1892,46 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return;
         }
         this.openAdminWorkbench(player);
+    }
+
+    private void saveGuiString(final Player player, final String key, final String value, final int maxLength) {
+        if (value.isBlank() || value.length() > maxLength) {
+            player.sendMessage(ChatColor.RED + this.text("输入长度不合法。", "Invalid input length."));
+            return;
+        }
+        this.preferences.setValue(key, value);
+        this.preferences.save(this.workerExecutor);
+        player.sendMessage(ChatColor.GREEN + this.text("设置已保存。", "Setting saved."));
+    }
+
+    private void saveGuiInteger(final Player player, final String key, final String value, final int min, final int max) {
+        try {
+            final int parsed = Integer.parseInt(value);
+            if (parsed < min || parsed > max) {
+                player.sendMessage(ChatColor.RED + this.text("数字超出范围。", "Number out of range."));
+                return;
+            }
+            this.preferences.setValue(key, parsed);
+            this.preferences.save(this.workerExecutor);
+            player.sendMessage(ChatColor.GREEN + this.text("设置已保存。", "Setting saved."));
+        } catch (final NumberFormatException ex) {
+            player.sendMessage(ChatColor.RED + this.text("请输入数字。", "Please type a number."));
+        }
+    }
+
+    private void saveGuiDouble(final Player player, final String key, final String value, final double min, final double max) {
+        try {
+            final double parsed = Double.parseDouble(value);
+            if (parsed < min || parsed > max) {
+                player.sendMessage(ChatColor.RED + this.text("数字超出范围。", "Number out of range."));
+                return;
+            }
+            this.preferences.setValue(key, parsed);
+            this.preferences.save(this.workerExecutor);
+            player.sendMessage(ChatColor.GREEN + this.text("设置已保存。", "Setting saved."));
+        } catch (final NumberFormatException ex) {
+            player.sendMessage(ChatColor.RED + this.text("请输入数字。", "Please type a number."));
+        }
     }
 
     private void toggleActorAi(final Player player, final String module, final String id) {
@@ -1270,11 +2049,19 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case PROFILE -> ChatColor.DARK_AQUA + this.text("HunterCore · 我的资料", "HunterCore · My Profile");
             case INVENTORY_PREVIEW -> ChatColor.DARK_AQUA + this.text("HunterCore · 背包预览", "HunterCore · Inventory Preview");
             case SETTINGS -> ChatColor.DARK_AQUA + this.text("HunterCore · 设置", "HunterCore · Settings");
+            case TOOLS -> ChatColor.DARK_AQUA + this.text("HunterCore · 工具", "HunterCore · Tools");
             case ADMIN -> ChatColor.DARK_RED + this.text("HunterCore · 管理中心", "HunterCore · Admin");
             case ADMIN_SYSTEM -> ChatColor.DARK_RED + this.text("HunterCore · 系统状态", "HunterCore · System");
+            case ADMIN_PLUGINS -> ChatColor.DARK_RED + this.text("HunterCore · 插件状态", "HunterCore · Plugins");
             case ADMIN_MODULES -> ChatColor.DARK_RED + this.text("HunterCore · 模块", "HunterCore · Modules");
             case ADMIN_PREFERENCES -> ChatColor.DARK_RED + this.text("HunterCore · 偏好", "HunterCore · Preferences");
             case ADMIN_OPTIMIZE -> ChatColor.DARK_RED + this.text("HunterCore · 优化", "HunterCore · Optimize");
+            case ADMIN_CHAT_REPORTS -> ChatColor.DARK_RED + this.text("HunterCore · 聊天举报", "HunterCore · Chat Reports");
+            case ADMIN_AI -> ChatColor.DARK_RED + this.text("HunterCore · AI", "HunterCore · AI");
+            case ADMIN_WEB -> ChatColor.DARK_RED + this.text("HunterCore · 网页面板", "HunterCore · Web Panel");
+            case ADMIN_MOTD -> ChatColor.DARK_RED + this.text("HunterCore · MOTD", "HunterCore · MOTD");
+            case ADMIN_COMMANDS -> ChatColor.DARK_RED + this.text("HunterCore · 指令开关", "HunterCore · Command Gates");
+            case COMMAND_CENTER -> ChatColor.DARK_AQUA + this.text("HunterCore · 全部指令", "HunterCore · Commands");
             case ACTOR_LIST -> ChatColor.DARK_AQUA + (REAL_FAKE_PLAYERS.equals(module) ? this.text("HunterCore · 假人", "HunterCore · PlayerBots") : this.text("HunterCore · NPC", "HunterCore · NPCs"));
             case ACTOR_DETAIL -> ChatColor.DARK_AQUA + this.text("HunterCore · 对象 ", "HunterCore · Actor ") + (id == null ? "" : id);
             case STORY -> ChatColor.DARK_AQUA + this.text("HunterCore · 故事模式", "HunterCore · Story Mode");
@@ -1525,7 +2312,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     }
 
     private void registerHunterCoreCommands() {
-        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("admin", List.of(), "huntertools.command.admin", "open the admin GUI or manage HunterCore modules"));
+        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("admin", List.of(), "huntertools.command.admin", "manage HunterCore from traditional admin commands"));
         HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("menu", List.of("gui"), "huntertools.command.menu", "open the HunterCore player GUI"));
         HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("profile", List.of("me", "playerinfo"), "huntertools.command.profile", "open your HunterCore profile GUI"));
         HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("settings", List.of("prefs"), "huntertools.command.settings", "open your HunterCore settings GUI"));
@@ -1537,7 +2324,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private boolean executeHunterCoreCommand(final CommandSender sender, final String label, final String[] args) {
         return switch (label) {
-            case "admin" -> args.length == 0 && sender instanceof Player ? this.openAdminWorkbench(sender) : this.admin(sender, args);
+            case "admin" -> this.admin(sender, args);
             case "tps", "htps" -> this.showTps(sender);
             case "heal" -> this.heal(sender, args);
             case "feed" -> this.feed(sender, args);
@@ -1889,7 +2676,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.sampleMetrics();
         this.metricsTask = this.getServer().getScheduler().runTaskTimer(this, this::sampleMetrics, 20L, 20L);
 
-        if (this.preferences.moduleEnabled("tps-display") && this.preferences.booleanValue("modules.tps-display.actionbar", true)) {
+        if (this.preferences.moduleEnabled("tps-display") && this.preferences.booleanValue("modules.tps-display.actionbar", false)) {
             final long interval = Math.max(20L, this.preferences.intValue("modules.tps-display.interval-ticks", 40));
             this.actionbarTask = this.getServer().getScheduler().runTaskTimer(this, this::tickActionBar, interval, interval);
         }
@@ -2158,6 +2945,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "gc" -> this.adminGc(sender);
             case "threads" -> this.adminThreads(sender);
             case "optimize" -> this.adminOptimize(sender, args);
+            case "ncr", "nochatreports", "chatreports" -> this.adminNoChatReports(sender, args);
             case "motd" -> this.adminMotd(sender, args);
             case "web" -> this.adminWeb(sender, args);
             case "ai" -> this.adminAi(sender, args);
@@ -2175,6 +2963,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.sendUsage(sender, "/hc admin module <module> <on|off>", "开启或关闭模块。", "Enables or disables a module.");
         this.sendUsage(sender, "/hc admin command <module> <command> <on|off>", "开启或关闭模块内指令。", "Enables or disables a command inside a module.");
         this.sendUsage(sender, "/hc admin optimize [status|mode]", "查看或保存 CPU 优化模式。", "Shows or saves the CPU optimization mode.");
+        this.sendUsage(sender, "/hc admin ncr [status|on|off|convert|query|demand|debug|message]", "管理核心聊天举报保护。", "Manages built-in chat report protection.");
         this.sendUsage(sender, "/hc admin motd [status|line1|line2|max]", "查看或修改服务器列表 MOTD。", "Views or edits the server-list MOTD.");
         this.sendUsage(sender, "/hc admin web [status|restart|bind|port|map|public-map|user|remove|users|allow|execution]", "管理网页面板。", "Manages the web panel.");
         this.sendUsage(sender, "/hc admin ai [status|enable|disable|model|base-url|key|env|prefix|chat|npc|temperature|max-tokens|test]", "管理 AI 接入。", "Manages AI integration.");
@@ -2326,6 +3115,87 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         return true;
     }
 
+    private boolean adminNoChatReports(final CommandSender sender, final String[] args) {
+        if (!this.managementCommandEnabled(sender, "nochatreports")) {
+            return true;
+        }
+        final HunterNoChatReportsBridge.Settings current = HunterNoChatReportsBridge.read();
+        if (args.length == 1 || args[1].equalsIgnoreCase("status")) {
+            sender.sendMessage(ChatColor.GOLD + this.text("聊天举报保护：", "Chat report protection:"));
+            sender.sendMessage(ChatColor.GRAY + "enabled: " + ChatColor.WHITE + current.enabled());
+            sender.sendMessage(ChatColor.GRAY + "add-query-data: " + ChatColor.WHITE + current.addQueryData());
+            sender.sendMessage(ChatColor.GRAY + "convert-to-game-message: " + ChatColor.WHITE + current.convertToGameMessage());
+            sender.sendMessage(ChatColor.GRAY + "demand-on-client: " + ChatColor.WHITE + current.demandOnClient());
+            sender.sendMessage(ChatColor.GRAY + "debug-log: " + ChatColor.WHITE + current.debugLog());
+            sender.sendMessage(ChatColor.GRAY + "message: " + ChatColor.WHITE + current.disconnectMessage());
+            return true;
+        }
+
+        final String sub = args[1].toLowerCase(Locale.ROOT);
+        final HunterNoChatReportsBridge.Settings next;
+        switch (sub) {
+            case "on", "enable", "enabled" -> next = current.withEnabled(true);
+            case "off", "disable", "disabled" -> next = current.withEnabled(false);
+            case "query", "add-query-data" -> {
+                if (args.length != 3 || parseToggle(args[2]) == null) {
+                    this.sendNoChatReportsUsage(sender);
+                    return true;
+                }
+                next = current.withAddQueryData(parseToggle(args[2]));
+            }
+            case "convert", "convert-to-game-message" -> {
+                if (args.length != 3 || parseToggle(args[2]) == null) {
+                    this.sendNoChatReportsUsage(sender);
+                    return true;
+                }
+                next = current.withConvertToGameMessage(parseToggle(args[2]));
+            }
+            case "demand", "require-client" -> {
+                if (args.length != 3 || parseToggle(args[2]) == null) {
+                    this.sendNoChatReportsUsage(sender);
+                    return true;
+                }
+                next = current.withDemandOnClient(parseToggle(args[2]));
+            }
+            case "debug", "debug-log" -> {
+                if (args.length != 3 || parseToggle(args[2]) == null) {
+                    this.sendNoChatReportsUsage(sender);
+                    return true;
+                }
+                next = current.withDebugLog(parseToggle(args[2]));
+            }
+            case "message" -> {
+                if (args.length < 3) {
+                    this.sendNoChatReportsUsage(sender);
+                    return true;
+                }
+                final String message = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)).trim();
+                if (message.isBlank() || message.length() > 256) {
+                    sender.sendMessage(ChatColor.RED + this.text("提示不能为空且不能超过 256 字符。", "Message cannot be blank or longer than 256 characters."));
+                    return true;
+                }
+                next = current.withDisconnectMessage(message);
+            }
+            default -> {
+                this.sendNoChatReportsUsage(sender);
+                return true;
+            }
+        }
+        HunterNoChatReportsBridge.save(next);
+        sender.sendMessage(ChatColor.GREEN + this.text("聊天举报保护设置已保存。", "Chat report protection saved."));
+        return true;
+    }
+
+    private void sendNoChatReportsUsage(final CommandSender sender) {
+        this.sendUsage(sender, "/hc admin ncr status", "查看核心聊天举报保护状态。", "Shows built-in chat report protection state.");
+        this.sendUsage(sender, "/hc admin ncr <on|off>", "开启或关闭核心聊天举报保护。", "Enables or disables built-in protection.");
+        this.sendUsage(sender, "/hc admin ncr convert <on|off>", "切换聊天转游戏消息。", "Toggles chat-to-game-message conversion.");
+        this.sendUsage(sender, "/hc admin ncr query <on|off>", "切换客户端查询提示。", "Toggles client query data.");
+        this.sendUsage(sender, "/hc admin ncr demand <on|off>", "是否强制客户端安装 No Chat Reports。", "Requires or stops requiring the client mod.");
+        this.sendUsage(sender, "/hc admin ncr debug <on|off>", "切换调试日志。", "Toggles debug logging.");
+        this.sendUsage(sender, "/hc admin ncr message <text>", "设置强制客户端 Mod 时的踢出提示。", "Sets the kick message when client mod is required.");
+    }
+
     private boolean adminOptimize(final CommandSender sender, final String[] args) {
         if (!this.managementCommandEnabled(sender, "optimize")) {
             return true;
@@ -2349,7 +3219,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return true;
         }
         sender.sendMessage(ChatColor.GOLD + "HunterCore CPU optimization");
-        sender.sendMessage(ChatColor.GRAY + "Mode: " + ChatColor.WHITE + this.preferences.stringValue("optimizations.cpu.mode", "single-thread"));
+        sender.sendMessage(ChatColor.GRAY + "Mode: " + ChatColor.WHITE + this.preferences.stringValue("optimizations.cpu.mode", "multi-thread"));
         sender.sendMessage(ChatColor.GRAY + "CPU threads: " + ChatColor.WHITE + Runtime.getRuntime().availableProcessors());
         sender.sendMessage(ChatColor.GRAY + "Paper workers: " + ChatColor.WHITE + System.getProperty("Paper.WorkerThreadCount", "auto"));
         sender.sendMessage(ChatColor.GRAY + "Core workers: " + ChatColor.WHITE + System.getProperty("DivineMC.WorkerThreadCount", "auto"));
@@ -3309,7 +4179,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private List<String> adminCompletions(final String[] args) {
         if (args.length == 1) {
-            return matching(args[0], List.of("help", "reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize", "motd", "web", "ai"));
+            return matching(args[0], List.of("help", "reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize", "ncr", "nochatreports", "chatreports", "motd", "web", "ai"));
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("help")) {
             return matching(args[1], HunterHelp.topics());
@@ -3319,6 +4189,14 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("optimize")) {
             return matching(args[1], List.of("status", "single-thread", "high-clock", "high-core", "multi-thread"));
+        }
+        if (args.length == 2 && (args[0].equalsIgnoreCase("ncr") || args[0].equalsIgnoreCase("nochatreports") || args[0].equalsIgnoreCase("chatreports"))) {
+            return matching(args[1], List.of("status", "on", "off", "convert", "query", "demand", "debug", "message"));
+        }
+        if (args.length == 3
+            && (args[0].equalsIgnoreCase("ncr") || args[0].equalsIgnoreCase("nochatreports") || args[0].equalsIgnoreCase("chatreports"))
+            && List.of("convert", "query", "demand", "debug").contains(args[1].toLowerCase(Locale.ROOT))) {
+            return matching(args[2], List.of("on", "off"));
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("motd") && args[1].equalsIgnoreCase("max")) {
             return matching(args[2], List.of("default", "100", "500", "1000"));
@@ -3654,6 +4532,19 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private record GuiConfirmSession(String action, @Nullable String module, @Nullable String id) {
     }
 
+    private record GuiCommand(
+        Material material,
+        String zhName,
+        String enName,
+        List<String> zhLore,
+        List<String> enLore,
+        String command,
+        boolean prompt,
+        String zhPrompt,
+        String enPrompt
+    ) {
+    }
+
     private enum GuiPage {
         MAIN,
         PROFILE,
@@ -3661,9 +4552,17 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         SETTINGS,
         ADMIN,
         ADMIN_SYSTEM,
+        ADMIN_PLUGINS,
         ADMIN_MODULES,
         ADMIN_PREFERENCES,
         ADMIN_OPTIMIZE,
+        ADMIN_CHAT_REPORTS,
+        ADMIN_AI,
+        ADMIN_WEB,
+        ADMIN_MOTD,
+        ADMIN_COMMANDS,
+        TOOLS,
+        COMMAND_CENTER,
         ACTOR_LIST,
         ACTOR_DETAIL,
         STORY,

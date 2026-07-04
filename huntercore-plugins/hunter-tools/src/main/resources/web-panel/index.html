@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -226,6 +226,78 @@
             <button type="button" class="adminOnly" data-command="weather clear" data-i18n="quick.clearWeather" hidden>Clear weather</button>
             <button type="button" class="adminOnly" data-command="time set day" data-i18n="quick.day" hidden>Day</button>
           </div>
+          <div class="commandActionGrid">
+            <form class="commandAction" data-command-template="heal {player}">
+              <strong data-i18n="commandCenter.heal">Heal</strong>
+              <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="feed {player}">
+              <strong>Feed</strong>
+              <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="fly {player} {state}">
+              <strong data-i18n="commandCenter.fly">Fly</strong>
+              <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
+              <select name="state"><option value="">toggle</option><option value="on">on</option><option value="off">off</option></select>
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="gm {mode} {player}">
+              <strong data-i18n="commandCenter.gamemode">Gamemode</strong>
+              <select name="mode"><option value="survival">survival</option><option value="creative">creative</option><option value="adventure">adventure</option><option value="spectator">spectator</option></select>
+              <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="speed {speed} {player} {type}">
+              <strong data-i18n="commandCenter.speed">Speed</strong>
+              <input name="speed" inputmode="numeric" placeholder="1-10">
+              <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
+              <select name="type"><option value="">auto</option><option value="walk">walk</option><option value="fly">fly</option></select>
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="broadcast {message}">
+              <strong data-i18n="commandCenter.broadcast">Broadcast</strong>
+              <input name="message" placeholder="message" data-i18n-placeholder="commandCenter.message">
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="{time}">
+              <strong>Time</strong>
+              <select name="time"><option value="day">day</option><option value="night">night</option></select>
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="{weather}">
+              <strong>Weather</strong>
+              <select name="weather"><option value="sun">sun</option><option value="rain">rain</option><option value="thunder">thunder</option></select>
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="tpa {player}">
+              <strong>TPA</strong>
+              <input name="player" placeholder="player" data-i18n-placeholder="actors.name">
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction" data-command-template="{homeAction} {name}">
+              <strong>Homes</strong>
+              <select name="homeAction"><option value="homes">homes</option><option value="home">home</option><option value="sethome">sethome</option><option value="delhome">delhome</option></select>
+              <input name="name" placeholder="home name or blank">
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction adminOnly" data-command-template="hc admin ncr {action}" hidden>
+              <strong data-i18n="commandCenter.ncr">Chat Reports</strong>
+              <select name="action"><option value="status">status</option><option value="on">on</option><option value="off">off</option><option value="query on">query on</option><option value="convert on">convert on</option><option value="demand off">demand off</option></select>
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction adminOnly" data-command-template="hc admin optimize {mode}" hidden>
+              <strong data-i18n="commandCenter.optimize">Optimize</strong>
+              <select name="mode"><option value="status">status</option><option value="multi-thread">multi-thread</option><option value="high-core">high-core</option><option value="high-clock">high-clock</option><option value="single-thread">single-thread</option></select>
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+            <form class="commandAction adminOnly" data-command-template="hc admin {adminAction}" hidden>
+              <strong>Admin</strong>
+              <select name="adminAction"><option value="plugins">plugins</option><option value="memory">memory</option><option value="threads">threads</option><option value="gc">gc</option><option value="modules">modules</option></select>
+              <button type="submit" data-i18n="action.run">Run</button>
+            </form>
+          </div>
           <pre id="commandResult">Login to run allowed commands.</pre>
         </section>
 
@@ -290,20 +362,20 @@
           <h3 data-i18n="assets.itemWizard">Item Wizard</h3>
           <form id="assetsItemForm" class="stackForm">
             <div class="formGrid">
-              <input id="assetItemId" placeholder="item_id">
-              <input id="assetItemNameZh" placeholder="中文名">
-              <input id="assetItemNameEn" placeholder="English name">
-              <input id="assetItemMaterial" placeholder="PAPER">
-              <input id="assetItemCmd" placeholder="1001">
-              <input id="assetItemAmount" placeholder="1">
-              <input id="assetItemCategory" placeholder="weapons / tools / ui">
-              <input id="assetItemPack" placeholder="resource-pack.zip">
-              <input id="assetItemPermission" placeholder="hunterassets.item.example">
-              <input id="assetItemIcon" placeholder="icons/example.png">
+              <label class="fieldLabel"><span data-i18n="assets.itemId">Item ID</span><input id="assetItemId" placeholder="item_id" data-i18n-placeholder="assets.itemIdPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.itemNameZh">Chinese display name</span><input id="assetItemNameZh" placeholder="中文名" data-i18n-placeholder="assets.itemNameZhPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.itemNameEn">English display name</span><input id="assetItemNameEn" placeholder="English name" data-i18n-placeholder="assets.itemNameEnPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.material">Base material</span><input id="assetItemMaterial" placeholder="PAPER" data-i18n-placeholder="assets.materialPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.customModelData">CustomModelData</span><input id="assetItemCmd" placeholder="1001" data-i18n-placeholder="assets.customModelDataPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.amount">Amount</span><input id="assetItemAmount" placeholder="1" data-i18n-placeholder="assets.amountPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.category">Category</span><input id="assetItemCategory" placeholder="weapons / tools / ui" data-i18n-placeholder="assets.categoryPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.packFile">Resource pack file</span><input id="assetItemPack" placeholder="resource-pack.zip" data-i18n-placeholder="assets.packFilePlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.permission">Permission node</span><input id="assetItemPermission" placeholder="hunterassets.item.example" data-i18n-placeholder="assets.permissionPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.iconPath">Icon path</span><input id="assetItemIcon" placeholder="icons/example.png" data-i18n-placeholder="assets.iconPathPlaceholder"></label>
             </div>
-            <textarea id="assetItemDescription" rows="2" placeholder="What this item is for"></textarea>
-            <textarea id="assetItemLoreZh" rows="2" placeholder="中文 Lore，每行一条"></textarea>
-            <textarea id="assetItemLoreEn" rows="2" placeholder="English lore, one line each"></textarea>
+            <label class="fieldLabel"><span data-i18n="assets.description">Description</span><textarea id="assetItemDescription" rows="2" placeholder="What this item is for" data-i18n-placeholder="assets.descriptionPlaceholder"></textarea></label>
+            <label class="fieldLabel"><span data-i18n="assets.loreZh">Chinese lore</span><textarea id="assetItemLoreZh" rows="2" placeholder="中文 Lore，每行一条" data-i18n-placeholder="assets.loreZhPlaceholder"></textarea></label>
+            <label class="fieldLabel"><span data-i18n="assets.loreEn">English lore</span><textarea id="assetItemLoreEn" rows="2" placeholder="English lore, one line each" data-i18n-placeholder="assets.loreEnPlaceholder"></textarea></label>
             <label class="checkLine"><input id="assetItemEnabled" type="checkbox" checked> <span>Enabled</span></label>
             <button type="submit" class="primaryButton" data-i18n="assets.saveItem">Save item</button>
           </form>
@@ -313,13 +385,13 @@
           <h3 data-i18n="assets.promptBuilder">AI Prompt Builder</h3>
           <form id="assetsPromptForm" class="stackForm">
             <div class="formGrid">
-              <input id="assetsPromptUseCase" placeholder="weapon / badge / menu icon">
-              <input id="assetsPromptTheme" placeholder="ice dragon / sci-fi / fantasy">
-              <input id="assetsPromptCategory" placeholder="items">
-              <input id="assetsPromptStyle" placeholder="Minecraft pixel art">
-              <input id="assetsPromptPalette" placeholder="blue silver high contrast">
-              <input id="assetsPromptMaterialFeel" placeholder="metal / cloth / crystal">
-              <input id="assetsPromptResolution" placeholder="16x16 / 32x32">
+              <input id="assetsPromptUseCase" placeholder="weapon / badge / menu icon" data-i18n-placeholder="assets.promptUseCase">
+              <input id="assetsPromptTheme" placeholder="ice dragon / sci-fi / fantasy" data-i18n-placeholder="assets.promptTheme">
+              <input id="assetsPromptCategory" placeholder="items" data-i18n-placeholder="assets.promptCategory">
+              <input id="assetsPromptStyle" placeholder="Minecraft pixel art" data-i18n-placeholder="assets.promptStyle">
+              <input id="assetsPromptPalette" placeholder="blue silver high contrast" data-i18n-placeholder="assets.promptPalette">
+              <input id="assetsPromptMaterialFeel" placeholder="metal / cloth / crystal" data-i18n-placeholder="assets.promptMaterialFeel">
+              <input id="assetsPromptResolution" placeholder="16x16 / 32x32" data-i18n-placeholder="assets.promptResolution">
             </div>
             <label class="checkLine"><input id="assetsPromptTransparent" type="checkbox" checked> <span>Transparent background</span></label>
             <button type="submit" class="primaryButton" data-i18n="assets.generatePrompt">Generate prompts</button>
@@ -331,8 +403,8 @@
           <div id="assetsValidationList" class="dataList"></div>
           <form id="assetsPublishForm" class="stackForm">
             <div class="formGrid">
-              <input id="assetsPublishFile" placeholder="resource-pack.zip">
-              <input id="assetsPublishBaseUrl" placeholder="https://your-panel-url">
+              <input id="assetsPublishFile" placeholder="resource-pack.zip" data-i18n-placeholder="assets.publishFile">
+              <input id="assetsPublishBaseUrl" placeholder="https://your-panel-url" data-i18n-placeholder="assets.publishBaseUrl">
             </div>
             <label class="checkLine"><input id="assetsPublishRequired" type="checkbox"> <span>Required</span></label>
             <label class="checkLine"><input id="assetsPublishSendOnJoin" type="checkbox"> <span>Send on join</span></label>
@@ -356,13 +428,13 @@
           <h3 data-i18n="titles.manage">Title Definitions</h3>
           <form id="titleForm" class="stackForm">
             <div class="formGrid">
-              <input id="titleId" placeholder="builder">
-              <input id="titleDisplayName" placeholder="Builder">
-              <input id="titlePrefix" placeholder="&b[Builder] ">
-              <input id="titlePriority" placeholder="10">
-              <input id="titlePermission" placeholder="huntercore.title.builder">
+              <label class="fieldLabel"><span data-i18n="titles.id">Title ID</span><input id="titleId" placeholder="builder" data-i18n-placeholder="titles.idPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="titles.displayName">Display name</span><input id="titleDisplayName" placeholder="Builder" data-i18n-placeholder="titles.displayNamePlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="titles.prefix">Chat prefix</span><input id="titlePrefix" placeholder="&b[Builder] " data-i18n-placeholder="titles.prefixPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="titles.priority">Priority</span><input id="titlePriority" placeholder="10" data-i18n-placeholder="titles.priorityPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="titles.permission">Permission node</span><input id="titlePermission" placeholder="huntercore.title.builder" data-i18n-placeholder="titles.permissionPlaceholder"></label>
             </div>
-            <textarea id="titleDescription" rows="2" placeholder="When this title should be used"></textarea>
+            <label class="fieldLabel"><span data-i18n="titles.description">Description</span><textarea id="titleDescription" rows="2" placeholder="When this title should be used" data-i18n-placeholder="titles.descriptionPlaceholder"></textarea></label>
             <label class="checkLine"><input id="titleEnabled" type="checkbox" checked> <span>Enabled</span></label>
             <button type="submit" class="primaryButton" data-i18n="titles.save">Save title</button>
           </form>
@@ -373,8 +445,8 @@
           <h3 data-i18n="titles.assign">Player Assignments</h3>
           <form id="titleAssignForm" class="stackForm">
             <div class="formGrid">
-              <input id="titleAssignPlayer" placeholder="Player name">
-              <input id="titleAssignTitle" placeholder="builder">
+              <label class="fieldLabel"><span data-i18n="titles.assignPlayer">Player name</span><input id="titleAssignPlayer" placeholder="Player name" data-i18n-placeholder="titles.assignPlayerPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="titles.assignTitle">Title ID</span><input id="titleAssignTitle" placeholder="builder" data-i18n-placeholder="titles.assignTitlePlaceholder"></label>
               <select id="titleAssignAction">
                 <option value="grant">Grant</option>
                 <option value="revoke">Revoke</option>
@@ -402,6 +474,14 @@
           <button type="button" class="configTab isActive" data-config-target="web">
             <strong data-i18n="settings.tab.web">Web panel</strong>
             <span data-i18n="settings.tab.webHint">Name, F3 and panel address</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="bundles">
+            <strong data-i18n="settings.tab.bundles">Bundled plugins</strong>
+            <span data-i18n="settings.tab.bundlesHint">Geyser, assets and compatibility</span>
+          </button>
+          <button type="button" class="configTab" data-config-target="geyser">
+            <strong data-i18n="settings.tab.geyser">Geyser</strong>
+            <span data-i18n="settings.tab.geyserHint">Bedrock port and login mode</span>
           </button>
           <button type="button" class="configTab" data-config-target="display">
             <strong data-i18n="settings.tab.display">Display</strong>
@@ -437,35 +517,54 @@
           </div>
           <p id="webAddressLine" class="subtleLine"></p>
           <p id="webThreadingLine" class="subtleLine"></p>
+        </section>
+
+        <section id="bundleSettingsPanel" class="panel" data-config-panel="bundles" data-settings-scope="web" hidden>
+          <h3 data-i18n="bundles.title">Bundled plugins</h3>
           <div class="formGrid">
-            <label class="checkLine"><input id="bundleGeyser" form="webSettingsForm" type="checkbox"> <span>Geyser</span></label>
-            <label class="checkLine"><input id="bundleFloodgate" form="webSettingsForm" type="checkbox"> <span>Floodgate</span></label>
-            <label class="checkLine"><input id="bundleNoChatReports" form="webSettingsForm" type="checkbox"> <span>NoChatReports</span></label>
+            <label class="checkLine"><input id="bundleGeyser" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.geyser">Geyser</span></label>
+            <label class="checkLine"><input id="bundleFloodgate" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.floodgate">Floodgate</span></label>
             <label class="checkLine"><input id="bundleHunterAssets" form="webSettingsForm" type="checkbox"> <span>HunterAssets</span></label>
             <label class="checkLine"><input id="bundleImageFrame" form="webSettingsForm" type="checkbox"> <span>ImageFrame</span></label>
             <label class="checkLine"><input id="bundleViaLegacy" form="webSettingsForm" type="checkbox"> <span>Via Legacy</span></label>
-            <label class="checkLine"><input id="assetsResourcePackEnabled" form="webSettingsForm" type="checkbox"> <span>Resource Pack Enabled</span></label>
-            <label class="checkLine"><input id="assetsResourcePackRequired" form="webSettingsForm" type="checkbox"> <span>Resource Pack Required</span></label>
-            <label class="checkLine"><input id="assetsSendOnJoin" form="webSettingsForm" type="checkbox"> <span>Send Pack On Join</span></label>
-            <input id="assetsResourcePackUrl" form="webSettingsForm" placeholder="https://example.com/hunterassets.zip">
-            <input id="assetsResourcePackSha1" form="webSettingsForm" placeholder="40-char sha1">
+            <label class="checkLine"><input id="assetsResourcePackEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.resourcePackEnabled">Resource Pack Enabled</span></label>
+            <label class="checkLine"><input id="assetsResourcePackRequired" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.resourcePackRequired">Resource Pack Required</span></label>
+            <label class="checkLine"><input id="assetsSendOnJoin" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.sendOnJoin">Send Pack On Join</span></label>
+            <input id="assetsResourcePackUrl" form="webSettingsForm" placeholder="https://example.com/hunterassets.zip" data-i18n-placeholder="bundles.resourcePackUrl">
+            <input id="assetsResourcePackSha1" form="webSettingsForm" placeholder="40-char sha1" data-i18n-placeholder="bundles.resourcePackSha1">
+            <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
           </div>
-          <h3>Geyser</h3>
+          <p id="noChatReportsLine" class="subtleLine"></p>
+          <h3 data-i18n="noChatReports.title">Chat report protection</h3>
           <div class="formGrid">
-            <input id="geyserBedrockAddress" form="webSettingsForm" placeholder="0.0.0.0">
-            <input id="geyserBedrockPort" form="webSettingsForm" inputmode="numeric" placeholder="19132">
-            <select id="geyserJavaAuthType" form="webSettingsForm">
+            <label class="checkLine"><input id="noChatReportsEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="noChatReports.enabled">Disable player chat reports</span></label>
+            <label class="checkLine"><input id="noChatReportsAddQueryData" form="webSettingsForm" type="checkbox"> <span data-i18n="noChatReports.addQueryData">Advertise protection to clients</span></label>
+            <label class="checkLine"><input id="noChatReportsConvertToGameMessage" form="webSettingsForm" type="checkbox"> <span data-i18n="noChatReports.convertToGameMessage">Convert chat to game messages</span></label>
+            <label class="checkLine"><input id="noChatReportsDemandOnClient" form="webSettingsForm" type="checkbox"> <span data-i18n="noChatReports.demandOnClient">Require client mod</span></label>
+            <label class="checkLine"><input id="noChatReportsDebugLog" form="webSettingsForm" type="checkbox"> <span data-i18n="noChatReports.debugLog">Debug log</span></label>
+            <label class="fieldLabel"><span data-i18n="noChatReports.disconnectMessage">Client requirement kick message</span><input id="noChatReportsDisconnectMessage" form="webSettingsForm" placeholder="You do not have No Chat Reports..." data-i18n-placeholder="noChatReports.disconnectMessagePlaceholder"></label>
+            <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="noChatReports.save">Save chat protection</button>
+          </div>
+        </section>
+
+        <section id="geyserSettingsPanel" class="panel" data-config-panel="geyser" data-settings-scope="web" hidden>
+          <h3 data-i18n="geyser.title">Geyser</h3>
+          <div class="formGrid">
+            <label class="fieldLabel"><span data-i18n="geyser.bedrockAddress">Bedrock bind address</span><input id="geyserBedrockAddress" form="webSettingsForm" placeholder="0.0.0.0" data-i18n-placeholder="geyser.bedrockAddressPlaceholder"></label>
+            <label class="fieldLabel"><span data-i18n="geyser.bedrockPort">Bedrock port</span><input id="geyserBedrockPort" form="webSettingsForm" inputmode="numeric" placeholder="19132" data-i18n-placeholder="geyser.bedrockPortPlaceholder"></label>
+            <label class="fieldLabel"><span data-i18n="geyser.authType">Java login mode</span><select id="geyserJavaAuthType" form="webSettingsForm">
               <option value="floodgate">floodgate</option>
               <option value="online">online</option>
               <option value="offline">offline</option>
-            </select>
-            <input id="geyserServerName" form="webSettingsForm" placeholder="HunterCore Bedrock">
-            <input id="geyserPrimaryMotd" form="webSettingsForm" placeholder="HunterCore">
-            <input id="geyserSecondaryMotd" form="webSettingsForm" placeholder="Bedrock ready">
-            <label class="checkLine"><input id="geyserPassthroughMotd" form="webSettingsForm" type="checkbox"> <span>Passthrough MOTD</span></label>
-            <label class="checkLine"><input id="geyserPassthroughPlayerCounts" form="webSettingsForm" type="checkbox"> <span>Passthrough players</span></label>
-            <button type="submit" form="webSettingsForm" class="primaryButton">Save Geyser settings</button>
+            </select></label>
+            <label class="fieldLabel"><span data-i18n="geyser.serverName">Bedrock server name</span><input id="geyserServerName" form="webSettingsForm" placeholder="HunterCore Bedrock" data-i18n-placeholder="geyser.serverNamePlaceholder"></label>
+            <label class="fieldLabel"><span data-i18n="geyser.primaryMotd">Primary MOTD</span><input id="geyserPrimaryMotd" form="webSettingsForm" placeholder="HunterCore" data-i18n-placeholder="geyser.primaryMotdPlaceholder"></label>
+            <label class="fieldLabel"><span data-i18n="geyser.secondaryMotd">Secondary MOTD</span><input id="geyserSecondaryMotd" form="webSettingsForm" placeholder="Bedrock ready" data-i18n-placeholder="geyser.secondaryMotdPlaceholder"></label>
+            <label class="checkLine"><input id="geyserPassthroughMotd" form="webSettingsForm" type="checkbox"> <span data-i18n="geyser.passthroughMotd">Passthrough MOTD</span></label>
+            <label class="checkLine"><input id="geyserPassthroughPlayerCounts" form="webSettingsForm" type="checkbox"> <span data-i18n="geyser.passthroughPlayers">Passthrough players</span></label>
+            <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="geyser.save">Save Geyser settings</button>
           </div>
+          <p id="geyserStatusLine" class="subtleLine"></p>
         </section>
 
         <section id="displaySettingsPanel" class="panel" data-config-panel="display" data-settings-scope="web" hidden>

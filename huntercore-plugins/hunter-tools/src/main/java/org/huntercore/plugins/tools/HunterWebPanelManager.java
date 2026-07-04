@@ -704,7 +704,7 @@ final class HunterWebPanelManager {
         json.append('}');
 
         json.append(",\"optimization\":{");
-        field(json, "mode", this.preferences.stringValue("optimizations.cpu.mode", "single-thread")).append(',');
+        field(json, "mode", this.preferences.stringValue("optimizations.cpu.mode", "multi-thread")).append(',');
         numberField(json, "cpuThreads", Runtime.getRuntime().availableProcessors()).append(',');
         field(json, "paperWorkers", System.getProperty("Paper.WorkerThreadCount", "auto")).append(',');
         field(json, "coreWorkers", System.getProperty("DivineMC.WorkerThreadCount", "auto")).append(',');
@@ -1263,7 +1263,7 @@ final class HunterWebPanelManager {
 
     private String webSettingsJson() {
         final StringBuilder json = new StringBuilder(256);
-        final String cpuMode = normalizeCpuMode(this.preferences.stringValue("optimizations.cpu.mode", "single-thread"));
+        final String cpuMode = normalizeCpuMode(this.preferences.stringValue("optimizations.cpu.mode", "multi-thread"));
         json.append('{');
         field(json, "bindAddress", this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1")).append(',');
         numberField(json, "port", Math.max(1, Math.min(65535, this.preferences.intValue("modules.web-panel.port", 8088)))).append(',');
@@ -1274,7 +1274,7 @@ final class HunterWebPanelManager {
         field(json, "f3ServerName", this.preferences.stringValue("modules.management.f3-server-name", "\"HunterCraft\" Server")).append(',');
         field(json, "cpuMode", cpuMode).append(',');
         booleanField(json, "tpsDisplayEnabled", this.preferences.moduleEnabled("tps-display")).append(',');
-        booleanField(json, "tpsActionbar", this.preferences.booleanValue("modules.tps-display.actionbar", true)).append(',');
+        booleanField(json, "tpsActionbar", this.preferences.booleanValue("modules.tps-display.actionbar", false)).append(',');
         numberField(json, "tpsIntervalTicks", this.preferences.intValue("modules.tps-display.interval-ticks", 40)).append(',');
         field(json, "tpsActionbarFormat", this.preferences.stringValue("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%")).append(',');
         booleanField(json, "sidebarEnabled", this.preferences.moduleEnabled("sidebar")).append(',');
@@ -2094,10 +2094,10 @@ final class HunterWebPanelManager {
         final String mapUrl = body.getOrDefault("mapUrl", this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/")).trim();
         final String serverName = body.getOrDefault("serverName", this.webServerName()).trim();
         final String f3ServerName = body.getOrDefault("f3ServerName", this.preferences.stringValue("modules.management.f3-server-name", "\"HunterCraft\" Server")).trim();
-        final String cpuMode = normalizeCpuMode(body.getOrDefault("cpuMode", this.preferences.stringValue("optimizations.cpu.mode", "single-thread")));
+        final String cpuMode = normalizeCpuMode(body.getOrDefault("cpuMode", this.preferences.stringValue("optimizations.cpu.mode", "multi-thread")));
         final Boolean publicMap = parseBoolean(body.getOrDefault("publicMap", String.valueOf(this.preferences.booleanValue("modules.web-panel.public-map", true))));
         final Boolean tpsDisplayEnabled = parseBoolean(body.getOrDefault("tpsDisplayEnabled", String.valueOf(this.preferences.moduleEnabled("tps-display"))));
-        final Boolean tpsActionbar = parseBoolean(body.getOrDefault("tpsActionbar", String.valueOf(this.preferences.booleanValue("modules.tps-display.actionbar", true))));
+        final Boolean tpsActionbar = parseBoolean(body.getOrDefault("tpsActionbar", String.valueOf(this.preferences.booleanValue("modules.tps-display.actionbar", false))));
         final Integer tpsIntervalTicks = parseInteger(body.getOrDefault("tpsIntervalTicks", String.valueOf(this.preferences.intValue("modules.tps-display.interval-ticks", 40))), 20, 1200);
         final String tpsActionbarFormat = body.getOrDefault("tpsActionbarFormat", this.preferences.stringValue("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%")).trim();
         final Boolean sidebarEnabled = parseBoolean(body.getOrDefault("sidebarEnabled", String.valueOf(this.preferences.moduleEnabled("sidebar"))));
@@ -2128,10 +2128,16 @@ final class HunterWebPanelManager {
         final String apiKey = body.getOrDefault("apiKey", "").trim();
         final Boolean bundleGeyser = parseBoolean(body.getOrDefault("bundleGeyser", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.geyser", true))));
         final Boolean bundleFloodgate = parseBoolean(body.getOrDefault("bundleFloodgate", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.floodgate", true))));
-        final Boolean bundleNoChatReports = parseBoolean(body.getOrDefault("bundleNoChatReports", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.nochatreports", true))));
         final Boolean bundleHunterAssets = parseBoolean(body.getOrDefault("bundleHunterAssets", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.hunter-assets", true))));
         final Boolean bundleImageFrame = parseBoolean(body.getOrDefault("bundleImageFrame", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.imageframe", true))));
         final Boolean bundleViaLegacy = parseBoolean(body.getOrDefault("bundleViaLegacy", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.viarewind-legacysupport", true))));
+        final HunterNoChatReportsBridge.Settings currentNoChatReports = HunterNoChatReportsBridge.read();
+        final Boolean noChatReportsEnabled = parseBoolean(body.getOrDefault("noChatReportsEnabled", String.valueOf(currentNoChatReports.enabled())));
+        final Boolean noChatReportsAddQueryData = parseBoolean(body.getOrDefault("noChatReportsAddQueryData", String.valueOf(currentNoChatReports.addQueryData())));
+        final Boolean noChatReportsConvertToGameMessage = parseBoolean(body.getOrDefault("noChatReportsConvertToGameMessage", String.valueOf(currentNoChatReports.convertToGameMessage())));
+        final Boolean noChatReportsDemandOnClient = parseBoolean(body.getOrDefault("noChatReportsDemandOnClient", String.valueOf(currentNoChatReports.demandOnClient())));
+        final Boolean noChatReportsDebugLog = parseBoolean(body.getOrDefault("noChatReportsDebugLog", String.valueOf(currentNoChatReports.debugLog())));
+        final String noChatReportsDisconnectMessage = body.getOrDefault("noChatReportsDisconnectMessage", currentNoChatReports.disconnectMessage()).trim();
         final Boolean assetsResourcePackEnabled = parseBoolean(body.getOrDefault("assetsResourcePackEnabled", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.enabled", false))));
         final Boolean assetsResourcePackRequired = parseBoolean(body.getOrDefault("assetsResourcePackRequired", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.required", false))));
         final Boolean assetsSendOnJoin = parseBoolean(body.getOrDefault("assetsSendOnJoin", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.send-on-join", false))));
@@ -2139,7 +2145,7 @@ final class HunterWebPanelManager {
         final String assetsResourcePackSha1 = body.getOrDefault("assetsResourcePackSha1", this.hunterAssetsValue("resource-pack.sha1", "")).trim();
         final String geyserBedrockAddress = body.getOrDefault("geyserBedrockAddress", this.geyserValue("bedrock.address", "0.0.0.0")).trim();
         final Integer geyserBedrockPort = parseInteger(body.getOrDefault("geyserBedrockPort", String.valueOf(this.geyserIntValue("bedrock.port", 19132))), 1, 65535);
-        final String geyserJavaAuthType = HunterToolsPreferences.normalize(body.getOrDefault("geyserJavaAuthType", this.geyserValue("java.auth-type", "floodgate")).trim());
+        final String geyserJavaAuthType = HunterToolsPreferences.normalize(body.getOrDefault("geyserJavaAuthType", this.geyserAuthType()).trim());
         final String geyserPrimaryMotd = body.getOrDefault("geyserPrimaryMotd", this.geyserValue("motd.primary-motd", this.webServerName())).trim();
         final String geyserSecondaryMotd = body.getOrDefault("geyserSecondaryMotd", this.geyserValue("motd.secondary-motd", "HunterCore Bedrock")).trim();
         final Boolean geyserPassthroughMotd = parseBoolean(body.getOrDefault("geyserPassthroughMotd", String.valueOf(this.geyserBooleanValue("motd.passthrough-motd", true))));
@@ -2161,7 +2167,9 @@ final class HunterWebPanelManager {
             || authEnabled == null || authRegistrationRequired == null || authWebRegistrationRequired == null || authWebRegistrationEnabled == null || authWebLoginEnabled == null
             || authGuiEnabled == null || authOpenGuiOnJoin == null || authMinimumPasswordLength == null
             || corsEnabled == null || apiKeyEnabled == null || clearApiKey == null
-            || bundleGeyser == null || bundleFloodgate == null || bundleNoChatReports == null || bundleHunterAssets == null || bundleImageFrame == null || bundleViaLegacy == null
+            || bundleGeyser == null || bundleFloodgate == null || bundleHunterAssets == null || bundleImageFrame == null || bundleViaLegacy == null
+            || noChatReportsEnabled == null || noChatReportsAddQueryData == null || noChatReportsConvertToGameMessage == null
+            || noChatReportsDemandOnClient == null || noChatReportsDebugLog == null || noChatReportsDisconnectMessage.length() > 256
             || assetsResourcePackEnabled == null || assetsResourcePackRequired == null || assetsSendOnJoin == null
             || geyserBedrockPort == null || geyserPassthroughMotd == null || geyserPassthroughPlayerCounts == null
             || f3ServerName.isBlank() || f3ServerName.length() > 96 || apiKey.length() > 256
@@ -2182,7 +2190,7 @@ final class HunterWebPanelManager {
 
         final boolean restart = !bindAddress.equals(this.preferences.stringValue("modules.web-panel.bind-address", "127.0.0.1"))
             || port != this.preferences.intValue("modules.web-panel.port", 8088);
-        final boolean threadingChanged = !cpuMode.equalsIgnoreCase(this.preferences.stringValue("optimizations.cpu.mode", "single-thread"));
+        final boolean threadingChanged = !cpuMode.equalsIgnoreCase(this.preferences.stringValue("optimizations.cpu.mode", "multi-thread"));
         this.preferences.setValue("modules.web-panel.bind-address", bindAddress);
         this.preferences.setValue("modules.web-panel.port", port);
         this.preferences.setValue("modules.web-panel.external-url", externalUrl);
@@ -2220,7 +2228,6 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.web-panel.api-key-enabled", apiKeyEnabled);
         this.preferences.setValue("bundled-plugins.plugins.geyser", bundleGeyser);
         this.preferences.setValue("bundled-plugins.plugins.floodgate", bundleFloodgate);
-        this.preferences.setValue("bundled-plugins.plugins.nochatreports", bundleNoChatReports);
         this.preferences.setValue("bundled-plugins.plugins.hunter-assets", bundleHunterAssets);
         this.preferences.setValue("bundled-plugins.plugins.imageframe", bundleImageFrame);
         this.preferences.setValue("bundled-plugins.plugins.viarewind-legacysupport", bundleViaLegacy);
@@ -2237,6 +2244,14 @@ final class HunterWebPanelManager {
         this.preferences.setValue("optimizations.hunter-tools.actor-batch-save", asyncEnabled);
         this.preferences.setValue("optimizations.hunter-tools.render-workers", this.preferences.defaultWorkerCount());
         this.preferences.setValue("optimizations.hunter-tools.web-panel-workers", this.preferences.defaultWorkerCount());
+        HunterNoChatReportsBridge.save(new HunterNoChatReportsBridge.Settings(
+            noChatReportsEnabled,
+            noChatReportsAddQueryData,
+            noChatReportsConvertToGameMessage,
+            noChatReportsDemandOnClient,
+            noChatReportsDebugLog,
+            noChatReportsDisconnectMessage
+        ));
         this.saveHunterAssetsSettings(assetsResourcePackEnabled, assetsResourcePackRequired, assetsSendOnJoin, assetsResourcePackUrl, assetsResourcePackSha1);
         this.saveGeyserSettings(geyserBedrockAddress, geyserBedrockPort, geyserJavaAuthType, geyserPrimaryMotd, geyserSecondaryMotd, geyserPassthroughMotd, geyserPassthroughPlayerCounts, geyserServerName);
         this.savePreferences();
@@ -2468,10 +2483,17 @@ final class HunterWebPanelManager {
         json.append("\"bundled\":{");
         booleanField(json, "geyser", this.preferences.booleanValue("bundled-plugins.plugins.geyser", true)).append(',');
         booleanField(json, "floodgate", this.preferences.booleanValue("bundled-plugins.plugins.floodgate", true)).append(',');
-        booleanField(json, "noChatReports", this.preferences.booleanValue("bundled-plugins.plugins.nochatreports", true)).append(',');
         booleanField(json, "hunterAssets", this.preferences.booleanValue("bundled-plugins.plugins.hunter-assets", true)).append(',');
         booleanField(json, "imageFrame", this.preferences.booleanValue("bundled-plugins.plugins.imageframe", true)).append(',');
         booleanField(json, "viaLegacy", this.preferences.booleanValue("bundled-plugins.plugins.viarewind-legacysupport", true));
+        json.append("},\"noChatReports\":{");
+        final HunterNoChatReportsBridge.Settings noChatReports = HunterNoChatReportsBridge.read();
+        booleanField(json, "builtinEnabled", noChatReports.enabled()).append(',');
+        booleanField(json, "addQueryData", noChatReports.addQueryData()).append(',');
+        booleanField(json, "convertToGameMessage", noChatReports.convertToGameMessage()).append(',');
+        booleanField(json, "demandOnClient", noChatReports.demandOnClient()).append(',');
+        booleanField(json, "debugLog", noChatReports.debugLog()).append(',');
+        field(json, "disconnectMessage", noChatReports.disconnectMessage());
         json.append("},\"hunterAssets\":{");
         final Path assetsPath = this.hunterAssetsConfigPath();
         booleanField(json, "configPresent", Files.isRegularFile(assetsPath)).append(',');
@@ -2485,7 +2507,7 @@ final class HunterWebPanelManager {
         booleanField(json, "configPresent", Files.isRegularFile(geyserPath)).append(',');
         field(json, "bedrockAddress", this.geyserValue("bedrock.address", "0.0.0.0")).append(',');
         numberField(json, "bedrockPort", this.geyserIntValue("bedrock.port", 19132)).append(',');
-        field(json, "javaAuthType", this.geyserValue("java.auth-type", "floodgate")).append(',');
+        field(json, "javaAuthType", this.geyserAuthType()).append(',');
         field(json, "primaryMotd", this.geyserValue("motd.primary-motd", this.webServerName())).append(',');
         field(json, "secondaryMotd", this.geyserValue("motd.secondary-motd", "HunterCore Bedrock")).append(',');
         booleanField(json, "passthroughMotd", this.geyserBooleanValue("motd.passthrough-motd", true)).append(',');
@@ -2547,6 +2569,15 @@ final class HunterWebPanelManager {
         return this.loadGeyserConfig().getString(path, fallback);
     }
 
+    private String geyserAuthType() {
+        final YamlConfiguration geyser = this.loadGeyserConfig();
+        final String remote = geyser.getString("remote.auth-type", "");
+        if (remote != null && !remote.isBlank()) {
+            return remote;
+        }
+        return geyser.getString("java.auth-type", "floodgate");
+    }
+
     private int geyserIntValue(final String path, final int fallback) {
         return this.loadGeyserConfig().getInt(path, fallback);
     }
@@ -2571,13 +2602,17 @@ final class HunterWebPanelManager {
         geyser.set("bedrock.address", bedrockAddress);
         geyser.set("bedrock.port", bedrockPort);
         geyser.set("bedrock.clone-remote-port", false);
+        geyser.set("remote.address", geyser.getString("remote.address", "127.0.0.1"));
+        geyser.set("remote.port", geyser.getInt("remote.port", 25565));
+        geyser.set("remote.auth-type", javaAuthType);
         geyser.set("java.auth-type", javaAuthType);
         geyser.set("motd.primary-motd", primaryMotd);
         geyser.set("motd.secondary-motd", secondaryMotd);
         geyser.set("motd.passthrough-motd", passthroughMotd);
         geyser.set("motd.passthrough-player-counts", passthroughPlayerCounts);
         geyser.set("gameplay.server-name", serverName);
-        geyser.set("advanced.floodgate-key-file", "key.pem");
+        geyser.set("floodgate-key-file", geyser.getString("floodgate-key-file", "../floodgate/key.pem"));
+        geyser.set("advanced.floodgate-key-file", geyser.getString("advanced.floodgate-key-file", "../floodgate/key.pem"));
         geyser.save(path.toFile());
     }
 

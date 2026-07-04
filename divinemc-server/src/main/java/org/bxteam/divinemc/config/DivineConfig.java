@@ -764,7 +764,7 @@ public class DivineConfig {
         public static int playerProfileResultCachingTimeout = 1440;
 
         // No chat reports
-        public static boolean noChatReportsEnabled = false;
+        public static boolean noChatReportsEnabled = true;
         public static boolean noChatReportsAddQueryData = true;
         public static boolean noChatReportsConvertToGameMessage = true;
         public static boolean noChatReportsDebugLog = false;

@@ -702,6 +702,35 @@ input::placeholder {
   color: rgba(98, 112, 125, 0.72);
 }
 
+.fieldLabel {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.fieldLabel > span {
+  overflow-wrap: anywhere;
+}
+
+.fieldLabel input,
+.fieldLabel select,
+.fieldLabel textarea {
+  width: 100%;
+}
+
+.assetListBlock {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.assetListBlock .listHeader {
+  padding: 0 2px;
+}
+
 input:focus,
 select:focus {
   border-color: rgba(10, 132, 255, 0.56);
@@ -1065,6 +1094,35 @@ small {
   margin: 12px 0;
 }
 
+.commandActionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.commandAction {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.commandAction strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.commandAction input,
+.commandAction select,
+.commandAction button {
+  width: 100%;
+  min-width: 0;
+}
+
 .quickRow button,
 .smallButton {
   min-height: 36px;
@@ -1167,6 +1225,25 @@ textarea {
   color: var(--muted);
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.assetListBlock {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 10px;
+}
+
+.assetListBlock .dataItem,
+#assetsItemList .pluginItem,
+#titleList .pluginItem {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#assetsHero .summaryCard strong,
+#titlesHero .summaryCard strong {
+  overflow-wrap: anywhere;
 }
 
 .userActions,
