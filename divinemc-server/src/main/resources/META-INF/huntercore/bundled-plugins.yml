@@ -17,3 +17,9 @@ plugins:
     file: HunterTools.jar
     source: "builtin:huntercore-plugins/hunter-tools"
     resource: META-INF/huntercore/bundled-plugins/HunterTools.jar
+  - id: hunter-assets
+    name: HunterAssets
+    version: builtin
+    file: HunterAssets.jar
+    source: "builtin:huntercore-plugins/hunter-assets"
+    resource: META-INF/huntercore/bundled-plugins/HunterAssets.jar

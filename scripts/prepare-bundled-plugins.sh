@@ -4,11 +4,12 @@ shopt -s nullglob globstar
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${1:-"$ROOT_DIR/build/huntercore/bundled-plugins"}"
-PLUGINS_DIR="$OUT_DIR/plugins"
 WORK_DIR="$ROOT_DIR/build/huntercore/bundled-work"
-MANIFEST="$OUT_DIR/bundled-plugins.external.yml"
+RUN_DIR="$WORK_DIR/run-$$"
+STAGE_DIR="$RUN_DIR/output"
+PLUGINS_DIR="$STAGE_DIR/plugins"
+MANIFEST="$STAGE_DIR/bundled-plugins.external.yml"
 
-rm -rf "$PLUGINS_DIR"
 mkdir -p "$PLUGINS_DIR" "$WORK_DIR"
 
 sha256_file() {
@@ -35,11 +36,7 @@ curl_to_file() {
 
   for attempt in $(seq 1 "$attempts"); do
     set +e
-    if [[ -s "$target" ]]; then
-      curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --speed-limit 1024 --speed-time 30 -C - -o "$target" "$url"
-    else
-      curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --speed-limit 1024 --speed-time 30 -o "$target" "$url"
-    fi
+    curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --speed-limit 1024 --speed-time 30 -o "$target" "$url"
     status="$?"
     set -e
 
@@ -47,9 +44,6 @@ curl_to_file() {
       return 0
     fi
 
-    if [[ "$status" == "33" ]]; then
-      rm -f "$target"
-    fi
     sleep "$attempt"
   done
 
@@ -65,7 +59,8 @@ download_file() {
     return
   fi
 
-  local tmp="$target.tmp"
+  local tmp
+  tmp="$(mktemp "$WORK_DIR/download.XXXXXX.tmp")"
   curl_to_file "$url" "$tmp"
   if [[ -n "$expected_sha" ]]; then
     local actual_sha
@@ -88,7 +83,8 @@ download_file_sha512() {
     return
   fi
 
-  local tmp="$target.tmp"
+  local tmp
+  tmp="$(mktemp "$WORK_DIR/download.XXXXXX.tmp")"
   curl_to_file "$url" "$tmp"
   local actual_sha
   actual_sha="$(sha512_file "$tmp")"
@@ -282,6 +278,38 @@ download_github_release_asset \
 manifest_entry "viarewind" "ViaRewind" "4.1.2" "ViaRewind-4.1.2.jar" "https://github.com/ViaVersion/ViaRewind/releases/tag/4.1.2"
 
 download_github_release_asset \
+  "ViaVersion/ViaRewind-Legacy-Support" \
+  "1.5.4" \
+  "ViaRewind-Legacy-Support-1.5.4.jar" \
+  "$PLUGINS_DIR/ViaRewind-Legacy-Support-1.5.4.jar" \
+  "ddf1773c68f63f89b37ae301a7141fc11297f0cbe5277a3c1419a07c21b93fa9"
+manifest_entry "viarewind-legacysupport" "ViaRewind-Legacy-Support" "1.5.4" "ViaRewind-Legacy-Support-1.5.4.jar" "https://github.com/ViaVersion/ViaRewind-Legacy-Support/releases/tag/1.5.4"
+
+download_file \
+  "https://download.geysermc.org/v2/projects/geyser/versions/2.10.1/builds/1177/downloads/spigot" \
+  "$PLUGINS_DIR/Geyser-Spigot-2.10.1-b1177.jar" \
+  "52a04e22c4876a357b57a90588c5e5e2996b7d67c5d919fac9091a092352abc2"
+manifest_entry "geyser" "Geyser-Spigot" "2.10.1-b1177" "Geyser-Spigot-2.10.1-b1177.jar" "https://download.geysermc.org/v2/projects/geyser/versions/2.10.1/builds/1177"
+
+download_file \
+  "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/138/downloads/spigot" \
+  "$PLUGINS_DIR/floodgate-spigot-2.2.5-b138.jar" \
+  "44bdb908e2fb4ff1b974d5313d048a625a21555a9844cfb86256a98e8e1c6bd1"
+manifest_entry "floodgate" "Floodgate" "2.2.5-b138" "floodgate-spigot-2.2.5-b138.jar" "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/138"
+
+download_file_sha512 \
+  "https://cdn.modrinth.com/data/XRJBgd3p/versions/ulQJdHkG/NoChatReports-2.7.8.jar" \
+  "$PLUGINS_DIR/NoChatReports-2.7.8.jar" \
+  "d51ade789a7a1b29c714118101e3b3298262558e46d99872271f98bf2adb18e767554b46bf37d982f88c23ca63105639353c42f3e8d36a930a8799f81d30e606"
+manifest_entry "nochatreports" "NoChatReports" "2.7.8" "NoChatReports-2.7.8.jar" "https://modrinth.com/plugin/nochatreports-spigot-paper/version/ulQJdHkG"
+
+download_file \
+  "https://ci.loohpjames.com/job/ImageFrame/191/artifact/common/target/ImageFrame-2026.1.4.0.jar" \
+  "$PLUGINS_DIR/ImageFrame-2026.1.4.0.jar" \
+  ""
+manifest_entry "imageframe" "ImageFrame" "2026.1.4.0" "ImageFrame-2026.1.4.0.jar" "https://ci.loohpjames.com/job/ImageFrame/191/"
+
+download_github_release_asset \
   "BlueMap-Minecraft/BlueMap" \
   "v5.22" \
   "bluemap-5.22-paper.jar" \
@@ -343,5 +371,8 @@ manifest_entry "multiverse-core" "Multiverse-Core" "5.7.1" "multiverse-core-5.7.
 
 prepare_luckperms
 prepare_coreprotect
+rm -rf "$OUT_DIR"
+mkdir -p "$OUT_DIR"
+cp -R "$STAGE_DIR"/. "$OUT_DIR"/
 
 echo "Prepared bundled plugin jars in $PLUGINS_DIR"

@@ -224,9 +224,10 @@ gradle.projectsEvaluated {
     val tpaJar = project(":huntercore-plugins:hunter-tpa").tasks.named<Jar>("jar")
     val authJar = project(":huntercore-plugins:hunter-auth").tasks.named<Jar>("jar")
     val toolsJar = project(":huntercore-plugins:hunter-tools").tasks.named<Jar>("jar")
+    val assetsJar = project(":huntercore-plugins:hunter-assets").tasks.named<Jar>("jar")
 
     project(":divinemc-server").tasks.named<ProcessResources>("processResources") {
-        dependsOn(prepareExternalBundledPlugins, tpaJar, authJar, toolsJar)
+        dependsOn(prepareExternalBundledPlugins, tpaJar, authJar, toolsJar, assetsJar)
         from(bundledPluginOutput.map { it.dir("plugins") }) {
             into("META-INF/huntercore/bundled-plugins")
         }
@@ -244,6 +245,10 @@ gradle.projectsEvaluated {
         from(toolsJar.flatMap { it.archiveFile }) {
             into("META-INF/huntercore/bundled-plugins")
             rename { "HunterTools.jar" }
+        }
+        from(assetsJar.flatMap { it.archiveFile }) {
+            into("META-INF/huntercore/bundled-plugins")
+            rename { "HunterAssets.jar" }
         }
     }
 }
@@ -348,9 +353,13 @@ tasks.register("packageHunterCoreRelease") {
         releaseAsset.parentFile.mkdirs()
         Files.copy(output.toPath(), releaseAsset.toPath(), StandardCopyOption.REPLACE_EXISTING)
         val size = output.length()
-        check(size < 110_000_000L) {
-            "HunterCore release jar is ${"%.2f".format(size / 1_000_000.0)} MB, expected less than 110 MB"
+        val sizeMb = size / 1_000_000.0
+        if (size >= 180_000_000L) {
+            error("HunterCore release jar is ${"%.2f".format(sizeMb)} MB, expected less than 180 MB")
         }
-        println("HunterCore release jar: ${output.name} (${"%.2f".format(size / 1_000_000.0)} MB)")
+        if (size >= 110_000_000L) {
+            println("HunterCore release jar is large because bundled plugins are embedded: ${"%.2f".format(sizeMb)} MB")
+        }
+        println("HunterCore release jar: ${output.name} (${"%.2f".format(sizeMb)} MB)")
     }
 }

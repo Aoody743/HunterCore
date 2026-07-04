@@ -1,0 +1,20 @@
+language: zh_cn
+resource-pack:
+  enabled: false
+  url: ""
+  sha1: ""
+  prompt-zh-cn: "服务器需要加载 HunterAssets 资源包以显示自定义内容。"
+  prompt-en-us: "This server uses the HunterAssets resource pack for custom content."
+  required: false
+  send-on-join: false
+items:
+  sample_blade:
+    material: IRON_SWORD
+    amount: 1
+    custom-model-data: 200001
+    name-zh-cn: "&b示例长剑"
+    name-en-us: "&bSample Blade"
+    lore-zh-cn:
+      - "&7自定义材质示例"
+    lore-en-us:
+      - "&7Custom texture example"

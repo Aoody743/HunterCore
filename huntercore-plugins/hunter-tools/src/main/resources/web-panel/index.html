@@ -183,6 +183,7 @@
       <section class="panel pluginWorkspace">
         <div id="pluginReleaseReadiness" class="pluginReadiness mutedState"></div>
         <div id="pluginSummary" class="pluginSummary"></div>
+        <div id="pluginWorkbenchCards" class="summaryGrid"></div>
         <div class="pluginToolbar">
           <input id="pluginSearch" type="search" placeholder="Search plugins" data-i18n-placeholder="plugins.search">
           <select id="pluginFilter" aria-label="Plugin filter">
@@ -305,6 +306,35 @@
           </div>
           <p id="webAddressLine" class="subtleLine"></p>
           <p id="webThreadingLine" class="subtleLine"></p>
+          <div class="formGrid">
+            <label class="checkLine"><input id="bundleGeyser" form="webSettingsForm" type="checkbox"> <span>Geyser</span></label>
+            <label class="checkLine"><input id="bundleFloodgate" form="webSettingsForm" type="checkbox"> <span>Floodgate</span></label>
+            <label class="checkLine"><input id="bundleNoChatReports" form="webSettingsForm" type="checkbox"> <span>NoChatReports</span></label>
+            <label class="checkLine"><input id="bundleHunterAssets" form="webSettingsForm" type="checkbox"> <span>HunterAssets</span></label>
+            <label class="checkLine"><input id="bundleImageFrame" form="webSettingsForm" type="checkbox"> <span>ImageFrame</span></label>
+            <label class="checkLine"><input id="bundleViaLegacy" form="webSettingsForm" type="checkbox"> <span>Via Legacy</span></label>
+            <label class="checkLine"><input id="assetsResourcePackEnabled" form="webSettingsForm" type="checkbox"> <span>Resource Pack Enabled</span></label>
+            <label class="checkLine"><input id="assetsResourcePackRequired" form="webSettingsForm" type="checkbox"> <span>Resource Pack Required</span></label>
+            <label class="checkLine"><input id="assetsSendOnJoin" form="webSettingsForm" type="checkbox"> <span>Send Pack On Join</span></label>
+            <input id="assetsResourcePackUrl" form="webSettingsForm" placeholder="https://example.com/hunterassets.zip">
+            <input id="assetsResourcePackSha1" form="webSettingsForm" placeholder="40-char sha1">
+          </div>
+          <h3>Geyser</h3>
+          <div class="formGrid">
+            <input id="geyserBedrockAddress" form="webSettingsForm" placeholder="0.0.0.0">
+            <input id="geyserBedrockPort" form="webSettingsForm" inputmode="numeric" placeholder="19132">
+            <select id="geyserJavaAuthType" form="webSettingsForm">
+              <option value="floodgate">floodgate</option>
+              <option value="online">online</option>
+              <option value="offline">offline</option>
+            </select>
+            <input id="geyserServerName" form="webSettingsForm" placeholder="HunterCore Bedrock">
+            <input id="geyserPrimaryMotd" form="webSettingsForm" placeholder="HunterCore">
+            <input id="geyserSecondaryMotd" form="webSettingsForm" placeholder="Bedrock ready">
+            <label class="checkLine"><input id="geyserPassthroughMotd" form="webSettingsForm" type="checkbox"> <span>Passthrough MOTD</span></label>
+            <label class="checkLine"><input id="geyserPassthroughPlayerCounts" form="webSettingsForm" type="checkbox"> <span>Passthrough players</span></label>
+            <button type="submit" form="webSettingsForm" class="primaryButton">Save Geyser settings</button>
+          </div>
         </section>
 
         <section id="displaySettingsPanel" class="panel" data-config-panel="display" data-settings-scope="web" hidden>

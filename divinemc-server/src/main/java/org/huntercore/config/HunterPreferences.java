@@ -55,6 +55,9 @@ public final class HunterPreferences {
     }
 
     public boolean updateExistingBundledPlugins() {
+        if (this.config.contains("bundled-plugins.auto-update")) {
+            return this.config.getBoolean("bundled-plugins.auto-update", true);
+        }
         return this.config.getBoolean("bundled-plugins.update-existing", true);
     }
 
@@ -138,6 +141,7 @@ public final class HunterPreferences {
         changed |= this.setDefault("language", HunterLanguage.DEFAULT);
         changed |= this.setDefault("bundled-plugins.enabled", true);
         changed |= this.setDefault("bundled-plugins.update-existing", true);
+        changed |= this.setDefault("bundled-plugins.auto-update", true);
         changed |= this.setDefault("bundled-plugins.write-disabled-marker", true);
         for (final HunterBundledPluginRecord plugin : bundledPlugins) {
             final boolean enabledByDefault = !normalize(plugin.id()).equals("coreprotect");
@@ -258,6 +262,7 @@ public final class HunterPreferences {
             this.config.options().header("""
                 HunterCore preferences.
                 bundled-plugins controls which built-in jar files HunterCore installs before plugin scanning.
+                bundled-plugins.auto-update keeps installed bundled plugins aligned with the HunterCore release on startup.
                 modules controls HunterCore's self-written runtime features.
                 Commands can change these values, but disabling bundled plugins still requires a restart to unload them.
                 """);
@@ -285,6 +290,10 @@ public final class HunterPreferences {
         }
         if (legacy.contains("update-existing") && !this.config.contains("bundled-plugins.update-existing")) {
             this.config.set("bundled-plugins.update-existing", legacy.getBoolean("update-existing", true));
+            changed = true;
+        }
+        if (!this.config.contains("bundled-plugins.auto-update")) {
+            this.config.set("bundled-plugins.auto-update", this.config.getBoolean("bundled-plugins.update-existing", true));
             changed = true;
         }
         for (final HunterBundledPluginRecord plugin : bundledPlugins) {

@@ -70,6 +70,7 @@ public final class HunterBundledPluginInstaller {
 
             final List<InstallResult> results = installPlugins(pluginDirectory, plugins, preferences);
             prepareBlueMapDefaults(pluginDirectory, plugins, preferences);
+            prepareGeyserDefaults(pluginDirectory, plugins, preferences);
 
             final InstallReport report = new InstallReport(plugins, results);
             HunterCoreRuntime.get().setLastInstallReport(report);
@@ -115,6 +116,36 @@ public final class HunterBundledPluginInstaller {
             }
         } catch (final IOException ex) {
             LOGGER.warn("HunterCore could not prepare BlueMap core.conf", ex);
+        }
+    }
+
+    private static void prepareGeyserDefaults(
+        final Path pluginDirectory,
+        final List<HunterBundledPluginRecord> plugins,
+        final HunterPreferences preferences
+    ) {
+        final boolean geyserBundled = plugins.stream().anyMatch(plugin -> plugin.id().equals("geyser"));
+        if (!geyserBundled || !preferences.bundledPluginEnabled("geyser")) {
+            return;
+        }
+        final Path config = pluginDirectory.resolve("Geyser-Spigot").resolve("config.yml");
+        try {
+            Files.createDirectories(config.getParent());
+            final YamlConfiguration yaml = Files.isRegularFile(config) ? YamlConfiguration.loadConfiguration(config.toFile()) : new YamlConfiguration();
+            yaml.set("bedrock.address", yaml.getString("bedrock.address", "0.0.0.0"));
+            yaml.set("bedrock.port", yaml.getInt("bedrock.port", 19132));
+            yaml.set("bedrock.clone-remote-port", yaml.getBoolean("bedrock.clone-remote-port", false));
+            yaml.set("java.auth-type", yaml.getString("java.auth-type", preferences.bundledPluginEnabled("floodgate") ? "floodgate" : "online"));
+            yaml.set("motd.primary-motd", yaml.getString("motd.primary-motd", "HunterCore"));
+            yaml.set("motd.secondary-motd", yaml.getString("motd.secondary-motd", "Bedrock ready"));
+            yaml.set("motd.passthrough-motd", yaml.getBoolean("motd.passthrough-motd", true));
+            yaml.set("motd.passthrough-player-counts", yaml.getBoolean("motd.passthrough-player-counts", true));
+            yaml.set("gameplay.server-name", yaml.getString("gameplay.server-name", "HunterCore"));
+            yaml.set("advanced.floodgate-key-file", yaml.getString("advanced.floodgate-key-file", "key.pem"));
+            yaml.save(config.toFile());
+            LOGGER.info("HunterCore prepared Geyser-Spigot config defaults.");
+        } catch (final IOException ex) {
+            LOGGER.warn("HunterCore could not prepare Geyser config", ex);
         }
     }
 

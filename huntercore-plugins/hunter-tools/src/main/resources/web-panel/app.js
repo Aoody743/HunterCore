@@ -1541,6 +1541,9 @@ function renderOverview(data) {
     $('pluginReleaseReadiness').innerHTML = data.plugins ? pluginReadinessPanel(data.plugins) : '';
     $('pluginReleaseReadiness').classList.toggle('mutedState', !data.plugins);
   }
+  if ($('pluginWorkbenchCards')) {
+    $('pluginWorkbenchCards').innerHTML = data.plugins ? pluginWorkbenchCards(data.plugins, data.webSettings?.thirdParty || {}) : '';
+  }
   $('pluginList').innerHTML = filteredPlugins
     ? filteredPlugins.map((plugin) => pluginLine(plugin, Boolean(data.session?.admin))).join('') || `<p class="mutedState">${esc(t('plugins.empty'))}</p>`
     : `<p class="mutedState">${esc(t('plugins.loginRequired'))}</p>`;
@@ -1582,6 +1585,25 @@ function renderPluginInspector(plugins) {
       ${dataItem('Authors', selected.authors?.join(', ') || '--', selected.website || '--')}
       ${dataItem('Dependencies', selected.dependencies?.join(', ') || '--', selected.softDependencies?.length ? `soft: ${selected.softDependencies.join(', ')}` : '')}
     </div>`;
+}
+
+function pluginWorkbenchCards(plugins, thirdParty) {
+  const find = (names) => plugins.find((plugin) => names.includes((plugin.name || '').toLowerCase()));
+  const status = (names) => pluginStatusLabel(find(names)?.status || 'missing');
+  const bundled = thirdParty?.bundled || {};
+  const geyser = thirdParty?.geyser || {};
+  return [
+    summaryCard('Cross-Platform', [
+      `Geyser ${status(['geyser-spigot', 'geyser'])}`,
+      `Floodgate ${status(['floodgate'])}`,
+      `ViaVersion ${status(['viaversion'])}`,
+      `ViaBackwards ${status(['viabackwards'])}`,
+      `ViaRewind ${status(['viarewind'])}`,
+      `Via Legacy ${status(['viarewind-legacy-support'])}`
+    ].join(' · '), geyser.configPresent ? `${geyser.bedrockAddress || '0.0.0.0'}:${geyser.bedrockPort || 19132} · ${geyser.javaAuthType || 'floodgate'}` : 'Geyser config pending'),
+    summaryCard('Chat & Privacy', `NoChatReports ${status(['nochatreports'])}`, bundled.noChatReports ? 'Bundled on next install' : 'Bundled off'),
+    summaryCard('Custom Content', `HunterAssets ${status(['hunterassets', 'hunter-assets'])} · ImageFrame ${status(['imageframe'])}`, `${bundled.hunterAssets ? 'HunterAssets on' : 'HunterAssets off'} · ${bundled.imageFrame ? 'ImageFrame on' : 'ImageFrame off'}`)
+  ].join('');
 }
 
 function renderActorInspector(actors) {
@@ -1705,6 +1727,29 @@ function renderWebSettings(settings) {
   $('webClearApiKey').checked = false;
   $('webAddressLine').textContent = settings.address || '';
   $('webThreadingLine').textContent = `${t('webSettings.cpuMode')}: ${settings.cpuMode || 'single-thread'} · ${settings.asyncEnabled ? 'async' : 'sync'} · workers ${settings.recommendedWorkers || '--'} · F3 ${settings.f3ServerName || ''}`;
+  const thirdParty = settings.thirdParty || {};
+  const bundled = thirdParty.bundled || {};
+  const geyser = thirdParty.geyser || {};
+  $('bundleGeyser').checked = Boolean(bundled.geyser);
+  $('bundleFloodgate').checked = Boolean(bundled.floodgate);
+  $('bundleNoChatReports').checked = Boolean(bundled.noChatReports);
+  $('bundleHunterAssets').checked = Boolean(bundled.hunterAssets);
+  $('bundleImageFrame').checked = Boolean(bundled.imageFrame);
+  $('bundleViaLegacy').checked = Boolean(bundled.viaLegacy);
+  const hunterAssets = thirdParty.hunterAssets || {};
+  $('assetsResourcePackEnabled').checked = Boolean(hunterAssets.enabled);
+  $('assetsResourcePackRequired').checked = Boolean(hunterAssets.required);
+  $('assetsSendOnJoin').checked = Boolean(hunterAssets.sendOnJoin);
+  $('assetsResourcePackUrl').value = hunterAssets.url || '';
+  $('assetsResourcePackSha1').value = hunterAssets.sha1 || '';
+  $('geyserBedrockAddress').value = geyser.bedrockAddress || '0.0.0.0';
+  $('geyserBedrockPort').value = geyser.bedrockPort ?? 19132;
+  $('geyserJavaAuthType').value = geyser.javaAuthType || 'floodgate';
+  $('geyserPrimaryMotd').value = geyser.primaryMotd || '';
+  $('geyserSecondaryMotd').value = geyser.secondaryMotd || '';
+  $('geyserPassthroughMotd').checked = Boolean(geyser.passthroughMotd);
+  $('geyserPassthroughPlayerCounts').checked = Boolean(geyser.passthroughPlayerCounts);
+  $('geyserServerName').value = geyser.serverName || '';
 }
 
 function renderAiApprovals(approvals) {
@@ -2378,7 +2423,26 @@ function bindEvents() {
       corsAllowOrigin: $('webCorsAllowOrigin').value,
       apiKeyEnabled: String($('webApiKeyEnabled').checked),
       apiKey: $('webApiKey').value,
-      clearApiKey: String($('webClearApiKey').checked)
+      clearApiKey: String($('webClearApiKey').checked),
+      bundleGeyser: String($('bundleGeyser').checked),
+      bundleFloodgate: String($('bundleFloodgate').checked),
+      bundleNoChatReports: String($('bundleNoChatReports').checked),
+      bundleHunterAssets: String($('bundleHunterAssets').checked),
+      bundleImageFrame: String($('bundleImageFrame').checked),
+      bundleViaLegacy: String($('bundleViaLegacy').checked),
+      assetsResourcePackEnabled: String($('assetsResourcePackEnabled').checked),
+      assetsResourcePackRequired: String($('assetsResourcePackRequired').checked),
+      assetsSendOnJoin: String($('assetsSendOnJoin').checked),
+      assetsResourcePackUrl: $('assetsResourcePackUrl').value,
+      assetsResourcePackSha1: $('assetsResourcePackSha1').value,
+      geyserBedrockAddress: $('geyserBedrockAddress').value,
+      geyserBedrockPort: $('geyserBedrockPort').value,
+      geyserJavaAuthType: $('geyserJavaAuthType').value,
+      geyserPrimaryMotd: $('geyserPrimaryMotd').value,
+      geyserSecondaryMotd: $('geyserSecondaryMotd').value,
+      geyserPassthroughMotd: String($('geyserPassthroughMotd').checked),
+      geyserPassthroughPlayerCounts: String($('geyserPassthroughPlayerCounts').checked),
+      geyserServerName: $('geyserServerName').value
     };
     try {
       const result = await json('/api/admin/web-settings', { method: 'POST', body: JSON.stringify(payload) });

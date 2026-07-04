@@ -1238,7 +1238,8 @@ final class HunterWebPanelManager {
         booleanField(json, "apiKeyConfigured", !this.preferences.stringValue("modules.web-panel.api-key", "").isBlank()).append(',');
         booleanField(json, "asyncEnabled", !cpuMode.equals("single-thread")).append(',');
         numberField(json, "recommendedWorkers", this.preferences.defaultWorkerCount()).append(',');
-        field(json, "address", this.addressLine());
+        field(json, "address", this.addressLine()).append(',');
+        json.append("\"thirdParty\":").append(this.thirdPartySettingsJson());
         json.append('}');
         return json.toString();
     }
@@ -2059,6 +2060,25 @@ final class HunterWebPanelManager {
         final Boolean apiKeyEnabled = parseBoolean(body.getOrDefault("apiKeyEnabled", String.valueOf(this.preferences.booleanValue("modules.web-panel.api-key-enabled", false))));
         final Boolean clearApiKey = parseBoolean(body.getOrDefault("clearApiKey", "false"));
         final String apiKey = body.getOrDefault("apiKey", "").trim();
+        final Boolean bundleGeyser = parseBoolean(body.getOrDefault("bundleGeyser", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.geyser", true))));
+        final Boolean bundleFloodgate = parseBoolean(body.getOrDefault("bundleFloodgate", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.floodgate", true))));
+        final Boolean bundleNoChatReports = parseBoolean(body.getOrDefault("bundleNoChatReports", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.nochatreports", true))));
+        final Boolean bundleHunterAssets = parseBoolean(body.getOrDefault("bundleHunterAssets", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.hunter-assets", true))));
+        final Boolean bundleImageFrame = parseBoolean(body.getOrDefault("bundleImageFrame", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.imageframe", true))));
+        final Boolean bundleViaLegacy = parseBoolean(body.getOrDefault("bundleViaLegacy", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.viarewind-legacysupport", true))));
+        final Boolean assetsResourcePackEnabled = parseBoolean(body.getOrDefault("assetsResourcePackEnabled", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.enabled", false))));
+        final Boolean assetsResourcePackRequired = parseBoolean(body.getOrDefault("assetsResourcePackRequired", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.required", false))));
+        final Boolean assetsSendOnJoin = parseBoolean(body.getOrDefault("assetsSendOnJoin", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.send-on-join", false))));
+        final String assetsResourcePackUrl = body.getOrDefault("assetsResourcePackUrl", this.hunterAssetsValue("resource-pack.url", "")).trim();
+        final String assetsResourcePackSha1 = body.getOrDefault("assetsResourcePackSha1", this.hunterAssetsValue("resource-pack.sha1", "")).trim();
+        final String geyserBedrockAddress = body.getOrDefault("geyserBedrockAddress", this.geyserValue("bedrock.address", "0.0.0.0")).trim();
+        final Integer geyserBedrockPort = parseInteger(body.getOrDefault("geyserBedrockPort", String.valueOf(this.geyserIntValue("bedrock.port", 19132))), 1, 65535);
+        final String geyserJavaAuthType = HunterToolsPreferences.normalize(body.getOrDefault("geyserJavaAuthType", this.geyserValue("java.auth-type", "floodgate")).trim());
+        final String geyserPrimaryMotd = body.getOrDefault("geyserPrimaryMotd", this.geyserValue("motd.primary-motd", this.webServerName())).trim();
+        final String geyserSecondaryMotd = body.getOrDefault("geyserSecondaryMotd", this.geyserValue("motd.secondary-motd", "HunterCore Bedrock")).trim();
+        final Boolean geyserPassthroughMotd = parseBoolean(body.getOrDefault("geyserPassthroughMotd", String.valueOf(this.geyserBooleanValue("motd.passthrough-motd", true))));
+        final Boolean geyserPassthroughPlayerCounts = parseBoolean(body.getOrDefault("geyserPassthroughPlayerCounts", String.valueOf(this.geyserBooleanValue("motd.passthrough-player-counts", true))));
+        final String geyserServerName = body.getOrDefault("geyserServerName", this.geyserValue("gameplay.server-name", this.webServerName())).trim();
         final int port;
         try {
             port = Integer.parseInt(rawPort);
@@ -2075,8 +2095,16 @@ final class HunterWebPanelManager {
             || authEnabled == null || authRegistrationRequired == null || authWebRegistrationRequired == null || authWebRegistrationEnabled == null || authWebLoginEnabled == null
             || authGuiEnabled == null || authOpenGuiOnJoin == null || authMinimumPasswordLength == null
             || corsEnabled == null || apiKeyEnabled == null || clearApiKey == null
+            || bundleGeyser == null || bundleFloodgate == null || bundleNoChatReports == null || bundleHunterAssets == null || bundleImageFrame == null || bundleViaLegacy == null
+            || assetsResourcePackEnabled == null || assetsResourcePackRequired == null || assetsSendOnJoin == null
+            || geyserBedrockPort == null || geyserPassthroughMotd == null || geyserPassthroughPlayerCounts == null
             || f3ServerName.isBlank() || f3ServerName.length() > 96 || apiKey.length() > 256
+            || geyserBedrockAddress.isBlank() || geyserBedrockAddress.length() > 128 || geyserJavaAuthType.isBlank()
+            || !(geyserJavaAuthType.equals("floodgate") || geyserJavaAuthType.equals("online") || geyserJavaAuthType.equals("offline"))
+            || geyserPrimaryMotd.isBlank() || geyserPrimaryMotd.length() > 128 || geyserSecondaryMotd.length() > 128 || geyserServerName.isBlank() || geyserServerName.length() > 128
+            || assetsResourcePackUrl.length() > 512 || assetsResourcePackSha1.length() > 64
             || invalidOptionalUrl(externalUrl) || invalidOptionalUrl(authRegistrationUrl)
+            || invalidOptionalUrl(assetsResourcePackUrl)
             || corsAllowOrigin.isBlank() || corsAllowOrigin.length() > 256 || containsHeaderBreak(corsAllowOrigin)) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_web_settings\"}");
             return;
@@ -2124,6 +2152,12 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.web-panel.cors-enabled", corsEnabled);
         this.preferences.setValue("modules.web-panel.cors-allow-origin", corsAllowOrigin);
         this.preferences.setValue("modules.web-panel.api-key-enabled", apiKeyEnabled);
+        this.preferences.setValue("bundled-plugins.plugins.geyser", bundleGeyser);
+        this.preferences.setValue("bundled-plugins.plugins.floodgate", bundleFloodgate);
+        this.preferences.setValue("bundled-plugins.plugins.nochatreports", bundleNoChatReports);
+        this.preferences.setValue("bundled-plugins.plugins.hunter-assets", bundleHunterAssets);
+        this.preferences.setValue("bundled-plugins.plugins.imageframe", bundleImageFrame);
+        this.preferences.setValue("bundled-plugins.plugins.viarewind-legacysupport", bundleViaLegacy);
         if (clearApiKey) {
             this.preferences.setValue("modules.web-panel.api-key", "");
         } else if (!apiKey.isBlank()) {
@@ -2137,6 +2171,8 @@ final class HunterWebPanelManager {
         this.preferences.setValue("optimizations.hunter-tools.actor-batch-save", asyncEnabled);
         this.preferences.setValue("optimizations.hunter-tools.render-workers", this.preferences.defaultWorkerCount());
         this.preferences.setValue("optimizations.hunter-tools.web-panel-workers", this.preferences.defaultWorkerCount());
+        this.saveHunterAssetsSettings(assetsResourcePackEnabled, assetsResourcePackRequired, assetsSendOnJoin, assetsResourcePackUrl, assetsResourcePackSha1);
+        this.saveGeyserSettings(geyserBedrockAddress, geyserBedrockPort, geyserJavaAuthType, geyserPrimaryMotd, geyserSecondaryMotd, geyserPassthroughMotd, geyserPassthroughPlayerCounts, geyserServerName);
         this.savePreferences();
         this.plugin.applyServerBrand();
         this.plugin.restartDisplayTasks();
@@ -2159,6 +2195,125 @@ final class HunterWebPanelManager {
             || input.equals("high-clock")
             || input.equals("high-core")
             || input.equals("multi-thread");
+    }
+
+    private String thirdPartySettingsJson() {
+        final StringBuilder json = new StringBuilder(256);
+        json.append('{');
+        json.append("\"bundled\":{");
+        booleanField(json, "geyser", this.preferences.booleanValue("bundled-plugins.plugins.geyser", true)).append(',');
+        booleanField(json, "floodgate", this.preferences.booleanValue("bundled-plugins.plugins.floodgate", true)).append(',');
+        booleanField(json, "noChatReports", this.preferences.booleanValue("bundled-plugins.plugins.nochatreports", true)).append(',');
+        booleanField(json, "hunterAssets", this.preferences.booleanValue("bundled-plugins.plugins.hunter-assets", true)).append(',');
+        booleanField(json, "imageFrame", this.preferences.booleanValue("bundled-plugins.plugins.imageframe", true)).append(',');
+        booleanField(json, "viaLegacy", this.preferences.booleanValue("bundled-plugins.plugins.viarewind-legacysupport", true));
+        json.append("},\"hunterAssets\":{");
+        final Path assetsPath = this.hunterAssetsConfigPath();
+        booleanField(json, "configPresent", Files.isRegularFile(assetsPath)).append(',');
+        booleanField(json, "enabled", this.hunterAssetsBooleanValue("resource-pack.enabled", false)).append(',');
+        booleanField(json, "required", this.hunterAssetsBooleanValue("resource-pack.required", false)).append(',');
+        booleanField(json, "sendOnJoin", this.hunterAssetsBooleanValue("resource-pack.send-on-join", false)).append(',');
+        field(json, "url", this.hunterAssetsValue("resource-pack.url", "")).append(',');
+        field(json, "sha1", this.hunterAssetsValue("resource-pack.sha1", ""));
+        json.append("},\"geyser\":{");
+        final Path geyserPath = this.geyserConfigPath();
+        booleanField(json, "configPresent", Files.isRegularFile(geyserPath)).append(',');
+        field(json, "bedrockAddress", this.geyserValue("bedrock.address", "0.0.0.0")).append(',');
+        numberField(json, "bedrockPort", this.geyserIntValue("bedrock.port", 19132)).append(',');
+        field(json, "javaAuthType", this.geyserValue("java.auth-type", "floodgate")).append(',');
+        field(json, "primaryMotd", this.geyserValue("motd.primary-motd", this.webServerName())).append(',');
+        field(json, "secondaryMotd", this.geyserValue("motd.secondary-motd", "HunterCore Bedrock")).append(',');
+        booleanField(json, "passthroughMotd", this.geyserBooleanValue("motd.passthrough-motd", true)).append(',');
+        booleanField(json, "passthroughPlayerCounts", this.geyserBooleanValue("motd.passthrough-player-counts", true)).append(',');
+        field(json, "serverName", this.geyserValue("gameplay.server-name", this.webServerName()));
+        json.append("}}");
+        return json.toString();
+    }
+
+    private Path geyserConfigPath() {
+        return Bukkit.getPluginsFolder().toPath().resolve("Geyser-Spigot").resolve("config.yml");
+    }
+
+    private Path hunterAssetsConfigPath() {
+        return Bukkit.getPluginsFolder().toPath().resolve("HunterAssets").resolve("config.yml");
+    }
+
+    private YamlConfiguration loadHunterAssetsConfig() {
+        final Path path = this.hunterAssetsConfigPath();
+        return Files.isRegularFile(path) ? YamlConfiguration.loadConfiguration(path.toFile()) : new YamlConfiguration();
+    }
+
+    private String hunterAssetsValue(final String path, final String fallback) {
+        return this.loadHunterAssetsConfig().getString(path, fallback);
+    }
+
+    private boolean hunterAssetsBooleanValue(final String path, final boolean fallback) {
+        return this.loadHunterAssetsConfig().getBoolean(path, fallback);
+    }
+
+    private void saveHunterAssetsSettings(
+        final boolean enabled,
+        final boolean required,
+        final boolean sendOnJoin,
+        final String url,
+        final String sha1
+    ) {
+        final Path path = this.hunterAssetsConfigPath();
+        try {
+            Files.createDirectories(path.getParent());
+            final YamlConfiguration yaml = Files.isRegularFile(path) ? YamlConfiguration.loadConfiguration(path.toFile()) : new YamlConfiguration();
+            yaml.set("resource-pack.enabled", enabled);
+            yaml.set("resource-pack.required", required);
+            yaml.set("resource-pack.send-on-join", sendOnJoin);
+            yaml.set("resource-pack.url", url);
+            yaml.set("resource-pack.sha1", sha1);
+            yaml.save(path.toFile());
+        } catch (final IOException ex) {
+            throw new IllegalStateException("Failed to save HunterAssets config", ex);
+        }
+    }
+
+    private YamlConfiguration loadGeyserConfig() {
+        final Path path = this.geyserConfigPath();
+        return Files.isRegularFile(path) ? YamlConfiguration.loadConfiguration(path.toFile()) : new YamlConfiguration();
+    }
+
+    private String geyserValue(final String path, final String fallback) {
+        return this.loadGeyserConfig().getString(path, fallback);
+    }
+
+    private int geyserIntValue(final String path, final int fallback) {
+        return this.loadGeyserConfig().getInt(path, fallback);
+    }
+
+    private boolean geyserBooleanValue(final String path, final boolean fallback) {
+        return this.loadGeyserConfig().getBoolean(path, fallback);
+    }
+
+    private void saveGeyserSettings(
+        final String bedrockAddress,
+        final int bedrockPort,
+        final String javaAuthType,
+        final String primaryMotd,
+        final String secondaryMotd,
+        final boolean passthroughMotd,
+        final boolean passthroughPlayerCounts,
+        final String serverName
+    ) throws IOException {
+        final Path path = this.geyserConfigPath();
+        Files.createDirectories(path.getParent());
+        final YamlConfiguration geyser = this.loadGeyserConfig();
+        geyser.set("bedrock.address", bedrockAddress);
+        geyser.set("bedrock.port", bedrockPort);
+        geyser.set("bedrock.clone-remote-port", false);
+        geyser.set("java.auth-type", javaAuthType);
+        geyser.set("motd.primary-motd", primaryMotd);
+        geyser.set("motd.secondary-motd", secondaryMotd);
+        geyser.set("motd.passthrough-motd", passthroughMotd);
+        geyser.set("motd.passthrough-player-counts", passthroughPlayerCounts);
+        geyser.set("gameplay.server-name", serverName);
+        geyser.set("advanced.floodgate-key-file", "key.pem");
+        geyser.save(path.toFile());
     }
 
     private static String normalizeCpuMode(final String input) {
