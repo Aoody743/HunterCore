@@ -87,7 +87,7 @@ final class HunterWebPanelManager {
     private static final int HASH_ITERATIONS = 120_000;
     private static final int HASH_BITS = 256;
     private static final Pattern LUCKPERMS_EDITOR_URL = Pattern.compile("https://luckperms\\.net/editor/[^\\s<>\\]\")]+", Pattern.CASE_INSENSITIVE);
-    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "auth", "web-panel");
+    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "auth", "web-panel", "titles");
     private static final Map<String, List<String>> MODULE_COMMANDS = Map.of(
         "essentials", HunterToolsPreferences.essentialsCommands(),
         "management", HunterToolsPreferences.managementCommands(),
@@ -98,6 +98,7 @@ final class HunterWebPanelManager {
 
     private final HunterToolsPlugin plugin;
     private final HunterToolsPreferences preferences;
+    private final HunterAssetsWorkspaceService assetsWorkspaceService;
     private final Map<String, WebSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, CachedResponse> statusCaches = new ConcurrentHashMap<>();
     private final AtomicLong nextPluginOperationAt = new AtomicLong();
@@ -109,6 +110,7 @@ final class HunterWebPanelManager {
     HunterWebPanelManager(final HunterToolsPlugin plugin, final HunterToolsPreferences preferences) {
         this.plugin = plugin;
         this.preferences = preferences;
+        this.assetsWorkspaceService = new HunterAssetsWorkspaceService(plugin, preferences);
     }
 
     synchronized void start() {
@@ -469,6 +471,66 @@ final class HunterWebPanelManager {
                 this.adminPluginUpdate(exchange);
                 return;
             }
+            if (path.equals("/api/admin/assets")) {
+                this.requireMethod(exchange, "GET");
+                this.adminAssets(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/assets/upload")) {
+                this.requireMethod(exchange, "POST");
+                this.adminAssetsUpload(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/assets/item/save")) {
+                this.requireMethod(exchange, "POST");
+                this.adminAssetsItemSave(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/assets/item/remove")) {
+                this.requireMethod(exchange, "POST");
+                this.adminAssetsItemRemove(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/assets/prompt")) {
+                this.requireMethod(exchange, "POST");
+                this.adminAssetsPrompt(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/assets/validate")) {
+                this.requireMethod(exchange, "POST");
+                this.adminAssetsValidate(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/assets/publish")) {
+                this.requireMethod(exchange, "POST");
+                this.adminAssetsPublish(exchange);
+                return;
+            }
+            if (path.startsWith("/api/assets/download/")) {
+                this.requireMethod(exchange, "GET");
+                this.assetsDownload(exchange, path.substring("/api/assets/download/".length()));
+                return;
+            }
+            if (path.equals("/api/admin/title/save")) {
+                this.requireMethod(exchange, "POST");
+                this.adminTitleSave(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/title/remove")) {
+                this.requireMethod(exchange, "POST");
+                this.adminTitleRemove(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/title/assign")) {
+                this.requireMethod(exchange, "POST");
+                this.adminTitleAssign(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/title/module")) {
+                this.requireMethod(exchange, "POST");
+                this.adminTitleModule(exchange);
+                return;
+            }
             this.send(exchange, 404, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"not_found\"}");
         } catch (final MethodMismatchException ex) {
             this.send(exchange, 405, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"method_not_allowed\"}");
@@ -737,6 +799,10 @@ final class HunterWebPanelManager {
             json.append(']');
 
             json.append(",\"plugins\":").append(this.pluginsJson());
+            json.append(",\"assets\":").append(this.assetsWorkspaceService.summaryJson(this.preferences.language()));
+            if (this.plugin.titleManager() != null) {
+                json.append(",\"titles\":").append(this.plugin.titleManager().titlesJson());
+            }
         }
         if (session != null && session.admin()) {
             json.append(",\"modules\":").append(this.modulesJson());
@@ -2197,6 +2263,205 @@ final class HunterWebPanelManager {
             || input.equals("multi-thread");
     }
 
+    private void adminAssets(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null) {
+            return;
+        }
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
+    }
+
+    private void adminAssetsUpload(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 12 * 1024 * 1024));
+        try {
+            final HunterAssetsWorkspaceService.UploadedAsset uploaded = this.assetsWorkspaceService.upload(
+                body.getOrDefault("scope", "presets"),
+                body.getOrDefault("fileName", "asset.bin"),
+                body.getOrDefault("contentBase64", "")
+            );
+            this.invalidateStatusCaches();
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"uploaded\":" + uploaded.toJson() + ",\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
+        } catch (final Exception ex) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":" + string(ex.getMessage()) + "}");
+        }
+    }
+
+    private void adminAssetsItemSave(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 256 * 1024));
+        try {
+            final HunterAssetsWorkspaceService.AssetItemDefinition saved = this.assetsWorkspaceService.saveItem(new HunterAssetsWorkspaceService.AssetItemDefinition(
+                body.getOrDefault("id", ""),
+                parseBoolean(body.getOrDefault("enabled", "true")) != Boolean.FALSE,
+                body.getOrDefault("category", "items"),
+                body.getOrDefault("material", "PAPER"),
+                parseInt(body.getOrDefault("amount", "1"), 1),
+                parseInt(body.getOrDefault("customModelData", "0"), 0),
+                body.getOrDefault("permission", ""),
+                body.getOrDefault("pack", ""),
+                body.getOrDefault("icon", ""),
+                body.getOrDefault("description", ""),
+                body.getOrDefault("nameZhCn", body.getOrDefault("id", "")),
+                body.getOrDefault("nameEnUs", body.getOrDefault("id", "")),
+                lines(body.getOrDefault("loreZhCn", "")),
+                lines(body.getOrDefault("loreEnUs", ""))
+            ));
+            this.invalidateStatusCaches();
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"item\":{\"id\":" + string(saved.id()) + "},\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
+        } catch (final Exception ex) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":" + string(ex.getMessage()) + "}");
+        }
+    }
+
+    private void adminAssetsItemRemove(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
+        try {
+            final boolean removed = this.assetsWorkspaceService.removeItem(body.getOrDefault("id", ""));
+            this.invalidateStatusCaches();
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":" + removed + ",\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
+        } catch (final Exception ex) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":" + string(ex.getMessage()) + "}");
+        }
+    }
+
+    private void adminAssetsPrompt(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 128 * 1024));
+        final HunterAssetsWorkspaceService.AssetPromptBundle bundle = this.assetsWorkspaceService.generatePrompt(new HunterAssetsWorkspaceService.PromptRequest(
+            body.getOrDefault("style", ""),
+            body.getOrDefault("useCase", ""),
+            body.getOrDefault("theme", ""),
+            body.getOrDefault("category", "items"),
+            body.getOrDefault("colorPalette", ""),
+            body.getOrDefault("materialFeel", ""),
+            body.getOrDefault("resolution", "16x16"),
+            parseBoolean(body.getOrDefault("transparentBackground", "true")) != Boolean.FALSE
+        ), this.preferences.language());
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"prompt\":" + bundle.toJson() + "}");
+    }
+
+    private void adminAssetsValidate(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null) {
+            return;
+        }
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"validation\":" + this.assetsWorkspaceService.validate().toJson() + ",\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
+    }
+
+    private void adminAssetsPublish(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
+        try {
+            final HunterAssetsWorkspaceService.PublishedPack pack = this.assetsWorkspaceService.publishSelectedPack(
+                body.getOrDefault("fileName", ""),
+                parseBoolean(body.getOrDefault("required", "false")) == Boolean.TRUE,
+                parseBoolean(body.getOrDefault("sendOnJoin", "false")) == Boolean.TRUE,
+                body.getOrDefault("externalBaseUrl", "")
+            );
+            this.invalidateStatusCaches();
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"published\":" + pack.toJson() + ",\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
+        } catch (final Exception ex) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":" + string(ex.getMessage()) + "}");
+        }
+    }
+
+    private void assetsDownload(final HttpExchange exchange, final String fileName) throws IOException {
+        final byte[] bytes = this.assetsWorkspaceService.downloadPack(fileName);
+        this.sendBytes(exchange, 200, "application/zip", bytes);
+    }
+
+    private void adminTitleSave(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null || this.plugin.titleManager() == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
+        final HunterTitleManager manager = this.plugin.titleManager();
+        final String id = body.getOrDefault("id", "");
+        manager.saveDefinition(new HunterTitleManager.TitleDefinition(
+            id,
+            body.getOrDefault("displayName", id),
+            body.getOrDefault("prefix", "&7[" + id + "] "),
+            body.getOrDefault("description", ""),
+            parseInt(body.getOrDefault("priority", "0"), 0),
+            parseBoolean(body.getOrDefault("enabled", "true")) != Boolean.FALSE,
+            body.getOrDefault("permission", "")
+        ));
+        this.preferences.save(this.executor);
+        manager.refreshAllPlayers();
+        this.invalidateStatusCaches();
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"titles\":" + manager.titlesJson() + "}");
+    }
+
+    private void adminTitleRemove(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null || this.plugin.titleManager() == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
+        final HunterTitleManager manager = this.plugin.titleManager();
+        final boolean removed = manager.removeDefinition(body.getOrDefault("id", ""));
+        this.preferences.save(this.executor);
+        manager.refreshAllPlayers();
+        this.invalidateStatusCaches();
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":" + removed + ",\"titles\":" + manager.titlesJson() + "}");
+    }
+
+    private void adminTitleAssign(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null || this.plugin.titleManager() == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
+        final HunterTitleManager manager = this.plugin.titleManager();
+        final UUID playerId = HunterTitleManager.resolvePlayerId(body.getOrDefault("player", ""));
+        if (playerId == null) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"player_not_found\"}");
+            return;
+        }
+        final String action = HunterToolsPreferences.normalize(body.getOrDefault("action", "grant"));
+        final String titleId = body.getOrDefault("titleId", "");
+        final boolean ok = switch (action) {
+            case "revoke" -> manager.revokeTitle(playerId, titleId);
+            case "activate" -> manager.activateTitle(playerId, titleId);
+            case "clear" -> manager.activateTitle(playerId, "");
+            case "visible" -> {
+                manager.setVisible(playerId, parseBoolean(body.getOrDefault("visible", "true")) != Boolean.FALSE);
+                yield true;
+            }
+            default -> manager.grantTitle(playerId, titleId);
+        };
+        this.preferences.save(this.executor);
+        manager.refreshAllPlayers();
+        this.invalidateStatusCaches();
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":" + ok + ",\"titles\":" + manager.titlesJson() + "}");
+    }
+
+    private void adminTitleModule(final HttpExchange exchange) throws IOException {
+        if (this.adminOperator(exchange) == null || this.plugin.titleManager() == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
+        final Boolean enabled = parseBoolean(body.getOrDefault("enabled", "false"));
+        if (enabled == null) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_enabled\"}");
+            return;
+        }
+        this.preferences.setModuleEnabled("titles", enabled);
+        this.preferences.save(this.executor);
+        this.plugin.titleManager().refreshAllPlayers();
+        this.plugin.restartDisplayTasks();
+        this.invalidateStatusCaches();
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"titles\":" + this.plugin.titleManager().titlesJson() + "}");
+    }
+
     private String thirdPartySettingsJson() {
         final StringBuilder json = new StringBuilder(256);
         json.append('{');
@@ -3513,6 +3778,21 @@ final class HunterWebPanelManager {
         }
     }
 
+    private static int parseInt(final String value, final int fallback) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (final RuntimeException ex) {
+            return fallback;
+        }
+    }
+
+    private static List<String> lines(final String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return value.lines().map(String::trim).filter(line -> !line.isBlank()).toList();
+    }
+
     private static boolean validHttpUrl(final String value) {
         if (value == null || value.isBlank() || value.length() > 512) {
             return false;
@@ -3864,6 +4144,10 @@ final class HunterWebPanelManager {
     private static StringBuilder field(final StringBuilder json, final String name, final String value) {
         json.append('"').append(escapeJson(name)).append("\":\"").append(escapeJson(value == null ? "" : value)).append('"');
         return json;
+    }
+
+    private static String string(final String value) {
+        return "\"" + escapeJson(value == null ? "" : value) + "\"";
     }
 
     private static StringBuilder numberField(final StringBuilder json, final String name, final double value) {

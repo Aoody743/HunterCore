@@ -68,7 +68,7 @@ import org.jetbrains.annotations.Nullable;
 
 public final class HunterToolsPlugin extends JavaPlugin implements CommandExecutor, TabCompleter, Listener {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
-    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "auth", "web-panel");
+    private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "auth", "web-panel", "titles");
     private static final String MOTD = "motd";
     private static final String COMMAND_OVERRIDES = "command-overrides";
     private static final String ESSENTIALS = "essentials";
@@ -79,6 +79,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private static final String AI = "ai";
     private static final String AUTH = "auth";
     private static final String WEB_PANEL = "web-panel";
+    private static final String TITLES = "titles";
     private static final List<String> HUNTERCORE_SHORTCUTS = List.of(
         "tps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
         "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
@@ -107,6 +108,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private HunterGameplayRuleManager gameplayRuleManager;
     private HunterAiManager aiManager;
     private HunterWebPanelManager webPanelManager;
+    private HunterTitleManager titleManager;
     private HunterStoryModeManager storyModeManager;
     private ExecutorService workerExecutor;
     private MetricsSnapshot snapshot = MetricsSnapshot.empty();
@@ -129,6 +131,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.realFakePlayerManager = new HunterRealFakePlayerManager(this, this.preferences, this.aiManager, this.gameplayRuleManager);
         this.storyModeManager = new HunterStoryModeManager(this, this.preferences, this.realFakePlayerManager);
         this.webPanelManager = new HunterWebPanelManager(this, this.preferences);
+        this.titleManager = new HunterTitleManager(this, this.preferences);
         this.registerCommands();
         this.registerHunterCoreCommands();
         this.getServer().getPluginManager().registerEvents(this, this);
@@ -207,6 +210,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "npc" -> this.npc(sender, "npc", args);
             case "start" -> this.storyModeManager != null && this.storyModeManager.startCommand(sender);
             case "story" -> args.length == 0 && sender instanceof Player ? this.openStoryWorkbench((Player) sender) : this.storyModeManager != null && this.storyModeManager.command(sender, "story", args);
+            case "title", "titles" -> this.titleCommand(sender, args);
             default -> false;
         };
     }
@@ -231,11 +235,17 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (name.equals("story")) {
             return this.storyModeManager == null ? List.of() : this.storyModeManager.completions(args);
         }
+        if (name.equals("title") || name.equals("titles")) {
+            return this.titleCompletions(args);
+        }
         return this.shortcutCompletions(sender, name, args);
     }
 
     @EventHandler
     public void onJoin(final PlayerJoinEvent event) {
+        if (this.titleManager != null) {
+            this.titleManager.refreshPlayer(event.getPlayer());
+        }
         if (this.preferences.moduleEnabled("sidebar")) {
             this.updateSidebarSoon(event.getPlayer());
         }
@@ -340,6 +350,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 case ACTOR_LIST -> this.handleActorListWorkbenchClick(player, clicked, holder);
                 case ACTOR_DETAIL -> this.handleActorDetailWorkbenchClick(player, clicked, holder);
                 case STORY -> this.handleStoryWorkbenchClick(player, clicked);
+                case TITLE_LIST -> this.handleTitleWorkbenchClick(player, clicked, event.getRawSlot());
                 case CONFIRM -> this.handleConfirmWorkbenchClick(player, clicked, holder);
                 default -> {
                 }
@@ -500,6 +511,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         inventory.setItem(41, this.menuItem(Material.ARMOR_STAND, "假人", "PlayerBots", List.of("打开假人工作台"), List.of("Open fake player workbench")));
         inventory.setItem(42, this.menuItem(Material.VILLAGER_SPAWN_EGG, "NPC", "NPCs", List.of("打开 NPC 工作台"), List.of("Open NPC workbench")));
         inventory.setItem(43, this.menuItem(Material.LEVER, "设置", "Settings", List.of("打开设置工作台"), List.of("Open settings workbench")));
+        inventory.setItem(44, this.menuItem(Material.NETHER_STAR, "称号", "Titles", List.of("切换和查看当前称号", "聊天 / 头顶 / TAB"), List.of("Manage your active title", "Chat / nametag / tab")));
         inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/menu"), List.of("/menu")));
         player.openInventory(inventory);
         return true;
@@ -512,6 +524,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         final Inventory inventory = this.createGui(new GuiHolder(GuiPage.SETTINGS, null, null, null), 27, this.guiTitle(GuiPage.SETTINGS, null, null));
         inventory.setItem(10, this.menuItem(Material.ENDER_PEARL, "TPA 开关", "Toggle TPA", List.of("开启或关闭接收传送请求"), List.of("Enable or disable incoming requests")));
+        inventory.setItem(11, this.menuItem(Material.NETHER_STAR, "称号", "Titles", List.of("查看和切换当前称号"), List.of("Browse and switch your active title")));
         inventory.setItem(12, this.menuItem(Material.NAME_TAG, "语言", "Language", List.of("切换 HunterCore 双语界面"), List.of("Toggle HunterCore UI language")));
         inventory.setItem(14, this.menuItem(Material.FILLED_MAP, "网页面板", "Web Panel", List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088")), List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))));
         inventory.setItem(16, this.menuItem(Material.ENCHANTED_BOOK, "故事模式", "Story Mode", List.of("打开故事模式工作台"), List.of("Open story workbench")));
@@ -558,6 +571,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         inventory.setItem(34, this.menuItem(Material.SPYGLASS, "网页面板", "Web Panel", List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088")), List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))));
         inventory.setItem(39, this.menuItem(Material.BOOK, "偏好摘要", "Preferences", List.of("只读 HunterCore 偏好摘要"), List.of("Readonly HunterCore preferences summary")));
         inventory.setItem(40, this.menuItem(Material.OBSERVER, "优化模式", "Optimize", List.of("选择 CPU 优化模式"), List.of("Choose CPU optimization mode")));
+        inventory.setItem(41, this.menuItem(Material.NETHER_STAR, "称号", "Titles", List.of("启用模块并为玩家分配称号"), List.of("Toggle module and assign titles to players")));
         inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/menu"), List.of("/menu")));
         player.openInventory(inventory);
         return true;
@@ -572,6 +586,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case ARMOR_STAND -> this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
             case VILLAGER_SPAWN_EGG -> this.openActorListWorkbench(player, NPCS);
             case LEVER -> this.openSettingsWorkbench(player);
+            case NETHER_STAR -> this.openTitleWorkbench(player);
             case ARROW -> this.openMainMenuWorkbench(player);
             default -> {
             }
@@ -581,6 +596,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private void handleSettingsWorkbenchClick(final Player player, final ItemStack clicked) {
         switch (clicked.getType()) {
             case ENDER_PEARL -> player.performCommand("tptoggle");
+            case NETHER_STAR -> this.openTitleWorkbench(player);
             case NAME_TAG -> this.toggleLanguage(player);
             case FILLED_MAP -> player.sendMessage(ChatColor.AQUA + this.text("网页面板: ", "Web Panel: ") + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"));
             case ENCHANTED_BOOK -> this.openStoryWorkbench(player);
@@ -612,6 +628,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case SPYGLASS -> player.sendMessage(ChatColor.AQUA + this.text("网页面板: ", "Web Panel: ") + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"));
             case BOOK -> this.openAdminPreferencesWorkbench(player);
             case OBSERVER -> this.openAdminOptimizeWorkbench(player);
+            case NETHER_STAR -> this.openTitleWorkbench(player);
             case ARROW -> this.openMainMenuWorkbench(player);
             default -> {
             }
@@ -994,6 +1011,95 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
     }
 
+    private boolean openTitleWorkbench(final Player player) {
+        final Inventory inventory = this.createGui(new GuiHolder(GuiPage.TITLE_LIST, null, null, null), 54, this.guiTitle(GuiPage.TITLE_LIST, null, null));
+        final HunterTitleManager manager = this.titleManager;
+        if (manager == null) {
+            player.sendMessage(ChatColor.RED + this.text("称号模块暂不可用。", "Titles are unavailable right now."));
+            return true;
+        }
+        final HunterTitleManager.PlayerTitles titles = manager.playerTitles(player.getUniqueId());
+        inventory.setItem(4, this.menuItem(Material.NAME_TAG, "称号状态", "Title Status", List.of(
+            (manager.enabled() ? "模块已启用" : "模块默认关闭"),
+            "显示: " + (titles.visible() ? "开启" : "关闭"),
+            "当前: " + (titles.activeId().isBlank() ? "无" : titles.activeId())
+        ), List.of(
+            manager.enabled() ? "Module enabled" : "Module disabled by default",
+            "Visible: " + titles.visible(),
+            "Active: " + (titles.activeId().isBlank() ? "none" : titles.activeId())
+        )));
+        int slot = 0;
+        for (final String id : titles.owned()) {
+            if (slot >= 45) {
+                break;
+            }
+            final HunterTitleManager.TitleDefinition definition = manager.definition(id);
+            if (definition == null) {
+                continue;
+            }
+            final boolean active = id.equalsIgnoreCase(titles.activeId());
+            inventory.setItem(slot++, this.menuItem(active ? Material.LIME_DYE : Material.PAPER, definition.displayName(), definition.displayName(), List.of(
+                "ID: " + definition.id(),
+                "前缀: " + definition.prefix(),
+                active ? "当前已激活" : "点击激活"
+            ), List.of(
+                "ID: " + definition.id(),
+                "Prefix: " + definition.prefix(),
+                active ? "Currently active" : "Click to activate"
+            )));
+        }
+        inventory.setItem(45, this.menuItem(Material.LEVER, "显示开关", "Visibility", List.of(titles.visible() ? "点击隐藏称号" : "点击显示称号"), List.of(titles.visible() ? "Click to hide your title" : "Click to show your title")));
+        inventory.setItem(46, this.menuItem(Material.BARRIER, "清空当前称号", "Clear Active", List.of("保留拥有列表，只清空激活状态"), List.of("Keep owned titles but clear the active one")));
+        if (player.hasPermission("huntertools.command.title.admin")) {
+            inventory.setItem(47, this.menuItem(Material.REDSTONE_TORCH, "模块开关", "Module Toggle", List.of(manager.enabled() ? "点击关闭称号模块" : "点击启用称号模块"), List.of(manager.enabled() ? "Disable the titles module" : "Enable the titles module")));
+        }
+        inventory.setItem(49, this.menuItem(Material.ARROW, "返回", "Back", List.of("/profile"), List.of("/profile")));
+        player.openInventory(inventory);
+        return true;
+    }
+
+    private void handleTitleWorkbenchClick(final Player player, final ItemStack clicked, final int slot) {
+        if (this.titleManager == null) {
+            return;
+        }
+        final HunterTitleManager.PlayerTitles titles = this.titleManager.playerTitles(player.getUniqueId());
+        if (slot >= 0 && slot < Math.min(45, titles.owned().size())) {
+            final String id = titles.owned().get(slot);
+            this.titleManager.activateTitle(player.getUniqueId(), id);
+            this.preferences.save(this.workerExecutor);
+            this.titleManager.refreshAllPlayers();
+            this.openTitleWorkbench(player);
+            player.sendMessage(ChatColor.GREEN + this.text("当前称号已切换为 ", "Active title set to ") + id + ".");
+            return;
+        }
+        switch (clicked.getType()) {
+            case LEVER -> {
+                this.titleManager.setVisible(player.getUniqueId(), !titles.visible());
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                this.openTitleWorkbench(player);
+            }
+            case BARRIER -> {
+                this.titleManager.activateTitle(player.getUniqueId(), "");
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                this.openTitleWorkbench(player);
+            }
+            case REDSTONE_TORCH -> {
+                if (player.hasPermission("huntertools.command.title.admin")) {
+                    this.preferences.setModuleEnabled(TITLES, !this.preferences.moduleEnabled(TITLES));
+                    this.preferences.save(this.workerExecutor);
+                    this.titleManager.refreshAllPlayers();
+                    this.restartDisplayTasks();
+                    this.openTitleWorkbench(player);
+                }
+            }
+            case ARROW -> this.openProfileWorkbench(player);
+            default -> {
+            }
+        }
+    }
+
     private void beginGuiChat(final Player player, final GuiChatSession session, final String... instructions) {
         this.guiConfirmSessions.remove(player.getUniqueId());
         this.guiChatSessions.put(player.getUniqueId(), session);
@@ -1172,6 +1278,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case ACTOR_LIST -> ChatColor.DARK_AQUA + (REAL_FAKE_PLAYERS.equals(module) ? this.text("HunterCore · 假人", "HunterCore · PlayerBots") : this.text("HunterCore · NPC", "HunterCore · NPCs"));
             case ACTOR_DETAIL -> ChatColor.DARK_AQUA + this.text("HunterCore · 对象 ", "HunterCore · Actor ") + (id == null ? "" : id);
             case STORY -> ChatColor.DARK_AQUA + this.text("HunterCore · 故事模式", "HunterCore · Story Mode");
+            case TITLE_LIST -> ChatColor.DARK_AQUA + this.text("HunterCore · 称号", "HunterCore · Titles");
             case CONFIRM -> ChatColor.DARK_RED + this.text("HunterCore · 确认操作", "HunterCore · Confirm Action");
         };
     }
@@ -1377,6 +1484,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             && this.realFakePlayerManager.handleChatControl(event.getPlayer(), event.getMessage());
         if (!fakePlayerAiHandled && this.aiManager != null && this.aiManager.handleChat(event.getPlayer(), event.getMessage())) {
             event.setCancelled(true);
+            return;
+        }
+        if (this.titleManager != null && this.titleManager.enabled() && this.titleManager.displayChat()) {
+            event.setFormat(this.titleManager.formatChatName(event.getPlayer()) + ChatColor.RESET + ": %2$s");
         }
     }
 
@@ -1403,7 +1514,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             "htps", "heal", "feed", "fly", "gm", "gms", "gmc", "gma", "gmsp",
             "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat", "speed", "spawn", "setspawn", "back",
             "hat", "craft", "enderchest", "trash",
-            "menu", "profile", "playerinfo", "me", "settings", "admin", "player", "npc", "start", "story"
+            "menu", "profile", "playerinfo", "me", "settings", "admin", "player", "npc", "start", "story", "title", "titles"
         )) {
             final org.bukkit.command.PluginCommand pluginCommand = this.getCommand(command);
             if (pluginCommand != null) {
@@ -1418,6 +1529,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("menu", List.of("gui"), "huntertools.command.menu", "open the HunterCore player GUI"));
         HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("profile", List.of("me", "playerinfo"), "huntertools.command.profile", "open your HunterCore profile GUI"));
         HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("settings", List.of("prefs"), "huntertools.command.settings", "open your HunterCore settings GUI"));
+        HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand("title", List.of("titles"), "huntertools.command.title", "manage HunterCore titles"));
         for (final String command : HUNTERCORE_SHORTCUTS) {
             HunterCoreProvider.get().registerCommandExtension(new HunterToolsCoreCommand(command, this.hunterCoreShortcutAliases(command), this.hunterCoreShortcutPermission(command), this.hunterCoreShortcutDescription(command)));
         }
@@ -1446,6 +1558,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "menu", "gui" -> this.openMainMenuWorkbench(sender);
             case "profile", "me", "playerinfo" -> this.openProfileWorkbench(sender);
             case "settings", "prefs" -> this.openSettingsWorkbench(sender);
+            case "title", "titles" -> this.titleCommand(sender, args);
             default -> false;
         };
     }
@@ -1453,6 +1566,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private List<String> hunterCoreCompletions(final CommandSender sender, final String label, final String[] args) {
         if (label.equals("admin")) {
             return this.adminCompletions(args);
+        }
+        if (label.equals("title") || label.equals("titles")) {
+            return this.titleCompletions(args);
         }
         return this.shortcutCompletions(sender, label, args);
     }
@@ -1478,6 +1594,191 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (name.equals("speed") && args.length == 3) {
             return matching(args[2], List.of("walk", "fly"));
+        }
+        return List.of();
+    }
+
+    private boolean titleCommand(final CommandSender sender, final String[] args) {
+        if (this.titleManager == null) {
+            sender.sendMessage(ChatColor.RED + this.text("称号模块暂不可用。", "Titles are unavailable right now."));
+            return true;
+        }
+        if (args.length == 0) {
+            if (sender instanceof Player player) {
+                return this.openTitleWorkbench(player);
+            }
+            sender.sendMessage(ChatColor.YELLOW + "/title list|activate|clear|toggle|create|delete|grant|revoke|preview");
+            return true;
+        }
+        final String sub = HunterToolsPreferences.normalize(args[0]);
+        switch (sub) {
+            case "list" -> {
+                if (sender instanceof Player player && args.length == 1) {
+                    final HunterTitleManager.PlayerTitles titles = this.titleManager.playerTitles(player.getUniqueId());
+                    sender.sendMessage(ChatColor.GOLD + this.text("你的称号: ", "Your titles: ") + String.join(", ", titles.owned()));
+                    sender.sendMessage(ChatColor.GRAY + this.text("当前: ", "Active: ") + (titles.activeId().isBlank() ? this.text("无", "none") : titles.activeId()));
+                    return true;
+                }
+                sender.sendMessage(ChatColor.GOLD + this.text("已注册称号: ", "Registered titles: ") + this.titleManager.definitions().stream().map(HunterTitleManager.TitleDefinition::id).toList());
+                return true;
+            }
+            case "activate", "use" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(ChatColor.RED + this.text("只有玩家可以激活称号。", "Only players can activate titles."));
+                    return true;
+                }
+                if (args.length != 2) {
+                    sender.sendMessage(ChatColor.YELLOW + "/title activate <id>");
+                    return true;
+                }
+                if (!this.titleManager.activateTitle(player.getUniqueId(), args[1])) {
+                    sender.sendMessage(ChatColor.RED + this.text("你还没有这个称号。", "You do not own that title."));
+                    return true;
+                }
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                sender.sendMessage(ChatColor.GREEN + this.text("已激活称号 ", "Activated title ") + args[1] + ".");
+                return true;
+            }
+            case "clear", "none" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(ChatColor.RED + this.text("只有玩家可以清空称号。", "Only players can clear their title."));
+                    return true;
+                }
+                this.titleManager.activateTitle(player.getUniqueId(), "");
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                sender.sendMessage(ChatColor.GREEN + this.text("已清空当前称号。", "Cleared the active title."));
+                return true;
+            }
+            case "toggle", "visible" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(ChatColor.RED + this.text("只有玩家可以切换显示。", "Only players can toggle visibility."));
+                    return true;
+                }
+                final HunterTitleManager.PlayerTitles titles = this.titleManager.playerTitles(player.getUniqueId());
+                this.titleManager.setVisible(player.getUniqueId(), !titles.visible());
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                sender.sendMessage(ChatColor.GREEN + this.text("称号显示已切换为 ", "Title visibility is now ") + (!titles.visible()) + ".");
+                return true;
+            }
+            case "create", "delete", "grant", "revoke", "preview", "module" -> {
+                if (!this.require(sender, "huntertools.command.title.admin")) {
+                    return true;
+                }
+                return this.titleAdminCommand(sender, sub, args);
+            }
+            default -> {
+                sender.sendMessage(ChatColor.YELLOW + "/title list|activate|clear|toggle|create|delete|grant|revoke|preview");
+                return true;
+            }
+        }
+    }
+
+    private boolean titleAdminCommand(final CommandSender sender, final String sub, final String[] args) {
+        switch (sub) {
+            case "create" -> {
+                if (args.length < 3) {
+                    sender.sendMessage(ChatColor.YELLOW + "/title create <id> <prefix>");
+                    return true;
+                }
+                final String id = HunterToolsPreferences.normalize(args[1]);
+                final String prefix = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length));
+                this.titleManager.saveDefinition(new HunterTitleManager.TitleDefinition(id, id, prefix, "", 0, true, ""));
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                sender.sendMessage(ChatColor.GREEN + this.text("已创建称号 ", "Created title ") + id + ".");
+                return true;
+            }
+            case "delete" -> {
+                if (args.length != 2) {
+                    sender.sendMessage(ChatColor.YELLOW + "/title delete <id>");
+                    return true;
+                }
+                if (!this.titleManager.removeDefinition(args[1])) {
+                    sender.sendMessage(ChatColor.RED + this.text("找不到这个称号。", "Title not found."));
+                    return true;
+                }
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                sender.sendMessage(ChatColor.GREEN + this.text("已删除称号 ", "Deleted title ") + args[1] + ".");
+                return true;
+            }
+            case "grant", "revoke" -> {
+                if (args.length != 3) {
+                    sender.sendMessage(ChatColor.YELLOW + "/title " + sub + " <player> <id>");
+                    return true;
+                }
+                final UUID playerId = HunterTitleManager.resolvePlayerId(args[1]);
+                if (playerId == null) {
+                    sender.sendMessage(ChatColor.RED + this.text("找不到玩家。", "Player not found."));
+                    return true;
+                }
+                final boolean changed = sub.equals("grant")
+                    ? this.titleManager.grantTitle(playerId, args[2])
+                    : this.titleManager.revokeTitle(playerId, args[2]);
+                if (!changed) {
+                    sender.sendMessage(ChatColor.RED + this.text("操作未生效，请检查玩家或称号。", "Nothing changed. Check the player and title."));
+                    return true;
+                }
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                sender.sendMessage(ChatColor.GREEN + this.text("称号操作已完成。", "Title assignment updated."));
+                return true;
+            }
+            case "preview" -> {
+                if (args.length != 3) {
+                    sender.sendMessage(ChatColor.YELLOW + "/title preview <player> <id>");
+                    return true;
+                }
+                final Player target = Bukkit.getPlayerExact(args[1]);
+                final HunterTitleManager.TitleDefinition definition = this.titleManager.definition(args[2]);
+                if (target == null || definition == null) {
+                    sender.sendMessage(ChatColor.RED + this.text("找不到玩家或称号。", "Player or title not found."));
+                    return true;
+                }
+                sender.sendMessage(ChatColor.AQUA + this.text("预览: ", "Preview: ") + ChatColor.translateAlternateColorCodes('&', definition.prefix()) + ChatColor.RESET + target.getName());
+                return true;
+            }
+            case "module" -> {
+                if (args.length != 2) {
+                    sender.sendMessage(ChatColor.YELLOW + "/title module <on|off>");
+                    return true;
+                }
+                final Boolean enabled = parseToggle(args[1]);
+                if (enabled == null) {
+                    sender.sendMessage(ChatColor.RED + this.text("请使用 on/off。", "Use on/off."));
+                    return true;
+                }
+                this.preferences.setModuleEnabled(TITLES, enabled);
+                this.preferences.save(this.workerExecutor);
+                this.titleManager.refreshAllPlayers();
+                this.restartDisplayTasks();
+                sender.sendMessage(ChatColor.GREEN + this.text("称号模块已设置为 ", "Titles module set to ") + enabled + ".");
+                return true;
+            }
+            default -> {
+                return true;
+            }
+        }
+    }
+
+    private List<String> titleCompletions(final String[] args) {
+        if (args.length == 1) {
+            return matching(args[0], List.of("list", "activate", "clear", "toggle", "create", "delete", "grant", "revoke", "preview", "module"));
+        }
+        if (args.length == 2 && List.of("activate", "delete").contains(HunterToolsPreferences.normalize(args[0]))) {
+            return matching(args[1], this.titleManager == null ? List.of() : this.titleManager.definitions().stream().map(HunterTitleManager.TitleDefinition::id).toList());
+        }
+        if (args.length == 2 && List.of("grant", "revoke", "preview").contains(HunterToolsPreferences.normalize(args[0]))) {
+            return matching(args[1], this.onlinePlayerNames());
+        }
+        if (args.length == 3 && List.of("grant", "revoke", "preview").contains(HunterToolsPreferences.normalize(args[0]))) {
+            return matching(args[2], this.titleManager == null ? List.of() : this.titleManager.definitions().stream().map(HunterTitleManager.TitleDefinition::id).toList());
+        }
+        if (args.length == 2 && HunterToolsPreferences.normalize(args[0]).equals("module")) {
+            return matching(args[1], List.of("on", "off"));
         }
         return List.of();
     }
@@ -1614,6 +1915,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     void restartDisplayTasks() {
         this.startTasks();
+        if (this.titleManager != null) {
+            this.titleManager.refreshAllPlayers();
+        }
     }
 
     private void sampleMetrics() {
@@ -1758,6 +2062,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private void applySidebar(final Player player, final String title, final List<String> lines) {
         final boolean dirtyOnly = this.preferences.booleanValue("modules.sidebar.dirty-updates-only", true);
         final SidebarBoard board = this.sidebars.computeIfAbsent(player.getUniqueId(), ignored -> this.createSidebar());
+        if (this.titleManager != null) {
+            this.titleManager.syncScoreboard(board.scoreboard);
+        }
         board.objective.setDisplayName(color(renderDisplayLine(title, this.snapshot, playerView(player), this.preferences.stringValue("modules.web-panel.server-name", "HunterCore"))));
         final List<String> encoded = new ArrayList<>(lines.size());
         for (int i = 0; i < lines.size() && i < SIDEBAR_KEYS.length; i++) {
@@ -1793,6 +2100,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private void clearSidebars() {
         final Scoreboard main = Bukkit.getScoreboardManager().getMainScoreboard();
+        if (this.titleManager != null) {
+            this.titleManager.syncScoreboard(main);
+        }
         for (final UUID uuid : new ArrayList<>(this.sidebars.keySet())) {
             final Player player = Bukkit.getPlayer(uuid);
             if (player != null && player.isOnline()) {
@@ -1800,6 +2110,14 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             }
         }
         this.sidebars.clear();
+    }
+
+    String webPanelAddress() {
+        return this.webPanelManager == null ? "http://127.0.0.1:8088" : this.webPanelManager.addressLine().replaceAll("/+$", "");
+    }
+
+    HunterTitleManager titleManager() {
+        return this.titleManager;
     }
 
     private boolean showTps(final CommandSender sender) {
@@ -3349,6 +3667,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         ACTOR_LIST,
         ACTOR_DETAIL,
         STORY,
+        TITLE_LIST,
         CONFIRM
     }
 

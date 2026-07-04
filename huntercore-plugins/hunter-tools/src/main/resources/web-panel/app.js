@@ -31,6 +31,18 @@ function storeValue(key, value) {
   }
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      resolve(result.includes(',') ? result.split(',').pop() : result);
+    };
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function normalizeBackendUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
@@ -72,7 +84,7 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
-const ADMIN_PAGES = ['settings', 'access', 'ai', 'admin'];
+const ADMIN_PAGES = ['assets', 'titles', 'settings', 'access', 'ai', 'admin'];
 
 const FIELD_HELP = {
   webServerName: 'Shown as the panel title and %server% display name.',
@@ -146,6 +158,8 @@ const translations = {
     'nav.runtime': '运行时',
     'nav.plugins': '插件',
     'nav.tools': '工具',
+    'nav.assets': '资源',
+    'nav.titles': '称号',
     'nav.settings': '设置',
     'nav.access': '权限',
     'nav.ai': 'AI',
@@ -216,6 +230,23 @@ const translations = {
     'players.none': '当前没有玩家在线。',
     'tools.eyebrow': 'Minecraft 操作',
     'tools.title': '工具',
+    'assets.eyebrow': '自定义内容工作台',
+    'assets.title': '资源',
+    'assets.upload': '上传资源',
+    'assets.uploadAction': '上传文件',
+    'assets.itemWizard': '物品向导',
+    'assets.saveItem': '保存物品',
+    'assets.promptBuilder': 'AI 提示词生成',
+    'assets.generatePrompt': '生成提示词',
+    'assets.validate': '部署检查',
+    'assets.publish': '发布资源包',
+    'titles.eyebrow': '原生称号系统',
+    'titles.title': '称号',
+    'titles.manage': '称号定义',
+    'titles.assign': '玩家分配',
+    'titles.save': '保存称号',
+    'titles.apply': '应用',
+    'titles.moduleToggle': '启用称号模块',
     'console.title': '命令控制台',
     'console.placeholder': 'list',
     'console.run': '运行',
@@ -515,6 +546,8 @@ const translations = {
     'nav.runtime': 'Runtime',
     'nav.plugins': 'Plugins',
     'nav.tools': 'Tools',
+    'nav.assets': 'Assets',
+    'nav.titles': 'Titles',
     'nav.settings': 'Settings',
     'nav.access': 'Access',
     'nav.ai': 'AI',
@@ -591,6 +624,23 @@ const translations = {
     'players.none': 'No players online.',
     'tools.eyebrow': 'Minecraft actions',
     'tools.title': 'Tools',
+    'assets.eyebrow': 'Custom content workbench',
+    'assets.title': 'Assets',
+    'assets.upload': 'Upload',
+    'assets.uploadAction': 'Upload file',
+    'assets.itemWizard': 'Item Wizard',
+    'assets.saveItem': 'Save item',
+    'assets.promptBuilder': 'AI Prompt Builder',
+    'assets.generatePrompt': 'Generate prompts',
+    'assets.validate': 'Validate',
+    'assets.publish': 'Publish pack',
+    'titles.eyebrow': 'Native title system',
+    'titles.title': 'Titles',
+    'titles.manage': 'Title Definitions',
+    'titles.assign': 'Player Assignments',
+    'titles.save': 'Save title',
+    'titles.apply': 'Apply',
+    'titles.moduleToggle': 'Enable titles module',
     'console.title': 'Command console',
     'console.placeholder': 'list',
     'console.run': 'Run',
@@ -1176,6 +1226,8 @@ function rerenderCachedStatus() {
   const data = state.lastData;
   renderHealth(data.health);
   renderOverview(data);
+  renderAssets(data.assets);
+  renderTitles(data.titles);
   renderActorWorlds(data.worlds);
   renderActors(data.actorDetails);
   renderOperations(data.modules);
@@ -1553,6 +1605,59 @@ function renderOverview(data) {
   }
   if (data.plugins) state.plugins = data.plugins;
   renderPluginInspector(filteredPlugins || []);
+}
+
+function renderAssets(assets) {
+  if (!state.session?.admin || !assets) return;
+  const validation = assets.validation || {};
+  $('assetsHero').innerHTML = [
+    summaryCard('Items', (assets.items || []).length, `${(assets.packs || []).length} packs`),
+    summaryCard('Images', (assets.images || []).length, `${(assets.presets || []).length} presets`),
+    summaryCard('Validation', (validation.errors || []).length, `${(validation.warnings || []).length} warnings`, (validation.errors || []).length ? 'bad' : (validation.warnings || []).length ? 'warn' : 'good'),
+    summaryCard('Pack URL', assets.resourcePack?.url || '--', assets.resourcePack?.enabled ? 'enabled' : 'disabled')
+  ].join('');
+  $('assetsPackList').innerHTML = (assets.packs || []).map((file) => dataItem(file.name, formatBytes(file.size || 0))).join('') || `<p class="mutedState">No packs yet.</p>`;
+  $('assetsImageList').innerHTML = (assets.images || []).map((file) => dataItem(file.name, formatBytes(file.size || 0))).join('') || `<p class="mutedState">No images yet.</p>`;
+  $('assetsPresetList').innerHTML = (assets.presets || []).map((file) => dataItem(file.name, formatBytes(file.size || 0))).join('') || `<p class="mutedState">No presets yet.</p>`;
+  $('assetsItemList').innerHTML = (assets.items || []).map((item) => `
+    <article class="pluginItem">
+      <div class="pluginTop"><span>${esc(item.name || item.id)}<small>${esc(item.id)} · ${esc(item.material)} · CMD ${esc(item.customModelData)}</small></span></div>
+      <div class="pluginMeta">${esc(item.category || 'items')} · ${esc(item.pack || '--')} · ${item.enabled ? 'enabled' : 'disabled'}</div>
+      <div class="pluginActions">
+        <button type="button" data-asset-edit="${esc(item.id)}">Edit</button>
+        <button type="button" data-asset-remove="${esc(item.id)}">Remove</button>
+      </div>
+    </article>
+  `).join('') || `<p class="mutedState">No custom items yet.</p>`;
+  $('assetsValidationList').innerHTML = [
+    ...(validation.errors || []).map((line) => dataItem('Error', line)),
+    ...(validation.warnings || []).map((line) => dataItem('Warning', line))
+  ].join('') || `<p class="mutedState">No validation issues.</p>`;
+}
+
+function renderTitles(titles) {
+  if (!state.session?.admin || !titles) return;
+  $('titlesModuleEnabled').checked = Boolean(titles.enabled);
+  $('titlesHero').innerHTML = [
+    summaryCard('Module', titles.enabled ? 'Enabled' : 'Disabled', `chat ${titles.displayChat} · tag ${titles.displayNametag} · tab ${titles.displayTab}`),
+    summaryCard('Definitions', (titles.definitions || []).length, 'registered titles'),
+    summaryCard('Players', (titles.players || []).length, 'online assignment view')
+  ].join('');
+  $('titleList').innerHTML = (titles.definitions || []).map((title) => `
+    <article class="pluginItem">
+      <div class="pluginTop"><span>${esc(title.displayName || title.id)}<small>${esc(title.id)} · ${esc(title.prefix || '')}</small></span></div>
+      <div class="pluginMeta">${esc(title.description || '--')} · priority ${esc(title.priority)} · ${title.enabled ? 'enabled' : 'disabled'}</div>
+      <div class="pluginActions">
+        <button type="button" data-title-edit="${esc(title.id)}">Edit</button>
+        <button type="button" data-title-remove="${esc(title.id)}">Remove</button>
+      </div>
+    </article>
+  `).join('') || `<p class="mutedState">No titles yet.</p>`;
+  $('titlePlayerList').innerHTML = (titles.players || []).map((player) => dataItem(
+    player.name,
+    player.active || 'none',
+    `${(player.owned || []).join(', ') || 'none'} · visible ${player.visible}`
+  )).join('') || `<p class="mutedState">No online players.</p>`;
 }
 
 function renderActorWorlds(worlds) {
@@ -1971,6 +2076,8 @@ async function refresh() {
   renderHealth(data.health);
   renderBackendConnection();
   renderOverview(data);
+  renderAssets(data.assets);
+  renderTitles(data.titles);
   renderActorWorlds(data.worlds);
   renderActors(data.actorDetails);
   renderOperations(data.modules);
@@ -2654,6 +2761,236 @@ function bindEvents() {
     try {
       await json('/api/admin/web-user/remove', { method: 'POST', body: JSON.stringify({ username: target.dataset.userRemove }) });
       setOutput(t('webUsers.removed'));
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('assetsUploadForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const file = $('assetsUploadFile').files?.[0];
+    if (!file) {
+      setOutput('Choose a file first.');
+      return;
+    }
+    try {
+      const contentBase64 = await fileToBase64(file);
+      const result = await json('/api/admin/assets/upload', {
+        method: 'POST',
+        body: JSON.stringify({
+          scope: $('assetsUploadScope').value,
+          fileName: file.name,
+          contentBase64
+        })
+      });
+      setOutput('Asset uploaded.');
+      if (result.assets) renderAssets(result.assets);
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('assetsItemForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const payload = {
+        id: $('assetItemId').value,
+        enabled: String($('assetItemEnabled').checked),
+        category: $('assetItemCategory').value,
+        material: $('assetItemMaterial').value,
+        amount: $('assetItemAmount').value,
+        customModelData: $('assetItemCmd').value,
+        permission: $('assetItemPermission').value,
+        pack: $('assetItemPack').value,
+        icon: $('assetItemIcon').value,
+        description: $('assetItemDescription').value,
+        nameZhCn: $('assetItemNameZh').value,
+        nameEnUs: $('assetItemNameEn').value,
+        loreZhCn: $('assetItemLoreZh').value,
+        loreEnUs: $('assetItemLoreEn').value
+      };
+      const result = await json('/api/admin/assets/item/save', { method: 'POST', body: JSON.stringify(payload) });
+      setOutput('Asset item saved.');
+      if (result.assets) renderAssets(result.assets);
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('assetsItemList')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-asset-edit], [data-asset-remove]');
+    if (!button) return;
+    const item = (state.lastData?.assets?.items || []).find((entry) => entry.id === (button.dataset.assetEdit || button.dataset.assetRemove));
+    if (button.dataset.assetEdit && item) {
+      $('assetItemId').value = item.id || '';
+      $('assetItemNameZh').value = item.name || '';
+      $('assetItemNameEn').value = item.name || '';
+      $('assetItemMaterial').value = item.material || 'PAPER';
+      $('assetItemCmd').value = item.customModelData || 0;
+      $('assetItemAmount').value = item.amount || 1;
+      $('assetItemCategory').value = item.category || '';
+      $('assetItemPack').value = item.pack || '';
+      $('assetItemPermission').value = item.permission || '';
+      $('assetItemIcon').value = item.icon || '';
+      $('assetItemDescription').value = item.description || '';
+      $('assetItemEnabled').checked = item.enabled !== false;
+      return;
+    }
+    if (button.dataset.assetRemove) {
+      try {
+        const result = await json('/api/admin/assets/item/remove', { method: 'POST', body: JSON.stringify({ id: button.dataset.assetRemove }) });
+        setOutput('Asset item removed.');
+        if (result.assets) renderAssets(result.assets);
+        await refresh();
+      } catch (error) {
+        setOutput(t('command.error', { message: error.message }));
+      }
+    }
+  });
+
+  $('assetsPromptForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const result = await json('/api/admin/assets/prompt', {
+        method: 'POST',
+        body: JSON.stringify({
+          useCase: $('assetsPromptUseCase').value,
+          theme: $('assetsPromptTheme').value,
+          category: $('assetsPromptCategory').value,
+          style: $('assetsPromptStyle').value,
+          colorPalette: $('assetsPromptPalette').value,
+          materialFeel: $('assetsPromptMaterialFeel').value,
+          resolution: $('assetsPromptResolution').value,
+          transparentBackground: String($('assetsPromptTransparent').checked)
+        })
+      });
+      const prompt = result.prompt || {};
+      $('assetsPromptCards').innerHTML = [
+        dataItem('Model Prompt', prompt.modelPrompt || ''),
+        dataItem('UI Prompt', prompt.uiPrompt || ''),
+        dataItem('Item Definition Hint', prompt.itemDefinitionHint || ''),
+        ...(prompt.steps || []).map((line) => dataItem('Step', line))
+      ].join('');
+      setOutput('Prompts generated.');
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('assetsValidateButton')?.addEventListener('click', async () => {
+    try {
+      const result = await json('/api/admin/assets/validate', { method: 'POST', body: '{}' });
+      if (result.assets) renderAssets(result.assets);
+      setOutput('Validation finished.');
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('assetsPublishForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const result = await json('/api/admin/assets/publish', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileName: $('assetsPublishFile').value,
+          externalBaseUrl: $('assetsPublishBaseUrl').value,
+          required: String($('assetsPublishRequired').checked),
+          sendOnJoin: String($('assetsPublishSendOnJoin').checked)
+        })
+      });
+      const published = result.published || {};
+      $('assetsPublishResult').innerHTML = [
+        dataItem('URL', published.url || '--'),
+        dataItem('SHA1', published.sha1 || '--'),
+        dataItem('File', published.fileName || '--')
+      ].join('');
+      if (result.assets) renderAssets(result.assets);
+      setOutput('Pack published.');
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('titleForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const result = await json('/api/admin/title/save', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: $('titleId').value,
+          displayName: $('titleDisplayName').value,
+          prefix: $('titlePrefix').value,
+          priority: $('titlePriority').value,
+          permission: $('titlePermission').value,
+          description: $('titleDescription').value,
+          enabled: String($('titleEnabled').checked)
+        })
+      });
+      if (result.titles) renderTitles(result.titles);
+      setOutput('Title saved.');
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('titlesModuleEnabled')?.addEventListener('change', async (event) => {
+    try {
+      const result = await json('/api/admin/title/module', { method: 'POST', body: JSON.stringify({ enabled: String(event.target.checked) }) });
+      if (result.titles) renderTitles(result.titles);
+      setOutput('Titles module updated.');
+      await refresh();
+    } catch (error) {
+      event.target.checked = !event.target.checked;
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('titleList')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-title-edit], [data-title-remove]');
+    if (!button) return;
+    const title = (state.lastData?.titles?.definitions || []).find((entry) => entry.id === (button.dataset.titleEdit || button.dataset.titleRemove));
+    if (button.dataset.titleEdit && title) {
+      $('titleId').value = title.id || '';
+      $('titleDisplayName').value = title.displayName || '';
+      $('titlePrefix').value = title.prefix || '';
+      $('titlePriority').value = title.priority || 0;
+      $('titlePermission').value = title.permission || '';
+      $('titleDescription').value = title.description || '';
+      $('titleEnabled').checked = title.enabled !== false;
+      return;
+    }
+    if (button.dataset.titleRemove) {
+      try {
+        const result = await json('/api/admin/title/remove', { method: 'POST', body: JSON.stringify({ id: button.dataset.titleRemove }) });
+        if (result.titles) renderTitles(result.titles);
+        setOutput('Title removed.');
+        await refresh();
+      } catch (error) {
+        setOutput(t('command.error', { message: error.message }));
+      }
+    }
+  });
+
+  $('titleAssignForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const result = await json('/api/admin/title/assign', {
+        method: 'POST',
+        body: JSON.stringify({
+          player: $('titleAssignPlayer').value,
+          titleId: $('titleAssignTitle').value,
+          action: $('titleAssignAction').value
+        })
+      });
+      if (result.titles) renderTitles(result.titles);
+      setOutput('Title assignment updated.');
       await refresh();
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));

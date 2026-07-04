@@ -98,6 +98,12 @@ final class HunterToolsPreferences {
         return HunterLanguage.normalize(this.stringValue("language", HunterLanguage.DEFAULT));
     }
 
+    @Nullable ConfigurationSection section(final String path) {
+        synchronized (this.lock) {
+            return this.config.getConfigurationSection(path);
+        }
+    }
+
     List<String> stringList(final String path, final List<String> fallback) {
         synchronized (this.lock) {
             return this.config.contains(path) ? this.config.getStringList(path) : fallback;
@@ -502,15 +508,19 @@ final class HunterToolsPreferences {
     private boolean applyDefaults() {
         boolean changed = false;
         changed |= this.setDefault("language", HunterLanguage.DEFAULT);
-        changed |= this.setDefault("modules.tps-display.enabled", true);
+        changed |= this.setDefault("modules.tps-display.enabled", false);
         changed |= this.setDefault("modules.tps-display.actionbar", true);
         changed |= this.setDefault("modules.tps-display.actionbar-format", "&7TPS %tps_color%%tps% &8| &7MSPT &f%mspt% &8| &7Players &f%online%/%max%");
         changed |= this.setDefault("modules.tps-display.interval-ticks", 40);
-        changed |= this.setDefault("modules.sidebar.enabled", true);
+        changed |= this.setDefault("modules.sidebar.enabled", false);
         changed |= this.setDefault("modules.sidebar.title", "&6HunterCore");
         changed |= this.setDefault("modules.sidebar.lines", defaultSidebarLines());
         changed |= this.setDefault("modules.sidebar.interval-ticks", 40);
         changed |= this.setDefault("modules.sidebar.dirty-updates-only", true);
+        changed |= this.setDefault("modules.titles.enabled", false);
+        changed |= this.setDefault("modules.titles.display.chat", true);
+        changed |= this.setDefault("modules.titles.display.nametag", true);
+        changed |= this.setDefault("modules.titles.display.tab", true);
         changed |= this.setDefault("modules.motd.enabled", true);
         changed |= this.setDefault("modules.motd.line-1", "&b\"HunterCraft\" Server &8| &fHunterCore");
         changed |= this.setDefault("modules.motd.line-2", "&7%online%/%max% players &8- &aTPS %tps% &8- &e%version%");

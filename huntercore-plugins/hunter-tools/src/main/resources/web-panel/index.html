@@ -34,6 +34,8 @@
         <button type="button" class="navButton" data-page-target="runtime" data-i18n="nav.runtime">Runtime</button>
         <button type="button" class="navButton" data-page-target="plugins" data-i18n="nav.plugins">Plugins</button>
         <button type="button" class="navButton" data-page-target="tools" data-i18n="nav.tools">Tools</button>
+        <button type="button" class="navButton adminOnly" data-page-target="assets" data-i18n="nav.assets" hidden>Assets</button>
+        <button type="button" class="navButton adminOnly" data-page-target="titles" data-i18n="nav.titles" hidden>Titles</button>
         <button type="button" class="navButton adminOnly" data-page-target="settings" data-i18n="nav.settings" hidden>Settings</button>
         <button type="button" class="navButton adminOnly" data-page-target="access" data-i18n="nav.access" hidden>Access</button>
         <button type="button" class="navButton adminOnly" data-page-target="ai" data-i18n="nav.ai" hidden>AI</button>
@@ -254,6 +256,135 @@
             <div id="actorList" class="dataList mutedState" data-i18n="admin.required">Admin session required.</div>
             <aside id="actorInspector" class="detailInspector mutedState">Select an actor to inspect.</aside>
           </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="assets" class="pageView workspace adminOnly" hidden>
+      <div class="sectionHead">
+        <div>
+          <span class="eyebrow" data-i18n="assets.eyebrow">Custom content workbench</span>
+          <h2 data-i18n="assets.title">Assets</h2>
+        </div>
+      </div>
+      <div id="assetsHero" class="summaryGrid"></div>
+      <div class="overviewGrid">
+        <section class="panel">
+          <h3 data-i18n="assets.upload">Upload</h3>
+          <form id="assetsUploadForm" class="stackForm">
+            <div class="formGrid">
+              <select id="assetsUploadScope">
+                <option value="packs">Resource Pack</option>
+                <option value="images">Image</option>
+                <option value="presets">Preset / Template</option>
+              </select>
+              <input id="assetsUploadFile" type="file">
+              <button type="submit" class="primaryButton" data-i18n="assets.uploadAction">Upload file</button>
+            </div>
+          </form>
+          <div id="assetsPackList" class="dataList"></div>
+          <div id="assetsImageList" class="dataList"></div>
+          <div id="assetsPresetList" class="dataList"></div>
+        </section>
+        <section class="panel">
+          <h3 data-i18n="assets.itemWizard">Item Wizard</h3>
+          <form id="assetsItemForm" class="stackForm">
+            <div class="formGrid">
+              <input id="assetItemId" placeholder="item_id">
+              <input id="assetItemNameZh" placeholder="中文名">
+              <input id="assetItemNameEn" placeholder="English name">
+              <input id="assetItemMaterial" placeholder="PAPER">
+              <input id="assetItemCmd" placeholder="1001">
+              <input id="assetItemAmount" placeholder="1">
+              <input id="assetItemCategory" placeholder="weapons / tools / ui">
+              <input id="assetItemPack" placeholder="resource-pack.zip">
+              <input id="assetItemPermission" placeholder="hunterassets.item.example">
+              <input id="assetItemIcon" placeholder="icons/example.png">
+            </div>
+            <textarea id="assetItemDescription" rows="2" placeholder="What this item is for"></textarea>
+            <textarea id="assetItemLoreZh" rows="2" placeholder="中文 Lore，每行一条"></textarea>
+            <textarea id="assetItemLoreEn" rows="2" placeholder="English lore, one line each"></textarea>
+            <label class="checkLine"><input id="assetItemEnabled" type="checkbox" checked> <span>Enabled</span></label>
+            <button type="submit" class="primaryButton" data-i18n="assets.saveItem">Save item</button>
+          </form>
+          <div id="assetsItemList" class="pluginGrid mutedState"></div>
+        </section>
+        <section class="panel">
+          <h3 data-i18n="assets.promptBuilder">AI Prompt Builder</h3>
+          <form id="assetsPromptForm" class="stackForm">
+            <div class="formGrid">
+              <input id="assetsPromptUseCase" placeholder="weapon / badge / menu icon">
+              <input id="assetsPromptTheme" placeholder="ice dragon / sci-fi / fantasy">
+              <input id="assetsPromptCategory" placeholder="items">
+              <input id="assetsPromptStyle" placeholder="Minecraft pixel art">
+              <input id="assetsPromptPalette" placeholder="blue silver high contrast">
+              <input id="assetsPromptMaterialFeel" placeholder="metal / cloth / crystal">
+              <input id="assetsPromptResolution" placeholder="16x16 / 32x32">
+            </div>
+            <label class="checkLine"><input id="assetsPromptTransparent" type="checkbox" checked> <span>Transparent background</span></label>
+            <button type="submit" class="primaryButton" data-i18n="assets.generatePrompt">Generate prompts</button>
+          </form>
+          <div id="assetsPromptCards" class="dataList"></div>
+          <div class="quickRow">
+            <button type="button" id="assetsValidateButton" data-i18n="assets.validate">Validate</button>
+          </div>
+          <div id="assetsValidationList" class="dataList"></div>
+          <form id="assetsPublishForm" class="stackForm">
+            <div class="formGrid">
+              <input id="assetsPublishFile" placeholder="resource-pack.zip">
+              <input id="assetsPublishBaseUrl" placeholder="https://your-panel-url">
+            </div>
+            <label class="checkLine"><input id="assetsPublishRequired" type="checkbox"> <span>Required</span></label>
+            <label class="checkLine"><input id="assetsPublishSendOnJoin" type="checkbox"> <span>Send on join</span></label>
+            <button type="submit" class="primaryButton" data-i18n="assets.publish">Publish pack</button>
+          </form>
+          <div id="assetsPublishResult" class="dataList"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="titles" class="pageView workspace adminOnly" hidden>
+      <div class="sectionHead">
+        <div>
+          <span class="eyebrow" data-i18n="titles.eyebrow">Native title system</span>
+          <h2 data-i18n="titles.title">Titles</h2>
+        </div>
+      </div>
+      <div id="titlesHero" class="summaryGrid"></div>
+      <div class="overviewGrid">
+        <section class="panel">
+          <h3 data-i18n="titles.manage">Title Definitions</h3>
+          <form id="titleForm" class="stackForm">
+            <div class="formGrid">
+              <input id="titleId" placeholder="builder">
+              <input id="titleDisplayName" placeholder="Builder">
+              <input id="titlePrefix" placeholder="&b[Builder] ">
+              <input id="titlePriority" placeholder="10">
+              <input id="titlePermission" placeholder="huntercore.title.builder">
+            </div>
+            <textarea id="titleDescription" rows="2" placeholder="When this title should be used"></textarea>
+            <label class="checkLine"><input id="titleEnabled" type="checkbox" checked> <span>Enabled</span></label>
+            <button type="submit" class="primaryButton" data-i18n="titles.save">Save title</button>
+          </form>
+          <label class="checkLine"><input id="titlesModuleEnabled" type="checkbox"> <span data-i18n="titles.moduleToggle">Enable titles module</span></label>
+          <div id="titleList" class="pluginGrid mutedState"></div>
+        </section>
+        <section class="panel">
+          <h3 data-i18n="titles.assign">Player Assignments</h3>
+          <form id="titleAssignForm" class="stackForm">
+            <div class="formGrid">
+              <input id="titleAssignPlayer" placeholder="Player name">
+              <input id="titleAssignTitle" placeholder="builder">
+              <select id="titleAssignAction">
+                <option value="grant">Grant</option>
+                <option value="revoke">Revoke</option>
+                <option value="activate">Activate</option>
+                <option value="clear">Clear active</option>
+              </select>
+            </div>
+            <button type="submit" class="primaryButton" data-i18n="titles.apply">Apply</button>
+          </form>
+          <div id="titlePlayerList" class="dataList mutedState"></div>
         </section>
       </div>
     </section>

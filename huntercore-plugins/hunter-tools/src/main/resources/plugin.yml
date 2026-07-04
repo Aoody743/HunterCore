@@ -142,6 +142,11 @@ commands:
     description: Control the HunterCore story mode sequence.
     usage: /story <start|status|skip|stop|line|meltdown>
     permission: huntertools.command.story
+  title:
+    description: Manage HunterCore titles.
+    usage: /title [list|activate|clear|toggle|create|delete|grant|revoke|preview]
+    aliases: [titles]
+    permission: huntertools.command.title
 permissions:
   huntertools.command.tps:
     default: true
@@ -196,6 +201,10 @@ permissions:
   huntertools.command.npc:
     default: op
   huntertools.command.story:
+    default: op
+  huntertools.command.title:
+    default: true
+  huntertools.command.title.admin:
     default: op
   huntertools.display.tps:
     default: true
