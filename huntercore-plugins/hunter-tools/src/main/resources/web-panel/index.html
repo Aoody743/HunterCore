@@ -201,6 +201,7 @@
           <div id="pluginList" class="pluginGrid mutedState" data-i18n="plugins.loginRequired">Login to view plugin detail.</div>
           <aside id="pluginInspector" class="detailInspector mutedState">Select a plugin to inspect.</aside>
         </div>
+        <div id="pluginPager" class="listPager" hidden></div>
       </section>
     </section>
 
@@ -227,46 +228,46 @@
             <button type="button" class="adminOnly" data-command="time set day" data-i18n="quick.day" hidden>Day</button>
           </div>
           <div class="commandActionGrid">
-            <form class="commandAction" data-command-template="heal {player}">
+            <form class="commandAction adminOnly" data-command-template="heal {player}" hidden>
               <strong data-i18n="commandCenter.heal">Heal</strong>
               <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
               <button type="submit" data-i18n="action.run">Run</button>
             </form>
-            <form class="commandAction" data-command-template="feed {player}">
+            <form class="commandAction adminOnly" data-command-template="feed {player}" hidden>
               <strong>Feed</strong>
               <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
               <button type="submit" data-i18n="action.run">Run</button>
             </form>
-            <form class="commandAction" data-command-template="fly {player} {state}">
+            <form class="commandAction adminOnly" data-command-template="fly {player} {state}" hidden>
               <strong data-i18n="commandCenter.fly">Fly</strong>
               <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
               <select name="state"><option value="">toggle</option><option value="on">on</option><option value="off">off</option></select>
               <button type="submit" data-i18n="action.run">Run</button>
             </form>
-            <form class="commandAction" data-command-template="gm {mode} {player}">
+            <form class="commandAction adminOnly" data-command-template="gm {mode} {player}" hidden>
               <strong data-i18n="commandCenter.gamemode">Gamemode</strong>
               <select name="mode"><option value="survival">survival</option><option value="creative">creative</option><option value="adventure">adventure</option><option value="spectator">spectator</option></select>
               <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
               <button type="submit" data-i18n="action.run">Run</button>
             </form>
-            <form class="commandAction" data-command-template="speed {speed} {player} {type}">
+            <form class="commandAction adminOnly" data-command-template="speed {speed} {player} {type}" hidden>
               <strong data-i18n="commandCenter.speed">Speed</strong>
               <input name="speed" inputmode="numeric" placeholder="1-10">
               <input name="player" placeholder="player or blank" data-i18n-placeholder="commandCenter.playerOptional">
               <select name="type"><option value="">auto</option><option value="walk">walk</option><option value="fly">fly</option></select>
               <button type="submit" data-i18n="action.run">Run</button>
             </form>
-            <form class="commandAction" data-command-template="broadcast {message}">
+            <form class="commandAction adminOnly" data-command-template="broadcast {message}" hidden>
               <strong data-i18n="commandCenter.broadcast">Broadcast</strong>
               <input name="message" placeholder="message" data-i18n-placeholder="commandCenter.message">
               <button type="submit" data-i18n="action.run">Run</button>
             </form>
-            <form class="commandAction" data-command-template="{time}">
+            <form class="commandAction adminOnly" data-command-template="{time}" hidden>
               <strong>Time</strong>
               <select name="time"><option value="day">day</option><option value="night">night</option></select>
               <button type="submit" data-i18n="action.run">Run</button>
             </form>
-            <form class="commandAction" data-command-template="{weather}">
+            <form class="commandAction adminOnly" data-command-template="{weather}" hidden>
               <strong>Weather</strong>
               <select name="weather"><option value="sun">sun</option><option value="rain">rain</option><option value="thunder">thunder</option></select>
               <button type="submit" data-i18n="action.run">Run</button>
@@ -340,6 +341,7 @@
         </div>
       </div>
       <div id="assetsHero" class="summaryGrid"></div>
+      <div id="assetsPackStatus" class="resourcePackBanner"></div>
       <div class="overviewGrid">
         <section class="panel">
           <h3 data-i18n="assets.upload">Upload</h3>
@@ -369,9 +371,9 @@
               <label class="fieldLabel"><span data-i18n="assets.customModelData">CustomModelData</span><input id="assetItemCmd" placeholder="1001" data-i18n-placeholder="assets.customModelDataPlaceholder"></label>
               <label class="fieldLabel"><span data-i18n="assets.amount">Amount</span><input id="assetItemAmount" placeholder="1" data-i18n-placeholder="assets.amountPlaceholder"></label>
               <label class="fieldLabel"><span data-i18n="assets.category">Category</span><input id="assetItemCategory" placeholder="weapons / tools / ui" data-i18n-placeholder="assets.categoryPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.packFile">Resource pack file</span><input id="assetItemPack" placeholder="resource-pack.zip" data-i18n-placeholder="assets.packFilePlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.packFile">Resource pack file</span><input id="assetItemPack" list="assetPackOptions" placeholder="resource-pack.zip" data-i18n-placeholder="assets.packFilePlaceholder"><small data-i18n="assets.packFileHint">Choose an uploaded pack file used by this item.</small></label>
               <label class="fieldLabel"><span data-i18n="assets.permission">Permission node</span><input id="assetItemPermission" placeholder="hunterassets.item.example" data-i18n-placeholder="assets.permissionPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.iconPath">Icon path</span><input id="assetItemIcon" placeholder="icons/example.png" data-i18n-placeholder="assets.iconPathPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="assets.iconPath">Icon path</span><input id="assetItemIcon" list="assetImageOptions" placeholder="icons/example.png" data-i18n-placeholder="assets.iconPathPlaceholder"><small data-i18n="assets.iconPathHint">Path inside the resource pack, or an uploaded image file name.</small></label>
             </div>
             <label class="fieldLabel"><span data-i18n="assets.description">Description</span><textarea id="assetItemDescription" rows="2" placeholder="What this item is for" data-i18n-placeholder="assets.descriptionPlaceholder"></textarea></label>
             <label class="fieldLabel"><span data-i18n="assets.loreZh">Chinese lore</span><textarea id="assetItemLoreZh" rows="2" placeholder="中文 Lore，每行一条" data-i18n-placeholder="assets.loreZhPlaceholder"></textarea></label>
@@ -403,16 +405,21 @@
           <div id="assetsValidationList" class="dataList"></div>
           <form id="assetsPublishForm" class="stackForm">
             <div class="formGrid">
-              <input id="assetsPublishFile" placeholder="resource-pack.zip" data-i18n-placeholder="assets.publishFile">
-              <input id="assetsPublishBaseUrl" placeholder="https://your-panel-url" data-i18n-placeholder="assets.publishBaseUrl">
+              <label class="fieldLabel"><span data-i18n="assets.publishFileLabel">Pack file</span><input id="assetsPublishFile" list="assetPackOptions" placeholder="resource-pack.zip" data-i18n-placeholder="assets.publishFile"><small data-i18n="assets.publishFileHint">Choose a zip from the Resource packs list.</small></label>
+              <label class="fieldLabel"><span data-i18n="assets.publishBaseUrlLabel">Public base URL</span><input id="assetsPublishBaseUrl" placeholder="https://your-panel-url" data-i18n-placeholder="assets.publishBaseUrl"><small data-i18n="assets.publishBaseUrlHint">Usually the current web panel address.</small></label>
             </div>
             <label class="checkLine"><input id="assetsPublishRequired" type="checkbox"> <span>Required</span></label>
             <label class="checkLine"><input id="assetsPublishSendOnJoin" type="checkbox"> <span>Send on join</span></label>
+            <div class="quickRow">
+              <button type="button" id="assetsPublishDefaultButton" data-i18n="assets.publishDefault">Use default pack</button>
+            </div>
             <button type="submit" class="primaryButton" data-i18n="assets.publish">Publish pack</button>
           </form>
           <div id="assetsPublishResult" class="dataList"></div>
         </section>
       </div>
+      <datalist id="assetPackOptions"></datalist>
+      <datalist id="assetImageOptions"></datalist>
     </section>
 
     <section id="titles" class="pageView workspace adminOnly" hidden>
@@ -428,13 +435,13 @@
           <h3 data-i18n="titles.manage">Title Definitions</h3>
           <form id="titleForm" class="stackForm">
             <div class="formGrid">
-              <label class="fieldLabel"><span data-i18n="titles.id">Title ID</span><input id="titleId" placeholder="builder" data-i18n-placeholder="titles.idPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="titles.displayName">Display name</span><input id="titleDisplayName" placeholder="Builder" data-i18n-placeholder="titles.displayNamePlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="titles.prefix">Chat prefix</span><input id="titlePrefix" placeholder="&b[Builder] " data-i18n-placeholder="titles.prefixPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="titles.priority">Priority</span><input id="titlePriority" placeholder="10" data-i18n-placeholder="titles.priorityPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="titles.permission">Permission node</span><input id="titlePermission" placeholder="huntercore.title.builder" data-i18n-placeholder="titles.permissionPlaceholder"></label>
+              <label class="fieldLabel"><span data-i18n="titles.id">Title ID</span><input id="titleId" placeholder="builder" data-i18n-placeholder="titles.idPlaceholder"><small data-i18n="titles.idHint">Internal ID used in commands, lowercase letters, numbers, dash or underscore.</small></label>
+              <label class="fieldLabel"><span data-i18n="titles.displayName">Display name</span><input id="titleDisplayName" placeholder="Builder" data-i18n-placeholder="titles.displayNamePlaceholder"><small data-i18n="titles.displayNameHint">Name shown in the panel and title list.</small></label>
+              <label class="fieldLabel"><span data-i18n="titles.prefix">Chat prefix</span><input id="titlePrefix" placeholder="&b[Builder] " data-i18n-placeholder="titles.prefixPlaceholder"><small data-i18n="titles.prefixHint">Text added before the player name in chat, nametag, or tab.</small></label>
+              <label class="fieldLabel"><span data-i18n="titles.priority">Priority</span><input id="titlePriority" placeholder="10" data-i18n-placeholder="titles.priorityPlaceholder"><small data-i18n="titles.priorityHint">Higher number wins when multiple titles can display.</small></label>
+              <label class="fieldLabel"><span data-i18n="titles.permission">Permission node</span><input id="titlePermission" placeholder="huntercore.title.builder" data-i18n-placeholder="titles.permissionPlaceholder"><small data-i18n="titles.permissionHint">Leave blank for manual grants only, or set a permission players must have.</small></label>
             </div>
-            <label class="fieldLabel"><span data-i18n="titles.description">Description</span><textarea id="titleDescription" rows="2" placeholder="When this title should be used" data-i18n-placeholder="titles.descriptionPlaceholder"></textarea></label>
+            <label class="fieldLabel"><span data-i18n="titles.description">Description</span><textarea id="titleDescription" rows="2" placeholder="When this title should be used" data-i18n-placeholder="titles.descriptionPlaceholder"></textarea><small data-i18n="titles.descriptionHint">Short admin note, for example event reward or staff rank.</small></label>
             <label class="checkLine"><input id="titleEnabled" type="checkbox" checked> <span>Enabled</span></label>
             <button type="submit" class="primaryButton" data-i18n="titles.save">Save title</button>
           </form>
@@ -524,6 +531,7 @@
           <div class="formGrid">
             <label class="checkLine"><input id="bundleGeyser" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.geyser">Geyser</span></label>
             <label class="checkLine"><input id="bundleFloodgate" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.floodgate">Floodgate</span></label>
+            <button type="button" class="smallButton" data-config-target="geyser" data-i18n="geyser.openSettings">Open Geyser settings</button>
             <label class="checkLine"><input id="bundleHunterAssets" form="webSettingsForm" type="checkbox"> <span>HunterAssets</span></label>
             <label class="checkLine"><input id="bundleImageFrame" form="webSettingsForm" type="checkbox"> <span>ImageFrame</span></label>
             <label class="checkLine"><input id="bundleViaLegacy" form="webSettingsForm" type="checkbox"> <span>Via Legacy</span></label>
@@ -667,6 +675,7 @@
           <h2 data-i18n="access.title">Access</h2>
         </div>
       </div>
+      <form id="permissionSettingsForm" hidden></form>
       <div class="configWorkbench" data-config-workbench="access">
         <aside class="configRail panel" aria-label="Access sections">
           <button type="button" class="configTab isActive" data-config-target="auth">
@@ -681,6 +690,10 @@
             <strong data-i18n="access.tab.users">Web roles</strong>
             <span data-i18n="access.tab.usersHint">Panel users and commands</span>
           </button>
+          <button type="button" class="configTab" data-config-target="permissions">
+            <strong data-i18n="access.tab.permissions">GUI / Permissions</strong>
+            <span data-i18n="access.tab.permissionsHint">Playerbot and GUI access</span>
+          </button>
         </aside>
         <div class="configPanels">
         <section id="authSettingsPanel" class="panel" data-config-panel="auth" data-settings-scope="web">
@@ -693,6 +706,8 @@
             <label class="checkLine"><input id="authWebLoginEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.webLoginEnabled">Allow HunterAuth web login</span></label>
             <label class="checkLine"><input id="authGuiEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.guiEnabled">Login GUI</span></label>
             <label class="checkLine"><input id="authOpenGuiOnJoin" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.openGuiOnJoin">Open GUI on join</span></label>
+            <label class="checkLine"><input id="authResourcePackGui" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.resourcePackGui">Resource-pack login GUI</span></label>
+            <label class="checkLine"><input id="authResourcePackPromptOnJoin" form="webSettingsForm" type="checkbox"> <span data-i18n="auth.resourcePackPromptOnJoin">Ask for UI pack on join</span></label>
             <input id="authMinimumPasswordLength" form="webSettingsForm" inputmode="numeric" placeholder="4" data-i18n-placeholder="auth.minimumPasswordLength">
             <input id="authLoginTimeoutSeconds" form="webSettingsForm" inputmode="numeric" placeholder="90" data-i18n-placeholder="auth.loginTimeoutSeconds">
             <input id="authMaxLoginAttempts" form="webSettingsForm" inputmode="numeric" placeholder="5" data-i18n-placeholder="auth.maxLoginAttempts">
@@ -712,6 +727,20 @@
             <label class="checkLine"><input id="webClearApiKey" form="webSettingsForm" type="checkbox"> <span data-i18n="remote.clearApiKey">Clear API key</span></label>
             <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
           </div>
+        </section>
+
+        <section id="permissionsPanel" class="panel" data-config-panel="permissions" data-settings-scope="permissions" hidden>
+          <h3 data-i18n="permissions.title">GUI and permissions</h3>
+          <div class="formGrid">
+            <label class="checkLine"><input id="permissionFakePlayersChatControlEnabled" form="permissionSettingsForm" type="checkbox"> <span data-i18n="permissions.fakeChatEnabled">Playerbot chat control</span></label>
+            <label class="checkLine"><input id="permissionFakePlayersChatControlAmbientEnabled" form="permissionSettingsForm" type="checkbox"> <span data-i18n="permissions.fakeAmbientEnabled">Ambient chat trigger</span></label>
+            <label class="checkLine"><input id="permissionFakePlayersChatControlRequirePermission" form="permissionSettingsForm" type="checkbox"> <span data-i18n="permissions.fakeRequirePermission">Require permission to control playerbots</span></label>
+            <input id="permissionFakePlayersChatControlPermission" form="permissionSettingsForm" placeholder="huntertools.ai.fakeplayer" data-i18n-placeholder="permissions.fakePermission">
+            <input id="permissionFakePlayersChatControlPrefix" form="permissionSettingsForm" placeholder="@bot" data-i18n-placeholder="permissions.fakePrefix">
+            <input id="permissionFakePlayersChatControlCooldownSeconds" form="permissionSettingsForm" inputmode="numeric" placeholder="3" data-i18n-placeholder="permissions.fakeCooldown">
+          </div>
+          <div id="guiPermissionList" class="permissionGrid"></div>
+          <button type="submit" form="permissionSettingsForm" class="primaryButton" data-i18n="permissions.save">Save permissions</button>
         </section>
 
         <section id="usersPanel" class="panel" data-config-panel="users" hidden>

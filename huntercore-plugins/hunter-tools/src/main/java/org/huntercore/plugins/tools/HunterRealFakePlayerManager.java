@@ -1028,7 +1028,7 @@ final class HunterRealFakePlayerManager {
             player.sendMessage(ChatColor.RED + "HunterCore fake player AI planning is disabled.");
             return;
         }
-        if (this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false)) {
+        if (this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", true)) {
             final String permission = this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer").trim();
             if (!permission.isBlank() && !player.hasPermission(permission)) {
                 player.sendMessage(ChatColor.RED + "You do not have permission to control fake player AI from chat.");
@@ -1097,7 +1097,7 @@ final class HunterRealFakePlayerManager {
             || this.service().list().isEmpty()) {
             return;
         }
-        if (this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false)) {
+        if (this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", true)) {
             final String permission = this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer").trim();
             if (!permission.isBlank() && !player.hasPermission(permission)) {
                 return;

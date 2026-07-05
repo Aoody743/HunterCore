@@ -36,6 +36,7 @@ public final class HunterPreferences {
         final HunterPreferences preferences = new HunterPreferences(path, config);
         boolean changed = preferences.applyDefaults(bundledPlugins);
         changed |= preferences.migrateLegacyBundledConfig(pluginDirectory, bundledPlugins);
+        changed |= preferences.applyReleaseSafetyMigrations();
         if (changed || !Files.exists(path)) {
             preferences.save();
         }
@@ -314,6 +315,39 @@ public final class HunterPreferences {
         }
         this.config.set(path, value);
         return true;
+    }
+
+    private boolean applyReleaseSafetyMigrations() {
+        boolean changed = false;
+        if (!this.config.getBoolean("migrations.2-5-0-safe-defaults", false)) {
+            if (!this.config.getBoolean("bundled-plugins.enabled", true)) {
+                this.config.set("bundled-plugins.enabled", true);
+                changed = true;
+            }
+            if (!this.config.getBoolean("bundled-plugins.plugins.geyser", true)) {
+                this.config.set("bundled-plugins.plugins.geyser", true);
+                changed = true;
+            }
+            if (!this.config.getBoolean("bundled-plugins.plugins.floodgate", true)) {
+                this.config.set("bundled-plugins.plugins.floodgate", true);
+                changed = true;
+            }
+            if (this.config.getBoolean("modules.tps-display.enabled", false)) {
+                this.config.set("modules.tps-display.enabled", false);
+                changed = true;
+            }
+            if (this.config.getBoolean("modules.tps-display.actionbar", false)) {
+                this.config.set("modules.tps-display.actionbar", false);
+                changed = true;
+            }
+            if (this.config.getBoolean("modules.sidebar.enabled", false)) {
+                this.config.set("modules.sidebar.enabled", false);
+                changed = true;
+            }
+            this.config.set("migrations.2-5-0-safe-defaults", true);
+            changed = true;
+        }
+        return changed;
     }
 
     private boolean singleThreadMode() {

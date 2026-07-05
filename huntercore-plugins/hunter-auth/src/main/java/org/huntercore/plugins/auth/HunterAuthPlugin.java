@@ -2,6 +2,7 @@ package org.huntercore.plugins.auth;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
@@ -14,10 +15,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
@@ -46,7 +49,10 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerResourcePackStatusEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -60,6 +66,22 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private static final int KEY_BITS = 256;
     private static final String GUI_TITLE = "HunterAuth Workbench";
     private static final String PASSWORD_GUI_TITLE = "HunterAuth Password";
+    private static final Key HUNTERCORE_GUI_FONT = Key.key("huntercore", "gui");
+    private static final String AUTH_PANEL_GLYPH = "\uE010";
+    private static final int CMD_AUTH_DIGIT = 210000;
+    private static final int CMD_AUTH_LOGIN = 210001;
+    private static final int CMD_AUTH_REGISTER = 210002;
+    private static final int CMD_AUTH_CHAT = 210003;
+    private static final int CMD_AUTH_CONFIRM = 210004;
+    private static final int CMD_AUTH_BACKSPACE = 210005;
+    private static final int CMD_AUTH_CLEAR = 210006;
+    private static final int CMD_AUTH_WEB = 210007;
+    private static final int CMD_AUTH_HELP = 210008;
+    private static final int CMD_AUTH_PASSWORD = 210009;
+    private static final int CMD_AUTH_CHANGE = 210010;
+    private static final int CMD_AUTH_CLOSE = 210011;
+    private static final int CMD_AUTH_PACK = 210012;
+    private static final int CMD_AUTH_SHIELD = 210013;
     private static final Set<String> ALLOWED_COMMANDS = Set.of("/login", "/l", "/register", "/reg");
     private static final Map<Integer, Integer> PIN_DIGIT_SLOTS = Map.of(
         10, 1, 11, 2, 12, 3,
@@ -72,6 +94,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private final Set<UUID> authenticated = new HashSet<>();
     private final Map<UUID, PendingInput> pendingInputs = new HashMap<>();
     private final Map<UUID, GuiSession> guiSessions = new HashMap<>();
+    private final Map<UUID, ResourcePackState> resourcePackStates = new HashMap<>();
     private final Map<UUID, Integer> loginFailures = new HashMap<>();
     private final Map<UUID, Long> lockedUntil = new HashMap<>();
     private File usersFile;
@@ -89,6 +112,8 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.getConfig().addDefault("web-registration-required", false);
         this.getConfig().addDefault("gui-enabled", true);
         this.getConfig().addDefault("open-gui-on-join", true);
+        this.getConfig().addDefault("resource-pack-gui", true);
+        this.getConfig().addDefault("resource-pack-prompt-on-join", true);
         this.getConfig().addDefault("minimum-password-length", 6);
         this.getConfig().addDefault("login-timeout-seconds", 90);
         this.getConfig().addDefault("max-login-attempts", 5);
@@ -124,8 +149,12 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         }
 
         return switch (command.getName().toLowerCase(Locale.ROOT)) {
-            case "register" -> this.register(player, args);
-            case "login" -> this.login(player, args);
+            case "register" -> args.length == 0 && this.guiEnabled()
+                ? this.openAuthGuiCommand(player)
+                : this.register(player, args);
+            case "login" -> args.length == 0 && this.guiEnabled()
+                ? this.openAuthGuiCommand(player)
+                : this.login(player, args);
             case "logout" -> this.logout(player);
             case "changepassword" -> args.length == 0 && this.guiEnabled()
                 ? this.openPasswordGui(player)
@@ -163,13 +192,15 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.sendMessage(this.text("此服务器未强制注册，已自动通过登录。", "Registration is not required on this server; you are logged in automatically."));
             return;
         }
+        final boolean resourcePackRequested = this.requestAuthResourcePack(player);
         this.sendLoginPrompt(player);
         if (this.guiEnabled() && this.setting("open-gui-on-join", true)) {
             this.getServer().getScheduler().runTaskLater(this, () -> {
-                if (player.isOnline() && !this.isAuthenticated(player)) {
+                if (player.isOnline() && !this.isAuthenticated(player) && !this.guiSessions.containsKey(player.getUniqueId())
+                    && !this.pendingInputs.containsKey(player.getUniqueId())) {
                     this.openAuthGui(player);
                 }
-            }, 10L);
+            }, resourcePackRequested ? 80L : 10L);
         }
         this.scheduleLoginTimeout(player);
     }
@@ -179,8 +210,34 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.authenticated.remove(event.getPlayer().getUniqueId());
         this.pendingInputs.remove(event.getPlayer().getUniqueId());
         this.guiSessions.remove(event.getPlayer().getUniqueId());
+        this.resourcePackStates.remove(event.getPlayer().getUniqueId());
         this.loginFailures.remove(event.getPlayer().getUniqueId());
         this.lockedUntil.remove(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler
+    public void onResourcePackStatus(final PlayerResourcePackStatusEvent event) {
+        final Player player = event.getPlayer();
+        if (!this.resourcePackStates.containsKey(player.getUniqueId()) || this.isAuthenticated(player)) {
+            return;
+        }
+        final String status = event.getStatus().name();
+        if (status.equals("SUCCESSFULLY_LOADED")) {
+            this.resourcePackStates.put(player.getUniqueId(), ResourcePackState.READY);
+            player.sendMessage(this.text("HunterCore 登录界面材质包已加载。", "HunterCore login UI resource pack loaded."));
+            this.openAuthGuiSoon(player);
+            return;
+        }
+        if (status.equals("ACCEPTED") || status.equals("DOWNLOADED")) {
+            this.resourcePackStates.put(player.getUniqueId(), ResourcePackState.ACCEPTED);
+            return;
+        }
+        if (status.equals("DECLINED") || status.equals("FAILED_DOWNLOAD") || status.equals("FAILED_RELOAD")
+            || status.equals("INVALID_URL") || status.equals("DISCARDED")) {
+            this.resourcePackStates.put(player.getUniqueId(), ResourcePackState.FALLBACK);
+            player.sendMessage(this.text("未使用登录界面材质包，已切换为普通登录界面。", "Using the classic login GUI because the resource pack was not loaded."));
+            this.openAuthGuiSoon(player);
+        }
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
@@ -230,8 +287,9 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         if (!(event.getWhoClicked() instanceof final Player player)) {
             return;
         }
-        final boolean authGui = this.isAuthGui(event.getView().title());
-        final boolean passwordGui = this.isPasswordGui(event.getView().title());
+        final Inventory topInventory = event.getView().getTopInventory();
+        final boolean authGui = topInventory.getHolder() instanceof AuthGuiHolder || this.isAuthGui(event.getView().title());
+        final boolean passwordGui = topInventory.getHolder() instanceof PasswordGuiHolder || this.isPasswordGui(event.getView().title());
         if (!this.isAuthenticated(player) && !authGui) {
             event.setCancelled(true);
             player.sendMessage(this.text("请先登录再操作背包。", "Please log in before using inventories."));
@@ -260,30 +318,30 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             if (session.current().length() < 64) {
                 session.append(digit);
             }
-            this.renderAuthGui(player, event.getView().getTopInventory(), session);
+            this.renderAuthGui(player, topInventory, session);
             return;
         }
         switch (slot) {
             case 14 -> {
                 session.mode(InputMode.LOGIN);
                 session.reset();
-                this.renderAuthGui(player, event.getView().getTopInventory(), session);
+                this.renderAuthGui(player, topInventory, session);
             }
             case 15 -> {
                 session.mode(InputMode.REGISTER);
                 session.reset();
-                this.renderAuthGui(player, event.getView().getTopInventory(), session);
+                this.renderAuthGui(player, topInventory, session);
             }
             case 16 -> this.startGuiInput(player, session.mode());
             case 37 -> {
                 session.backspace();
-                this.renderAuthGui(player, event.getView().getTopInventory(), session);
+                this.renderAuthGui(player, topInventory, session);
             }
             case 39 -> {
                 session.reset();
-                this.renderAuthGui(player, event.getView().getTopInventory(), session);
+                this.renderAuthGui(player, topInventory, session);
             }
-            case 32 -> this.submitGuiPassword(player, session, event.getView().getTopInventory());
+            case 32 -> this.submitGuiPassword(player, session, topInventory);
             case 41 -> player.sendMessage(this.text("网页注册地址：", "Web registration URL: ") + this.registrationUrl());
             case 43 -> this.sendLoginPrompt(player);
             default -> {
@@ -351,7 +409,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         if (!(event.getPlayer() instanceof final Player player) || this.isAuthenticated(player) || !this.guiEnabled()) {
             return;
         }
-        if (!this.isAuthGui(event.getView().title())) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof AuthGuiHolder) && !this.isAuthGui(event.getView().title())) {
             return;
         }
         this.guiSessions.remove(player.getUniqueId());
@@ -480,9 +538,23 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.sendMessage(this.text("Log in first, then change your password.", "Log in first, then change your password."));
             return true;
         }
-        final Inventory inventory = Bukkit.createInventory(player, 27, ComponentTitle.HUNTER_AUTH_PASSWORD);
+        final boolean enhanced = this.useEnhancedAuthGui(player);
+        final Inventory inventory = Bukkit.createInventory(new PasswordGuiHolder(enhanced), 27, enhanced ? ComponentTitle.HUNTER_AUTH_ENHANCED : ComponentTitle.HUNTER_AUTH_PASSWORD);
         this.renderPasswordGui(player, inventory);
         player.openInventory(inventory);
+        return true;
+    }
+
+    private boolean openAuthGuiCommand(final Player player) {
+        if (this.shouldBypass()) {
+            player.sendMessage(this.text("HunterAuth is disabled or bypassed while the server is in online mode.", "HunterAuth is disabled or bypassed while the server is in online mode."));
+            return true;
+        }
+        if (this.isAuthenticated(player)) {
+            player.sendMessage(this.text("你已经登录。", "You are already logged in."));
+            return true;
+        }
+        this.openAuthGui(player);
         return true;
     }
 
@@ -492,7 +564,8 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         }
         final GuiSession session = new GuiSession(this.isRegistered(player) ? InputMode.LOGIN : InputMode.REGISTER);
         this.guiSessions.put(player.getUniqueId(), session);
-        final Inventory inventory = Bukkit.createInventory(player, 54, ComponentTitle.HUNTER_AUTH);
+        final boolean enhanced = this.useEnhancedAuthGui(player);
+        final Inventory inventory = Bukkit.createInventory(new AuthGuiHolder(enhanced), 54, enhanced ? ComponentTitle.HUNTER_AUTH_ENHANCED : ComponentTitle.HUNTER_AUTH);
         this.renderAuthGui(player, inventory, session);
         player.openInventory(inventory);
     }
@@ -502,13 +575,18 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             return;
         }
         this.getServer().getScheduler().runTaskLater(this, () -> {
-            if (player.isOnline() && !this.isAuthenticated(player) && !this.pendingInputs.containsKey(player.getUniqueId())) {
+            if (player.isOnline() && !this.isAuthenticated(player) && !this.pendingInputs.containsKey(player.getUniqueId())
+                && !this.guiSessions.containsKey(player.getUniqueId())) {
                 this.openAuthGui(player);
             }
         }, 2L);
     }
 
     private void renderAuthGui(final Player player, final Inventory inventory, final GuiSession session) {
+        if (this.enhancedInventory(inventory)) {
+            this.renderEnhancedAuthGui(player, inventory, session);
+            return;
+        }
         inventory.clear();
         for (int i = 0; i < inventory.getSize(); i++) {
             inventory.setItem(i, item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of()));
@@ -558,7 +636,57 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         inventory.setItem(43, item(Material.PAPER, this.text("命令帮助", "Command help"), List.of("/login <password>", "/register <password> <password>", "/changepassword <old> <new>")));
     }
 
+    private void renderEnhancedAuthGui(final Player player, final Inventory inventory, final GuiSession session) {
+        inventory.clear();
+        for (final Map.Entry<Integer, Integer> entry : PIN_DIGIT_SLOTS.entrySet()) {
+            inventory.setItem(entry.getKey(), this.digitItem(entry.getValue(), true));
+        }
+        final boolean registered = this.isRegistered(player);
+        final boolean loginMode = session.mode() == InputMode.LOGIN;
+        final String entered = "*".repeat(session.current().length());
+        inventory.setItem(4, this.enhancedButton(CMD_AUTH_SHIELD, "&bHunterAuth", List.of(
+            registered ? "&7账号状态: &a已注册" : "&7账号状态: &e未注册",
+            this.resourcePackReady(player) ? "&7界面: &b资源包增强" : "&7界面: &f普通模式",
+            "&8拒绝材质包也可以继续登录"
+        )));
+        inventory.setItem(14, this.enhancedButton(CMD_AUTH_LOGIN, loginMode ? "&a登录模式" : "&7登录模式", List.of(
+            "&7使用已有密码进入服务器",
+            loginMode ? "&a当前已选择" : "&e点击切换"
+        )));
+        inventory.setItem(15, this.enhancedButton(CMD_AUTH_REGISTER, !loginMode ? "&a注册模式" : "&7注册模式", List.of(
+            "&7创建服务器登录密码",
+            !loginMode ? "&a当前已选择" : "&e点击切换"
+        )));
+        inventory.setItem(16, this.enhancedButton(CMD_AUTH_CHAT, "&b安全聊天输入", List.of(
+            loginMode ? "&f/login <password>" : "&f/register <password> <password>",
+            "&7点击后关闭 GUI，在聊天栏输入",
+            "&8不会广播给其他玩家"
+        )));
+        inventory.setItem(23, this.enhancedButton(CMD_AUTH_PASSWORD, loginMode ? "&b输入登录密码" : "&b输入注册密码", List.of(
+            "&7已输入: &f" + (entered.isBlank() ? "-" : entered),
+            session.firstPassword() == null ? "&7点击左侧键盘输入" : "&e请再次输入相同密码",
+            "&7最小长度: &f" + this.intSetting("minimum-password-length", 6)
+        )));
+        inventory.setItem(32, this.enhancedButton(CMD_AUTH_CONFIRM, "&a确认", List.of("&7提交当前输入")));
+        inventory.setItem(37, this.enhancedButton(CMD_AUTH_BACKSPACE, "&e退格", List.of("&7删除最后一位")));
+        inventory.setItem(39, this.enhancedButton(CMD_AUTH_CLEAR, "&c清空", List.of("&7清空当前输入")));
+        inventory.setItem(41, this.enhancedButton(CMD_AUTH_WEB, "&b网页登录", List.of(this.registrationUrl())));
+        inventory.setItem(43, this.enhancedButton(CMD_AUTH_HELP, "&f命令帮助", List.of(
+            "&f/login <password>",
+            "&f/register <password> <password>",
+            "&f/changepassword <old> <new>"
+        )));
+        inventory.setItem(49, this.enhancedButton(CMD_AUTH_PACK, "&b界面资源包", List.of(
+            "&7已集成 HunterCore 默认资源包",
+            "&7如果拒绝安装，会自动使用普通界面"
+        )));
+    }
+
     private void renderPasswordGui(final Player player, final Inventory inventory) {
+        if (this.enhancedInventory(inventory)) {
+            this.renderEnhancedPasswordGui(player, inventory);
+            return;
+        }
         inventory.clear();
         for (int i = 0; i < inventory.getSize(); i++) {
             inventory.setItem(i, item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of()));
@@ -573,6 +701,21 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         )));
         inventory.setItem(15, item(Material.PAPER, this.text("Command help", "Command help"), List.of("/changepassword <old> <new>")));
         inventory.setItem(22, item(Material.BARRIER, this.text("Close", "Close"), List.of(this.text("Close this panel.", "Close this panel."))));
+    }
+
+    private void renderEnhancedPasswordGui(final Player player, final Inventory inventory) {
+        inventory.clear();
+        inventory.setItem(4, this.enhancedButton(CMD_AUTH_CHANGE, "&b修改密码", List.of(
+            "&7当前账号: &f" + player.getName(),
+            "&7使用安全输入流程更换密码"
+        )));
+        inventory.setItem(11, this.enhancedButton(CMD_AUTH_CHAT, "&b安全聊天输入", List.of(
+            "&f/changepassword <old> <new>",
+            "&7点击后在聊天栏输入旧密码和新密码",
+            "&8输入 cancel 可取消"
+        )));
+        inventory.setItem(15, this.enhancedButton(CMD_AUTH_HELP, "&f命令帮助", List.of("&f/changepassword <old> <new>")));
+        inventory.setItem(22, this.enhancedButton(CMD_AUTH_CLOSE, "&c关闭", List.of("&7关闭此面板")));
     }
 
     private void handlePasswordGuiClick(final Player player, final int slot) {
@@ -712,6 +855,64 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     private boolean guiEnabled() {
         return this.setting("gui-enabled", true);
+    }
+
+    private boolean resourcePackGuiEnabled() {
+        return this.setting("resource-pack-gui", true);
+    }
+
+    private boolean requestAuthResourcePack(final Player player) {
+        if (!this.resourcePackGuiEnabled() || !this.setting("resource-pack-prompt-on-join", true)) {
+            return false;
+        }
+        final ResourcePackInfo pack = this.authResourcePack();
+        if (!pack.ready()) {
+            this.resourcePackStates.put(player.getUniqueId(), ResourcePackState.FALLBACK);
+            return false;
+        }
+        this.resourcePackStates.put(player.getUniqueId(), ResourcePackState.REQUESTED);
+        player.sendMessage(this.text(
+            "正在请求安装 HunterCore 登录界面材质包；如果拒绝，会自动使用普通登录界面。",
+            "Requesting the HunterCore login UI resource pack. If you decline, the classic login GUI will be used."
+        ));
+        player.setResourcePack(pack.url(), pack.sha1(), color(this.text(
+            "安装 HunterCore 界面资源包以启用定制登录界面；拒绝也可以继续登录。",
+            "Install the HunterCore UI resource pack for the custom login screen. You can decline and keep using the classic login GUI."
+        )), false);
+        return true;
+    }
+
+    private ResourcePackInfo authResourcePack() {
+        final File assetsConfig = Bukkit.getPluginsFolder().toPath().resolve("HunterAssets").resolve("config.yml").toFile();
+        if (!assetsConfig.isFile()) {
+            return ResourcePackInfo.empty();
+        }
+        final YamlConfiguration yaml = YamlConfiguration.loadConfiguration(assetsConfig);
+        final String url = yaml.getString("resource-pack.url", "").trim();
+        if (!yaml.getBoolean("resource-pack.enabled", false) || url.isBlank()) {
+            return ResourcePackInfo.empty();
+        }
+        try {
+            URI.create(url);
+        } catch (final IllegalArgumentException ex) {
+            this.getLogger().warning("HunterAuth ignored invalid HunterAssets resource-pack.url: " + url);
+            return ResourcePackInfo.empty();
+        }
+        return new ResourcePackInfo(url, sha1Bytes(yaml.getString("resource-pack.sha1", "").trim()));
+    }
+
+    private boolean useEnhancedAuthGui(final Player player) {
+        return this.resourcePackGuiEnabled() && this.resourcePackReady(player);
+    }
+
+    private boolean resourcePackReady(final Player player) {
+        return this.resourcePackStates.get(player.getUniqueId()) == ResourcePackState.READY;
+    }
+
+    private boolean enhancedInventory(final Inventory inventory) {
+        final InventoryHolder holder = inventory.getHolder();
+        return holder instanceof AuthGuiHolder authGuiHolder && authGuiHolder.enhanced()
+            || holder instanceof PasswordGuiHolder passwordGuiHolder && passwordGuiHolder.enhanced();
     }
 
     private boolean isAuthenticated(final Player player) {
@@ -879,6 +1080,18 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         return HunterLanguage.choose(HunterCoreProvider.get().language(), zhCn, enUs);
     }
 
+    private ItemStack digitItem(final int digit, final boolean enhanced) {
+        if (!enhanced) {
+            return this.digitItem(digit);
+        }
+        final ItemStack item = this.enhancedButton(CMD_AUTH_DIGIT, "&b" + digit, List.of(
+            "&7点击输入此位密码",
+            "&8也可以使用聊天栏安全输入"
+        ));
+        item.setAmount(digit == 0 ? 10 : digit);
+        return item;
+    }
+
     private ItemStack digitItem(final int digit) {
         final int amount = digit == 0 ? 10 : digit;
         final Material material = digit == 0 ? Material.BLACK_STAINED_GLASS_PANE : Material.LIGHT_BLUE_STAINED_GLASS_PANE;
@@ -890,6 +1103,17 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         return item;
     }
 
+    private ItemStack enhancedButton(final int customModelData, final String name, final List<String> lore) {
+        final ItemStack item = new ItemStack(Material.PAPER);
+        final ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(color(name));
+        meta.setLore(lore.stream().map(HunterAuthPlugin::color).toList());
+        meta.setCustomModelData(customModelData);
+        meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+        item.setItemMeta(meta);
+        return item;
+    }
+
     private static ItemStack item(final Material material, final String name, final List<String> lore) {
         final ItemStack item = new ItemStack(material);
         final ItemMeta meta = item.getItemMeta();
@@ -897,6 +1121,30 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         meta.setLore(lore.stream().map(line -> ChatColor.GRAY + line).toList());
         item.setItemMeta(meta);
         return item;
+    }
+
+    private static String color(final String input) {
+        return ChatColor.translateAlternateColorCodes('&', Objects.requireNonNullElse(input, ""));
+    }
+
+    private static byte[] sha1Bytes(final String sha1) {
+        if (sha1.isBlank()) {
+            return new byte[0];
+        }
+        final String normalized = sha1.replace(" ", "").toLowerCase(Locale.ROOT);
+        if (normalized.length() != 40) {
+            return new byte[0];
+        }
+        final byte[] bytes = new byte[20];
+        for (int i = 0; i < 20; i++) {
+            final int index = i * 2;
+            try {
+                bytes[i] = (byte) Integer.parseInt(normalized.substring(index, index + 2), 16);
+            } catch (final NumberFormatException ex) {
+                return new byte[0];
+            }
+        }
+        return bytes;
     }
 
     private static String path(final Player player) {
@@ -917,6 +1165,28 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         }
     }
 
+    private enum ResourcePackState {
+        REQUESTED,
+        ACCEPTED,
+        READY,
+        FALLBACK
+    }
+
+    private record ResourcePackInfo(String url, byte[] sha1) {
+        private ResourcePackInfo {
+            url = Objects.requireNonNullElse(url, "");
+            sha1 = sha1 == null ? new byte[0] : sha1.clone();
+        }
+
+        private boolean ready() {
+            return !this.url.isBlank();
+        }
+
+        private static ResourcePackInfo empty() {
+            return new ResourcePackInfo("", new byte[0]);
+        }
+    }
+
     private enum InputMode {
         LOGIN,
         REGISTER,
@@ -924,6 +1194,20 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private record PendingInput(InputMode mode) {
+    }
+
+    private record AuthGuiHolder(boolean enhanced) implements InventoryHolder {
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
+    private record PasswordGuiHolder(boolean enhanced) implements InventoryHolder {
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
     }
 
     private static final class GuiSession {
@@ -978,6 +1262,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private static final class ComponentTitle {
         private static final Component HUNTER_AUTH = Component.text(GUI_TITLE);
         private static final Component HUNTER_AUTH_PASSWORD = Component.text(PASSWORD_GUI_TITLE);
+        private static final Component HUNTER_AUTH_ENHANCED = Component.text(AUTH_PANEL_GLYPH).font(HUNTERCORE_GUI_FONT);
 
         private ComponentTitle() {
         }

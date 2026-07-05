@@ -60,6 +60,7 @@ public final class HunterBundledPluginInstaller {
             final HunterPreferences preferences = HunterPreferences.loadOrCreate(pluginDirectory, plugins);
             HunterCoreOptimizer.applyPreferences(preferences);
             HunterCoreRuntime.get().setPreferences(preferences);
+            quarantineLegacyNoChatReports(pluginDirectory);
 
             if (!preferences.bundledPluginsEnabled()) {
                 LOGGER.info("HunterCore bundled plugin installer disabled by configuration.");
@@ -392,5 +393,24 @@ public final class HunterBundledPluginInstaller {
         final Path target = pluginDirectory.resolve(plugin.fileName());
         deleteStaleSiblingJars(pluginDirectory, plugin, target);
         Files.deleteIfExists(target);
+    }
+
+    private static void quarantineLegacyNoChatReports(final Path pluginDirectory) {
+        final Path quarantineDirectory = pluginDirectory.resolve("HunterCore").resolve("disabled-legacy-plugins");
+        try (var paths = Files.list(pluginDirectory)) {
+            for (final Path path : paths.toList()) {
+                final String fileName = path.getFileName().toString();
+                final String lowerName = fileName.toLowerCase(Locale.ROOT);
+                if (!lowerName.endsWith(".jar") || !lowerName.contains("nochatreports")) {
+                    continue;
+                }
+                Files.createDirectories(quarantineDirectory);
+                final Path target = quarantineDirectory.resolve(fileName + ".disabled");
+                Files.move(path, target, StandardCopyOption.REPLACE_EXISTING);
+                LOGGER.info("HunterCore quarantined legacy NoChatReports plugin at {}. Built-in chat report protection is used instead.", target);
+            }
+        } catch (final IOException ex) {
+            LOGGER.warn("HunterCore could not quarantine legacy NoChatReports plugin", ex);
+        }
     }
 }

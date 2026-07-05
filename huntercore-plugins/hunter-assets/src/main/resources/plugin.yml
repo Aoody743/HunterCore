@@ -16,3 +16,7 @@ permissions:
     default: op
   hunterassets.give:
     default: op
+  hunterassets.item.sample_blade:
+    default: true
+  hunterassets.item.*:
+    default: op

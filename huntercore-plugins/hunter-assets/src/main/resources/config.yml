@@ -3,18 +3,24 @@ resource-pack:
   enabled: false
   url: ""
   sha1: ""
-  prompt-zh-cn: "服务器需要加载 HunterAssets 资源包以显示自定义内容。"
-  prompt-en-us: "This server uses the HunterAssets resource pack for custom content."
+  prompt-zh-cn: "Install the HunterCore UI and assets resource pack. You can decline and keep using the classic login GUI."
+  prompt-en-us: "Install the HunterCore UI and assets resource pack. You can decline and keep using the classic login GUI."
   required: false
   send-on-join: false
 items:
   sample_blade:
+    enabled: true
+    category: starter
     material: IRON_SWORD
     amount: 1
     custom-model-data: 200001
-    name-zh-cn: "&b示例长剑"
+    permission: hunterassets.item.sample_blade
+    pack: HunterCore-default-ui.zip
+    icon: assets/huntercore/textures/item/sample_blade.png
+    description: HunterAssets starter custom item.
+    name-zh-cn: "&bSample Blade"
     name-en-us: "&bSample Blade"
     lore-zh-cn:
-      - "&7自定义材质示例"
+      - "&7Custom texture example"
     lore-en-us:
       - "&7Custom texture example"

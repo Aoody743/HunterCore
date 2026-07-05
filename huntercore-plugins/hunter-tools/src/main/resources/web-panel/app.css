@@ -715,6 +715,13 @@ input::placeholder {
   overflow-wrap: anywhere;
 }
 
+.fieldLabel small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 640;
+  line-height: 1.35;
+}
+
 .fieldLabel input,
 .fieldLabel select,
 .fieldLabel textarea {
@@ -1241,9 +1248,65 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.assetFileCard {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.assetFileActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
 #assetsHero .summaryCard strong,
 #titlesHero .summaryCard strong {
   overflow-wrap: anywhere;
+}
+
+.resourcePackBanner {
+  min-width: 0;
+}
+
+.resourcePackStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  min-width: 0;
+}
+
+.resourcePackStatus > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.resourcePackStatus strong,
+.resourcePackStatus span,
+.resourcePackStatus small {
+  overflow-wrap: anywhere;
+}
+
+.resourcePackStatus small {
+  color: var(--muted);
+}
+
+.resourcePackStatus.good {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.resourcePackStatus.warn {
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.resourcePackStatus.bad {
+  border-color: rgba(239, 68, 68, 0.45);
 }
 
 .userActions,
@@ -1309,6 +1372,39 @@ textarea {
 
 .aiTestForm {
   margin-top: 12px;
+}
+
+.permissionGrid {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.permissionGridHead {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.permissionField {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.55fr) minmax(220px, 1fr);
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.permissionField small {
+  grid-column: 2;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .permissionField {
+    grid-template-columns: 1fr;
+  }
+
+  .permissionField small {
+    grid-column: 1;
+  }
 }
 
 .actorCommandInput {
@@ -1377,6 +1473,22 @@ textarea {
   min-height: 42px;
 }
 
+.listPager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.listPager span {
+  min-width: 180px;
+  text-align: center;
+  font-weight: 700;
+}
+
 .pluginGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1437,6 +1549,14 @@ textarea {
     radial-gradient(circle at var(--glass-x) var(--glass-y), rgba(255, 255, 255, 0.66), transparent 40%),
     linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(255, 238, 241, 0.24)),
     rgba(217, 45, 67, 0.08);
+}
+
+.pluginItem.isLegacyNcr {
+  border-color: rgba(245, 158, 11, 0.36);
+  background:
+    radial-gradient(circle at var(--glass-x) var(--glass-y), rgba(255, 255, 255, 0.62), transparent 40%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.46), rgba(255, 247, 223, 0.36)),
+    rgba(245, 158, 11, 0.10);
 }
 
 .pluginItem.isInstalled {
@@ -1733,6 +1853,15 @@ textarea {
   .chatForm,
   .chatLine {
     grid-template-columns: 1fr;
+  }
+
+  .listPager {
+    flex-wrap: wrap;
+  }
+
+  .listPager span {
+    order: -1;
+    width: 100%;
   }
 
   .miniMetrics,

@@ -133,6 +133,14 @@ final class HunterWebPanelManager {
         this.server.createContext("/", this::handle);
         this.server.start();
         this.plugin.getLogger().info("HunterCore web panel listening on http://" + bindAddress + ":" + port + "/");
+        try {
+            final HunterAssetsWorkspaceService.PublishedPack defaultPack = this.assetsWorkspaceService.publishDefaultPackIfNeeded();
+            if (defaultPack != null) {
+                this.plugin.getLogger().info("HunterAssets default resource pack published at " + defaultPack.url());
+            }
+        } catch (final IOException ex) {
+            this.plugin.getLogger().warning("Failed to publish HunterAssets default resource pack: " + ex.getMessage());
+        }
     }
 
     synchronized void restart() {
@@ -454,6 +462,11 @@ final class HunterWebPanelManager {
             if (path.equals("/api/admin/ai-settings")) {
                 this.requireMethod(exchange, "POST");
                 this.adminAiSettings(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/permission-settings")) {
+                this.requireMethod(exchange, "POST");
+                this.adminPermissionSettings(exchange);
                 return;
             }
             if (path.equals("/api/admin/ai-test")) {
@@ -812,6 +825,7 @@ final class HunterWebPanelManager {
             json.append(",\"webSettings\":").append(this.webSettingsJson());
             json.append(",\"commandMessages\":").append(this.commandMessagesJson());
             json.append(",\"aiSettings\":").append(this.aiSettingsJson());
+            json.append(",\"permissionSettings\":").append(this.permissionSettingsJson());
         }
         json.append('}');
         return json.toString();
@@ -992,6 +1006,7 @@ final class HunterWebPanelManager {
         booleanField(json, "webRegistrationRequired", this.preferences.booleanValue("modules.auth.web-registration-required", false)).append(',');
         booleanField(json, "webRegistrationEnabled", this.preferences.booleanValue("modules.auth.web-registration-enabled", false)).append(',');
         booleanField(json, "webLoginEnabled", this.preferences.booleanValue("modules.auth.web-login-enabled", false)).append(',');
+        booleanField(json, "resourcePackGui", this.preferences.booleanValue("modules.auth.resource-pack-gui", true)).append(',');
         numberField(json, "minimumPasswordLength", this.preferences.intValue("modules.auth.minimum-password-length", 4)).append(',');
         field(json, "registrationUrl", this.registrationUrl());
         json.append('}');
@@ -1167,9 +1182,10 @@ final class HunterWebPanelManager {
         final boolean loaded = installedPlugin != null;
         final boolean enabled = installedPlugin != null && installedPlugin.isEnabled();
         final boolean protectedPlugin = this.protectedPlugin(name);
+        final boolean legacyNoChatReports = legacyNoChatReports(name, scan == null ? "" : scan.path().getFileName().toString());
         final PluginDescriptionFile description = installedPlugin == null ? null : installedPlugin.getDescription();
         final long fileSize = scan == null ? -1L : safeFileSize(scan.path());
-        final String risk = protectedPlugin ? "protected" : !loaded ? "restart" : "runtime";
+        final String risk = legacyNoChatReports ? "legacy" : protectedPlugin ? "protected" : !loaded ? "restart" : "runtime";
         json.append('{');
         field(json, "name", name).append(',');
         field(json, "version", version).append(',');
@@ -1183,8 +1199,9 @@ final class HunterWebPanelManager {
         field(json, "status", loaded ? (enabled ? "enabled" : "disabled") : "installed").append(',');
         booleanField(json, "loaded", loaded).append(',');
         booleanField(json, "enabled", enabled).append(',');
-        booleanField(json, "controllable", !protectedPlugin).append(',');
-        booleanField(json, "updateable", !protectedPlugin).append(',');
+        booleanField(json, "legacyNoChatReports", legacyNoChatReports).append(',');
+        booleanField(json, "controllable", !protectedPlugin && !legacyNoChatReports).append(',');
+        booleanField(json, "updateable", !protectedPlugin && !legacyNoChatReports).append(',');
         numberField(json, "fileSizeBytes", fileSize).append(',');
         json.append("\"authors\":").append(stringArrayJson(description == null ? List.of() : description.getAuthors())).append(',');
         json.append("\"dependencies\":").append(stringArrayJson(description == null ? List.of() : description.getDepend())).append(',');
@@ -1198,6 +1215,11 @@ final class HunterWebPanelManager {
         } catch (final IOException ignored) {
             return -1L;
         }
+    }
+
+    private static boolean legacyNoChatReports(final String name, final String sourceJar) {
+        final String normalized = (name + " " + sourceJar).toLowerCase(Locale.ROOT).replace("-", "").replace("_", "");
+        return normalized.contains("nochatreports");
     }
 
     private String actorDetailsJson() {
@@ -1293,6 +1315,8 @@ final class HunterWebPanelManager {
         booleanField(json, "authWebLoginEnabled", this.preferences.booleanValue("modules.auth.web-login-enabled", false)).append(',');
         booleanField(json, "authGuiEnabled", this.preferences.booleanValue("modules.auth.gui-enabled", true)).append(',');
         booleanField(json, "authOpenGuiOnJoin", this.preferences.booleanValue("modules.auth.open-gui-on-join", true)).append(',');
+        booleanField(json, "authResourcePackGui", this.preferences.booleanValue("modules.auth.resource-pack-gui", true)).append(',');
+        booleanField(json, "authResourcePackPromptOnJoin", this.preferences.booleanValue("modules.auth.resource-pack-prompt-on-join", true)).append(',');
         numberField(json, "authMinimumPasswordLength", this.preferences.intValue("modules.auth.minimum-password-length", 4)).append(',');
         numberField(json, "authLoginTimeoutSeconds", this.preferences.intValue("modules.auth.login-timeout-seconds", 90)).append(',');
         numberField(json, "authMaxLoginAttempts", this.preferences.intValue("modules.auth.max-login-attempts", 5)).append(',');
@@ -1434,7 +1458,7 @@ final class HunterWebPanelManager {
         booleanField(json, "fakePlayersChatControlAmbientEnabled", this.preferences.booleanValue("modules.ai.fake-players.chat-control.ambient-enabled", true)).append(',');
         field(json, "fakePlayersChatControlPrefix", this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot")).append(',');
         numberField(json, "fakePlayersChatControlCooldownSeconds", this.preferences.intValue("modules.ai.fake-players.chat-control.cooldown-seconds", 3)).append(',');
-        booleanField(json, "fakePlayersChatControlRequirePermission", this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false)).append(',');
+        booleanField(json, "fakePlayersChatControlRequirePermission", this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", true)).append(',');
         field(json, "fakePlayersChatControlPermission", this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer")).append(',');
         field(json, "fakePlayersSystemPrompt", this.preferences.stringValue("modules.ai.fake-players.system-prompt", "")).append(',');
         json.append("\"fakeBotAliases\":").append(fakeBotAliasesJson()).append(',');
@@ -1449,6 +1473,33 @@ final class HunterWebPanelManager {
         field(json, "storyMeltdownDestroyGoal", story.meltdownDestroyGoal()).append(',');
         json.append("\"storyPhases\":").append(storyPhasesJson(story));
         json.append('}');
+        return json.toString();
+    }
+
+    private String permissionSettingsJson() {
+        final StringBuilder json = new StringBuilder(2048);
+        json.append('{');
+        booleanField(json, "fakePlayersChatControlEnabled", this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true)).append(',');
+        booleanField(json, "fakePlayersChatControlAmbientEnabled", this.preferences.booleanValue("modules.ai.fake-players.chat-control.ambient-enabled", true)).append(',');
+        field(json, "fakePlayersChatControlPrefix", this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot")).append(',');
+        numberField(json, "fakePlayersChatControlCooldownSeconds", this.preferences.intValue("modules.ai.fake-players.chat-control.cooldown-seconds", 3)).append(',');
+        booleanField(json, "fakePlayersChatControlRequirePermission", this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", true)).append(',');
+        field(json, "fakePlayersChatControlPermission", this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer")).append(',');
+        json.append("\"guiPermissions\":{");
+        boolean first = true;
+        for (final String feature : HunterToolsPreferences.guiPermissionFeatures()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            final String fallback = HunterToolsPreferences.guiPermissionDefault(feature);
+            json.append(string(feature)).append(':');
+            json.append('{');
+            field(json, "permission", this.preferences.stringValue("modules.gui.permissions." + feature, fallback)).append(',');
+            field(json, "defaultPermission", fallback);
+            json.append('}');
+        }
+        json.append("}}");
         return json.toString();
     }
 
@@ -2116,6 +2167,8 @@ final class HunterWebPanelManager {
         final Boolean authWebLoginEnabled = parseBoolean(body.getOrDefault("authWebLoginEnabled", String.valueOf(this.preferences.booleanValue("modules.auth.web-login-enabled", false))));
         final Boolean authGuiEnabled = parseBoolean(body.getOrDefault("authGuiEnabled", String.valueOf(this.preferences.booleanValue("modules.auth.gui-enabled", true))));
         final Boolean authOpenGuiOnJoin = parseBoolean(body.getOrDefault("authOpenGuiOnJoin", String.valueOf(this.preferences.booleanValue("modules.auth.open-gui-on-join", true))));
+        final Boolean authResourcePackGui = parseBoolean(body.getOrDefault("authResourcePackGui", String.valueOf(this.preferences.booleanValue("modules.auth.resource-pack-gui", true))));
+        final Boolean authResourcePackPromptOnJoin = parseBoolean(body.getOrDefault("authResourcePackPromptOnJoin", String.valueOf(this.preferences.booleanValue("modules.auth.resource-pack-prompt-on-join", true))));
         final Integer authMinimumPasswordLength = parseInteger(body.getOrDefault("authMinimumPasswordLength", String.valueOf(this.preferences.intValue("modules.auth.minimum-password-length", 4))), 1, 128);
         final Integer authLoginTimeoutSeconds = parseInteger(body.getOrDefault("authLoginTimeoutSeconds", String.valueOf(this.preferences.intValue("modules.auth.login-timeout-seconds", 90))), 0, 3600);
         final Integer authMaxLoginAttempts = parseInteger(body.getOrDefault("authMaxLoginAttempts", String.valueOf(this.preferences.intValue("modules.auth.max-login-attempts", 5))), 1, 100);
@@ -2165,7 +2218,7 @@ final class HunterWebPanelManager {
             || sidebarIntervalTicks == null || sidebarDirtyUpdatesOnly == null || motdEnabled == null
             || motdLine1.length() > 256 || motdLine2.length() > 256 || motdMaxPlayers == null
             || authEnabled == null || authRegistrationRequired == null || authWebRegistrationRequired == null || authWebRegistrationEnabled == null || authWebLoginEnabled == null
-            || authGuiEnabled == null || authOpenGuiOnJoin == null || authMinimumPasswordLength == null
+            || authGuiEnabled == null || authOpenGuiOnJoin == null || authResourcePackGui == null || authResourcePackPromptOnJoin == null || authMinimumPasswordLength == null
             || corsEnabled == null || apiKeyEnabled == null || clearApiKey == null
             || bundleGeyser == null || bundleFloodgate == null || bundleHunterAssets == null || bundleImageFrame == null || bundleViaLegacy == null
             || noChatReportsEnabled == null || noChatReportsAddQueryData == null || noChatReportsConvertToGameMessage == null
@@ -2218,6 +2271,8 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.auth.web-login-enabled", authWebLoginEnabled);
         this.preferences.setValue("modules.auth.gui-enabled", authGuiEnabled);
         this.preferences.setValue("modules.auth.open-gui-on-join", authOpenGuiOnJoin);
+        this.preferences.setValue("modules.auth.resource-pack-gui", authResourcePackGui);
+        this.preferences.setValue("modules.auth.resource-pack-prompt-on-join", authResourcePackPromptOnJoin);
         this.preferences.setValue("modules.auth.minimum-password-length", authMinimumPasswordLength);
         this.preferences.setValue("modules.auth.login-timeout-seconds", authLoginTimeoutSeconds);
         this.preferences.setValue("modules.auth.max-login-attempts", authMaxLoginAttempts);
@@ -2686,7 +2741,7 @@ final class HunterWebPanelManager {
         final Boolean fakePlayersAllowInteraction = parseBoolean(body.getOrDefault("fakePlayersAllowInteraction", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.allow-interaction", true))));
         final Boolean fakePlayersChatControlEnabled = parseBoolean(body.getOrDefault("fakePlayersChatControlEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true))));
         final Boolean fakePlayersChatControlAmbientEnabled = parseBoolean(body.getOrDefault("fakePlayersChatControlAmbientEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.ambient-enabled", true))));
-        final Boolean fakePlayersChatControlRequirePermission = parseBoolean(body.getOrDefault("fakePlayersChatControlRequirePermission", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", false))));
+        final Boolean fakePlayersChatControlRequirePermission = parseBoolean(body.getOrDefault("fakePlayersChatControlRequirePermission", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", true))));
         final String provider = body.getOrDefault("provider", "openai-compatible").trim();
         final String baseUrl = body.getOrDefault("baseUrl", this.preferences.stringValue("modules.ai.base-url", "https://api.openai.com/v1")).trim();
         final String model = body.getOrDefault("model", this.preferences.stringValue("modules.ai.model", "gpt-4o-mini")).trim();
@@ -2828,6 +2883,49 @@ final class HunterWebPanelManager {
         this.savePreferences();
         this.invalidateStatusCaches();
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"settings\":" + this.aiSettingsJson() + "}");
+    }
+
+    private void adminPermissionSettings(final HttpExchange exchange) throws IOException {
+        final WebSession session = this.adminOperator(exchange);
+        if (session == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 16 * 1024));
+        final Boolean fakePlayersChatControlEnabled = parseBoolean(body.getOrDefault("fakePlayersChatControlEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.enabled", true))));
+        final Boolean fakePlayersChatControlAmbientEnabled = parseBoolean(body.getOrDefault("fakePlayersChatControlAmbientEnabled", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.ambient-enabled", true))));
+        final Boolean fakePlayersChatControlRequirePermission = parseBoolean(body.getOrDefault("fakePlayersChatControlRequirePermission", String.valueOf(this.preferences.booleanValue("modules.ai.fake-players.chat-control.require-permission", true))));
+        final String fakePlayersChatControlPrefix = body.getOrDefault("fakePlayersChatControlPrefix", this.preferences.stringValue("modules.ai.fake-players.chat-control.trigger-prefix", "@bot")).trim();
+        final String fakePlayersChatControlPermission = body.getOrDefault("fakePlayersChatControlPermission", this.preferences.stringValue("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer")).trim();
+        final Integer fakePlayersChatControlCooldown = parseInteger(body.getOrDefault("fakePlayersChatControlCooldownSeconds", String.valueOf(this.preferences.intValue("modules.ai.fake-players.chat-control.cooldown-seconds", 3))), 0, 3600);
+
+        if (fakePlayersChatControlEnabled == null || fakePlayersChatControlAmbientEnabled == null || fakePlayersChatControlRequirePermission == null
+            || fakePlayersChatControlCooldown == null || fakePlayersChatControlPrefix.isBlank() || fakePlayersChatControlPrefix.length() > 32
+            || fakePlayersChatControlPermission.length() > 96) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_permission_settings\"}");
+            return;
+        }
+
+        for (final String feature : HunterToolsPreferences.guiPermissionFeatures()) {
+            final String value = body.getOrDefault("guiPermission." + feature, this.preferences.stringValue("modules.gui.permissions." + feature, HunterToolsPreferences.guiPermissionDefault(feature))).trim();
+            if (value.length() > 96 || (!value.isBlank() && !value.matches("[A-Za-z0-9_.-]+"))) {
+                this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_permission_node\"}");
+                return;
+            }
+        }
+
+        this.preferences.setValue("modules.ai.fake-players.chat-control.enabled", fakePlayersChatControlEnabled);
+        this.preferences.setValue("modules.ai.fake-players.chat-control.ambient-enabled", fakePlayersChatControlAmbientEnabled);
+        this.preferences.setValue("modules.ai.fake-players.chat-control.trigger-prefix", fakePlayersChatControlPrefix);
+        this.preferences.setValue("modules.ai.fake-players.chat-control.cooldown-seconds", fakePlayersChatControlCooldown);
+        this.preferences.setValue("modules.ai.fake-players.chat-control.require-permission", fakePlayersChatControlRequirePermission);
+        this.preferences.setValue("modules.ai.fake-players.chat-control.permission", fakePlayersChatControlPermission);
+        for (final String feature : HunterToolsPreferences.guiPermissionFeatures()) {
+            final String value = body.getOrDefault("guiPermission." + feature, this.preferences.stringValue("modules.gui.permissions." + feature, HunterToolsPreferences.guiPermissionDefault(feature))).trim();
+            this.preferences.setValue("modules.gui.permissions." + feature, value);
+        }
+        this.savePreferences();
+        this.invalidateStatusCaches();
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"settings\":" + this.permissionSettingsJson() + ",\"aiSettings\":" + this.aiSettingsJson() + "}");
     }
 
     private void adminAiTest(final HttpExchange exchange) throws IOException, InterruptedException, ExecutionException, TimeoutException {

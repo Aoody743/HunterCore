@@ -3,6 +3,7 @@ const BACKEND_URL_KEY = 'huntercore.panel.backendUrl';
 const BACKEND_API_KEY_KEY = 'huntercore.panel.apiKey';
 const SESSION_TOKEN_KEY = 'huntercore.panel.sessionToken';
 const CONFIG_WORKBENCH_KEY_PREFIX = 'huntercore.panel.config.';
+const PLUGIN_PAGE_SIZE = 20;
 
 function detectLanguage() {
   try {
@@ -71,6 +72,7 @@ const state = {
   lang: detectLanguage(),
   lastData: null,
   selectedPlugin: '',
+  pluginPage: 0,
   selectedActor: '',
   selectedWebUser: '',
   page: 'map',
@@ -148,6 +150,41 @@ const FIELD_HELP = {
   aiFakePlayersChatControlPermission: 'Permission node checked when chat control permission is required.',
   aiFakePlayersSystemPrompt: 'Advanced instruction for real fake player AI. Use action syntax only.'
 };
+const GUI_PERMISSION_FIELDS = [
+  ['admin', 'Admin GUI / hc admin'],
+  ['fake-players', 'Playerbots GUI'],
+  ['npcs', 'NPC GUI'],
+  ['story', 'Story GUI'],
+  ['titles', 'Titles GUI'],
+  ['title-admin', 'Title administration'],
+  ['teleport', 'TPA / teleport GUI'],
+  ['homes', 'Homes GUI'],
+  ['random-teleport', 'Random teleport'],
+  ['assets', 'Assets GUI'],
+  ['assets-give', 'Assets give'],
+  ['assets-admin', 'Assets admin'],
+  ['auth', 'Auth GUI'],
+  ['tps', 'TPS'],
+  ['heal', 'Heal'],
+  ['feed', 'Feed'],
+  ['fly', 'Fly'],
+  ['gamemode', 'Game mode'],
+  ['time', 'Time'],
+  ['weather', 'Weather'],
+  ['broadcast', 'Broadcast'],
+  ['clearchat', 'Clear chat'],
+  ['speed', 'Speed'],
+  ['spawn', 'Spawn'],
+  ['setspawn', 'Set spawn'],
+  ['back', 'Back'],
+  ['hat', 'Hat'],
+  ['craft', 'Crafting table'],
+  ['enderchest', 'Ender chest'],
+  ['trash', 'Trash'],
+  ['menu', 'Main GUI'],
+  ['profile', 'Profile GUI'],
+  ['settings', 'Settings GUI']
+];
 const PAGES = ['map', 'overview', 'runtime', 'plugins', 'tools', ...ADMIN_PAGES];
 
 const translations = {
@@ -208,6 +245,9 @@ const translations = {
     'players.loginRequired': '登录后查看玩家详情。',
     'plugins.loginRequired': '登录后查看插件详情。',
     'plugins.count': '{count} 个',
+    'plugins.page': '第 {page} / {pages} 页 · 共 {count} 个',
+    'plugins.prevPage': '上一页',
+    'plugins.nextPage': '下一页',
     'plugins.search': '搜索插件、Jar、描述或作者',
     'plugins.empty': '没有匹配的插件。',
     'plugins.summary': '全部 {total} · 已启用 {enabled} · 已停用 {disabled} · 仅安装 {installed} · 受保护 {protected}',
@@ -218,7 +258,9 @@ const translations = {
     'plugins.issue.installedOnly': '仅安装未加载',
     'plugins.issue.disabled': '已停用',
     'plugins.issue.legacyApi': '旧 API',
+    'plugins.issue.legacyNoChatReports': '旧外部 NoChatReports',
     'plugins.issue.noDescriptor': '描述文件缺失',
+    'plugins.legacyNoChatReports': '旧外部 NoChatReports 已由核心内置聊天举报保护替代，可移除该外部插件。',
     'plugins.detail': '详情',
     'plugins.filter.all': '全部',
     'plugins.filter.enabled': '已启用',
@@ -264,10 +306,12 @@ const translations = {
     'assets.categoryPlaceholder': 'weapons / tools / ui',
     'assets.packFile': '资源包文件',
     'assets.packFilePlaceholder': '已上传的 zip 文件名',
+    'assets.packFileHint': '选择这个物品依赖的已上传资源包。',
     'assets.permission': '权限节点',
     'assets.permissionPlaceholder': '留空或 hunterassets.item.example',
     'assets.iconPath': '图标路径',
     'assets.iconPathPlaceholder': '资源包内路径，例如 icons/example.png',
+    'assets.iconPathHint': '填写资源包内路径，或选择已上传的图片文件名。',
     'assets.description': '说明',
     'assets.descriptionPlaceholder': '这个物品的用途',
     'assets.loreZh': '中文 Lore',
@@ -292,16 +336,22 @@ const translations = {
     'titles.moduleToggle': '启用称号模块',
     'titles.id': '称号 ID',
     'titles.idPlaceholder': '唯一 ID，例如 builder',
+    'titles.idHint': '命令和配置使用的内部 ID，建议小写字母、数字、短横线或下划线。',
     'titles.displayName': '显示名',
     'titles.displayNamePlaceholder': '面板里看到的名称，例如 Builder',
+    'titles.displayNameHint': '显示在网页面板和称号列表里的名称。',
     'titles.prefix': '聊天前缀',
     'titles.prefixPlaceholder': '支持 & 颜色，例如 &b[Builder] ',
+    'titles.prefixHint': '显示在聊天、头顶名或 TAB 里的前缀文本。',
     'titles.priority': '优先级',
     'titles.priorityPlaceholder': '数字越大优先级越高',
+    'titles.priorityHint': '玩家拥有多个可显示称号时，数字更大的优先生效。',
     'titles.permission': '权限节点',
     'titles.permissionPlaceholder': '留空或 huntercore.title.builder',
+    'titles.permissionHint': '留空表示只靠手动发放；填写后玩家还需要拥有该权限。',
     'titles.description': '说明',
     'titles.descriptionPlaceholder': '这个称号的用途或发放条件',
+    'titles.descriptionHint': '管理员备注，例如活动奖励、身份组或解锁条件。',
     'titles.assignPlayer': '玩家名',
     'titles.assignPlayerPlaceholder': '要发放/撤销称号的玩家名',
     'titles.assignTitle': '称号 ID',
@@ -385,6 +435,52 @@ const translations = {
     'access.tab.remoteHint': '跨域和 API key',
     'access.tab.users': '网页身份',
     'access.tab.usersHint': '面板用户与命令权限',
+    'access.tab.permissions': 'GUI / 权限',
+    'access.tab.permissionsHint': '假人与功能入口权限',
+    'permissions.title': 'GUI 与权限',
+    'permissions.fakeChatEnabled': '假人聊天控制',
+    'permissions.fakeAmbientEnabled': '允许自然聊天触发',
+    'permissions.fakeRequirePermission': '控制假人需要权限',
+    'permissions.fakePermission': '假人控制权限节点，例如 huntertools.ai.fakeplayer',
+    'permissions.fakePrefix': '假人控制前缀，例如 @bot',
+    'permissions.fakeCooldown': '假人控制冷却秒数',
+    'permissions.guiPermissions': 'GUI / hc 功能权限',
+    'permissions.default': '默认：{permission}',
+    'permissions.save': '保存权限配置',
+    'permissions.saved': '权限配置已保存。',
+    'guiPermission.admin': '管理员 GUI / hc admin',
+    'guiPermission.fake-players': '假人 GUI',
+    'guiPermission.npcs': 'NPC GUI',
+    'guiPermission.story': '剧情 GUI',
+    'guiPermission.titles': '称号 GUI',
+    'guiPermission.title-admin': '称号管理',
+    'guiPermission.teleport': '传送 / TPA GUI',
+    'guiPermission.homes': '家园 GUI',
+    'guiPermission.random-teleport': '随机传送',
+    'guiPermission.assets': '资源物品 GUI',
+    'guiPermission.assets-give': '发放资源物品',
+    'guiPermission.assets-admin': '资源管理',
+    'guiPermission.auth': '登录认证 GUI',
+    'guiPermission.tps': 'TPS 显示',
+    'guiPermission.heal': '治疗',
+    'guiPermission.feed': '饱食',
+    'guiPermission.fly': '飞行',
+    'guiPermission.gamemode': '游戏模式',
+    'guiPermission.time': '时间',
+    'guiPermission.weather': '天气',
+    'guiPermission.broadcast': '广播',
+    'guiPermission.clearchat': '清屏',
+    'guiPermission.speed': '速度',
+    'guiPermission.spawn': '出生点',
+    'guiPermission.setspawn': '设置出生点',
+    'guiPermission.back': '返回死亡/传送点',
+    'guiPermission.hat': '帽子',
+    'guiPermission.craft': '工作台',
+    'guiPermission.enderchest': '末影箱',
+    'guiPermission.trash': '垃圾桶',
+    'guiPermission.menu': '主菜单 GUI',
+    'guiPermission.profile': '个人资料 GUI',
+    'guiPermission.settings': '设置 GUI',
     'modules.title': '模块',
     'commands.title': '命令开关',
     'webSettings.title': '网页面板',
@@ -427,6 +523,7 @@ const translations = {
     'geyser.secondaryMotdPlaceholder': '第二行服务器描述',
     'geyser.passthroughMotd': '跟随 Java MOTD',
     'geyser.passthroughPlayers': '跟随 Java 在线人数',
+    'geyser.openSettings': '打开 Geyser 配置',
     'geyser.save': '保存 Geyser 设置',
     'geyser.status': '配置：{config}；基岩地址：{address}:{port}；登录模式：{auth}。',
     'auth.title': 'HunterAuth',
@@ -437,6 +534,8 @@ const translations = {
     'auth.webLoginEnabled': '允许玩家用游戏密码登录网页',
     'auth.guiEnabled': '登录 GUI',
     'auth.openGuiOnJoin': '进服打开登录 GUI',
+    'auth.resourcePackGui': '资源包增强登录 GUI',
+    'auth.resourcePackPromptOnJoin': '进服先请求界面资源包',
     'auth.minimumPasswordLength': '最小密码长度',
     'auth.loginTimeoutSeconds': '登录超时秒数（0 为关闭）',
     'auth.maxLoginAttempts': '最大输错次数',
@@ -611,6 +710,7 @@ const translations = {
     'plugin.webControls': '网页可控',
     'plugin.protected': '受保护',
     'plugin.risk.protected': '核心/面板插件，禁止热操作',
+    'plugin.risk.legacy': '旧外部插件，核心已内置替代',
     'plugin.risk.restart': '已安装未加载，通常需要加载或重启',
     'plugin.risk.runtime': '支持网页热操作，生产环境建议低峰操作',
     'plugin.dependencies': '依赖',
@@ -708,6 +808,9 @@ const translations = {
     'players.loginRequired': 'Login to view player detail.',
     'plugins.loginRequired': 'Login to view plugin detail.',
     'plugins.count': '{count}',
+    'plugins.page': 'Page {page} / {pages} · {count} plugins',
+    'plugins.prevPage': 'Previous',
+    'plugins.nextPage': 'Next',
     'plugins.search': 'Search plugins, jars, descriptions or authors',
     'plugins.empty': 'No matching plugins.',
     'plugins.summary': 'Total {total} · Enabled {enabled} · Disabled {disabled} · Installed {installed} · Protected {protected}',
@@ -718,7 +821,9 @@ const translations = {
     'plugins.issue.installedOnly': 'Installed only',
     'plugins.issue.disabled': 'Disabled',
     'plugins.issue.legacyApi': 'Legacy API',
+    'plugins.issue.legacyNoChatReports': 'Legacy external NoChatReports',
     'plugins.issue.noDescriptor': 'Descriptor missing',
+    'plugins.legacyNoChatReports': 'Legacy external NoChatReports is replaced by HunterCore built-in chat report protection and can be removed.',
     'plugins.detail': 'Details',
     'plugins.filter.all': 'All',
     'plugins.filter.enabled': 'Enabled',
@@ -764,10 +869,12 @@ const translations = {
     'assets.categoryPlaceholder': 'weapons / tools / ui',
     'assets.packFile': 'Resource pack file',
     'assets.packFilePlaceholder': 'Uploaded zip file name',
+    'assets.packFileHint': 'Choose the uploaded resource pack this item depends on.',
     'assets.permission': 'Permission node',
     'assets.permissionPlaceholder': 'Blank or hunterassets.item.example',
     'assets.iconPath': 'Icon path',
     'assets.iconPathPlaceholder': 'Path inside the pack, e.g. icons/example.png',
+    'assets.iconPathHint': 'Path inside the resource pack, or an uploaded image file name.',
     'assets.description': 'Description',
     'assets.descriptionPlaceholder': 'What this item is for',
     'assets.loreZh': 'Chinese lore',
@@ -783,6 +890,14 @@ const translations = {
     'assets.promptResolution': 'Resolution, e.g. 16x16 / 32x32',
     'assets.publishFile': 'Resource pack zip file to publish',
     'assets.publishBaseUrl': 'Public base URL for the pack',
+    'assets.publishFileLabel': 'Pack file',
+    'assets.publishFileHint': 'Choose a zip from the Resource packs list.',
+    'assets.publishBaseUrlLabel': 'Public base URL',
+    'assets.publishBaseUrlHint': 'Usually the current web panel address.',
+    'assets.publishDefault': 'Use default pack',
+    'assets.packReady': 'Default pack ready',
+    'assets.packPublished': 'Pack published',
+    'assets.packMissing': 'No pack available',
     'titles.eyebrow': 'Native title system',
     'titles.title': 'Titles',
     'titles.manage': 'Title Definitions',
@@ -792,16 +907,22 @@ const translations = {
     'titles.moduleToggle': 'Enable titles module',
     'titles.id': 'Title ID',
     'titles.idPlaceholder': 'Unique ID, e.g. builder',
+    'titles.idHint': 'Internal ID for commands and config; use lowercase letters, numbers, dash or underscore.',
     'titles.displayName': 'Display name',
     'titles.displayNamePlaceholder': 'Panel name, e.g. Builder',
+    'titles.displayNameHint': 'Name shown in the web panel and title list.',
     'titles.prefix': 'Chat prefix',
     'titles.prefixPlaceholder': 'Supports & colors, e.g. &b[Builder] ',
+    'titles.prefixHint': 'Prefix text shown in chat, nametag, or tab.',
     'titles.priority': 'Priority',
     'titles.priorityPlaceholder': 'Higher numbers win first',
+    'titles.priorityHint': 'When a player has multiple displayable titles, the higher number wins.',
     'titles.permission': 'Permission node',
     'titles.permissionPlaceholder': 'Blank or huntercore.title.builder',
+    'titles.permissionHint': 'Leave blank for manual grants only, or require this permission.',
     'titles.description': 'Description',
     'titles.descriptionPlaceholder': 'When this title should be used',
+    'titles.descriptionHint': 'Short admin note, such as event reward, staff rank, or unlock condition.',
     'titles.assignPlayer': 'Player name',
     'titles.assignPlayerPlaceholder': 'Player to grant or revoke from',
     'titles.assignTitle': 'Title ID',
@@ -885,6 +1006,52 @@ const translations = {
     'access.tab.remoteHint': 'CORS and API key',
     'access.tab.users': 'Web roles',
     'access.tab.usersHint': 'Panel users and commands',
+    'access.tab.permissions': 'GUI / Permissions',
+    'access.tab.permissionsHint': 'Playerbot and GUI access',
+    'permissions.title': 'GUI and permissions',
+    'permissions.fakeChatEnabled': 'Playerbot chat control',
+    'permissions.fakeAmbientEnabled': 'Ambient chat trigger',
+    'permissions.fakeRequirePermission': 'Require permission to control playerbots',
+    'permissions.fakePermission': 'Playerbot control permission, e.g. huntertools.ai.fakeplayer',
+    'permissions.fakePrefix': 'Playerbot control prefix, e.g. @bot',
+    'permissions.fakeCooldown': 'Playerbot control cooldown seconds',
+    'permissions.guiPermissions': 'GUI / hc feature permissions',
+    'permissions.default': 'Default: {permission}',
+    'permissions.save': 'Save permissions',
+    'permissions.saved': 'Permission settings saved.',
+    'guiPermission.admin': 'Admin GUI / hc admin',
+    'guiPermission.fake-players': 'Playerbots GUI',
+    'guiPermission.npcs': 'NPC GUI',
+    'guiPermission.story': 'Story GUI',
+    'guiPermission.titles': 'Titles GUI',
+    'guiPermission.title-admin': 'Title administration',
+    'guiPermission.teleport': 'TPA / teleport GUI',
+    'guiPermission.homes': 'Homes GUI',
+    'guiPermission.random-teleport': 'Random teleport',
+    'guiPermission.assets': 'Assets GUI',
+    'guiPermission.assets-give': 'Assets give',
+    'guiPermission.assets-admin': 'Assets admin',
+    'guiPermission.auth': 'Auth GUI',
+    'guiPermission.tps': 'TPS display',
+    'guiPermission.heal': 'Heal',
+    'guiPermission.feed': 'Feed',
+    'guiPermission.fly': 'Fly',
+    'guiPermission.gamemode': 'Game mode',
+    'guiPermission.time': 'Time',
+    'guiPermission.weather': 'Weather',
+    'guiPermission.broadcast': 'Broadcast',
+    'guiPermission.clearchat': 'Clear chat',
+    'guiPermission.speed': 'Speed',
+    'guiPermission.spawn': 'Spawn',
+    'guiPermission.setspawn': 'Set spawn',
+    'guiPermission.back': 'Back',
+    'guiPermission.hat': 'Hat',
+    'guiPermission.craft': 'Crafting table',
+    'guiPermission.enderchest': 'Ender chest',
+    'guiPermission.trash': 'Trash',
+    'guiPermission.menu': 'Main GUI',
+    'guiPermission.profile': 'Profile GUI',
+    'guiPermission.settings': 'Settings GUI',
     'modules.title': 'Modules',
     'commands.title': 'Command gates',
     'webSettings.title': 'Web panel',
@@ -928,6 +1095,7 @@ const translations = {
     'geyser.secondaryMotdPlaceholder': 'Second server description line',
     'geyser.passthroughMotd': 'Passthrough Java MOTD',
     'geyser.passthroughPlayers': 'Passthrough Java player counts',
+    'geyser.openSettings': 'Open Geyser settings',
     'geyser.save': 'Save Geyser settings',
     'geyser.status': 'Config: {config}; Bedrock address: {address}:{port}; login mode: {auth}.',
     'auth.title': 'HunterAuth',
@@ -938,6 +1106,8 @@ const translations = {
     'auth.webLoginEnabled': 'Allow players to web-login with game password',
     'auth.guiEnabled': 'Login GUI',
     'auth.openGuiOnJoin': 'Open GUI on join',
+    'auth.resourcePackGui': 'Resource-pack login GUI',
+    'auth.resourcePackPromptOnJoin': 'Ask for UI pack on join',
     'auth.minimumPasswordLength': 'Minimum password length',
     'auth.loginTimeoutSeconds': 'Login timeout seconds (0 disables)',
     'auth.maxLoginAttempts': 'Maximum wrong attempts',
@@ -1123,6 +1293,7 @@ const translations = {
     'plugin.webControls': 'web controls',
     'plugin.protected': 'protected',
     'plugin.risk.protected': 'Core/panel plugin; hot operations are blocked',
+    'plugin.risk.legacy': 'Legacy external plugin replaced by built-in core behavior',
     'plugin.risk.restart': 'Installed but not loaded; load or restart may be required',
     'plugin.risk.runtime': 'Web hot operation available; prefer quiet production windows',
     'plugin.dependencies': 'Dependencies',
@@ -1176,6 +1347,11 @@ function statusLabel(status) {
 
 function pluginStatusLabel(status) {
   return t(`plugin.status.${status || 'disabled'}`);
+}
+
+function guiPermissionLabel(key, fallback) {
+  const label = t(`guiPermission.${key}`);
+  return label === `guiPermission.${key}` ? fallback : label;
 }
 
 function pluginRiskLabel(plugin) {
@@ -1244,6 +1420,7 @@ function pluginReadinessIssues(plugins) {
     installedOnly: [],
     disabled: [],
     legacyApi: [],
+    legacyNoChatReports: [],
     noDescriptor: []
   };
   (plugins || []).forEach((plugin) => {
@@ -1252,6 +1429,7 @@ function pluginReadinessIssues(plugins) {
     if (plugin.loaded === false || plugin.status === 'installed') buckets.installedOnly.push(plugin.name);
     else if (!plugin.enabled) buckets.disabled.push(plugin.name);
     if (plugin.apiVersion && /^1\.(1[0-9]|20)(\.|$)/.test(plugin.apiVersion)) buckets.legacyApi.push(`${plugin.name}: ${plugin.apiVersion}`);
+    if (plugin.legacyNoChatReports) buckets.legacyNoChatReports.push(plugin.name);
     if (!plugin.descriptor) buckets.noDescriptor.push(plugin.name);
   });
   return buckets;
@@ -1449,6 +1627,7 @@ function rerenderCachedStatus() {
   renderCommandMessages(data.commandMessages);
   renderAiApprovals(data.aiApprovals);
   renderAiSettings(data.aiSettings);
+  renderPermissionSettings(data.permissionSettings);
 }
 
 function setLanguage(lang) {
@@ -1566,6 +1745,7 @@ function pluginLine(plugin, admin) {
     controllable ? t('plugin.webControls') : t('plugin.protected')
   ].join(' · ');
   const detail = [
+    plugin.legacyNoChatReports ? t('plugins.legacyNoChatReports') : '',
     pluginRiskLabel(plugin),
     plugin.apiVersion ? `API ${plugin.apiVersion}` : '',
     plugin.fileSizeBytes >= 0 ? `${t('plugin.size')}: ${formatBytes(plugin.fileSizeBytes)}` : '',
@@ -1580,7 +1760,7 @@ function pluginLine(plugin, admin) {
   const controlDisabled = controllable ? '' : 'disabled';
   const reloadDisabled = controllable && loaded ? '' : 'disabled';
   const updateDisabled = updateable ? '' : 'disabled';
-  return `<div class="pluginItem ${status === 'enabled' ? 'isEnabled' : status === 'installed' ? 'isInstalled' : 'isDisabled'}">
+  return `<div class="pluginItem ${plugin.legacyNoChatReports ? 'isLegacyNcr' : status === 'enabled' ? 'isEnabled' : status === 'installed' ? 'isInstalled' : 'isDisabled'}">
     <div class="pluginTop">
       <span>${esc(plugin.name)}<small>${esc(meta)}</small></span>
       <strong class="stateChip ${statusClass}">${esc(pluginStatusLabel(status))}</strong>
@@ -1799,6 +1979,13 @@ function renderOverview(data) {
   const filteredPlugins = data.plugins
     ? data.plugins.filter((plugin) => pluginMatches(plugin, pluginQuery, pluginFilterValue))
     : null;
+  const pluginPageCount = filteredPlugins ? Math.max(1, Math.ceil(filteredPlugins.length / PLUGIN_PAGE_SIZE)) : 0;
+  if (filteredPlugins) {
+    state.pluginPage = Math.max(0, Math.min(state.pluginPage, pluginPageCount - 1));
+  }
+  const pluginPageItems = filteredPlugins
+    ? filteredPlugins.slice(state.pluginPage * PLUGIN_PAGE_SIZE, state.pluginPage * PLUGIN_PAGE_SIZE + PLUGIN_PAGE_SIZE)
+    : null;
   if ($('pluginSummary')) {
     $('pluginSummary').textContent = data.plugins ? pluginSummaryLine(data.plugins) : '';
   }
@@ -1810,9 +1997,10 @@ function renderOverview(data) {
     $('pluginWorkbenchCards').innerHTML = data.plugins ? pluginWorkbenchCards(data.plugins, data.webSettings?.thirdParty || {}) : '';
   }
   $('pluginList').innerHTML = filteredPlugins
-    ? filteredPlugins.map((plugin) => pluginLine(plugin, Boolean(data.session?.admin))).join('') || `<p class="mutedState">${esc(t('plugins.empty'))}</p>`
+    ? pluginPageItems.map((plugin) => pluginLine(plugin, Boolean(data.session?.admin))).join('') || `<p class="mutedState">${esc(t('plugins.empty'))}</p>`
     : `<p class="mutedState">${esc(t('plugins.loginRequired'))}</p>`;
   $('pluginList').classList.toggle('mutedState', !data.plugins);
+  renderPluginPager(filteredPlugins ? filteredPlugins.length : 0, state.pluginPage, pluginPageCount, Boolean(filteredPlugins));
   if ($('pluginCountBadge')) {
     $('pluginCountBadge').textContent = filteredPlugins ? t('plugins.count', { count: filteredPlugins.length }) : '--';
   }
@@ -1820,18 +2008,69 @@ function renderOverview(data) {
   renderPluginInspector(filteredPlugins || []);
 }
 
+function renderPluginPager(total, page, pageCount, visible) {
+  const pager = $('pluginPager');
+  if (!pager) return;
+  if (!visible || total <= PLUGIN_PAGE_SIZE || pageCount <= 1) {
+    pager.hidden = true;
+    pager.innerHTML = '';
+    return;
+  }
+  const prevPage = Math.max(0, page - 1);
+  const nextPage = Math.min(pageCount - 1, page + 1);
+  pager.hidden = false;
+  pager.innerHTML = `
+    <button type="button" class="smallButton" data-plugin-page="${prevPage}" ${page <= 0 ? 'disabled' : ''}>${esc(t('plugins.prevPage'))}</button>
+    <span>${esc(t('plugins.page', { page: page + 1, pages: pageCount, count: total }))}</span>
+    <button type="button" class="smallButton" data-plugin-page="${nextPage}" ${page >= pageCount - 1 ? 'disabled' : ''}>${esc(t('plugins.nextPage'))}</button>
+  `;
+}
+
+function defaultAssetPack(assets) {
+  const packs = assets?.packs || [];
+  return packs.find((file) => file.name === 'HunterCore-default-ui.zip')
+    || packs.find((file) => /\.zip$/i.test(file.name || ''))
+    || packs[0]
+    || null;
+}
+
+function currentPanelBaseUrl() {
+  return window.location?.origin && window.location.origin !== 'null' ? window.location.origin : '';
+}
+
 function renderAssets(assets) {
   if (!state.session?.admin || !assets) return;
   const validation = assets.validation || {};
+  const pack = defaultAssetPack(assets);
+  const resourcePack = assets.resourcePack || {};
+  const packUrl = resourcePack.url || '';
   $('assetsHero').innerHTML = [
     summaryCard('Items', (assets.items || []).length, `${(assets.packs || []).length} packs`),
     summaryCard('Images', (assets.images || []).length, `${(assets.presets || []).length} presets`),
     summaryCard('Validation', (validation.errors || []).length, `${(validation.warnings || []).length} warnings`, (validation.errors || []).length ? 'bad' : (validation.warnings || []).length ? 'warn' : 'good'),
-    summaryCard('Pack URL', assets.resourcePack?.url || '--', assets.resourcePack?.enabled ? 'enabled' : 'disabled')
+    summaryCard('Pack URL', packUrl || '--', resourcePack.enabled ? 'enabled' : 'disabled')
   ].join('');
-  $('assetsPackList').innerHTML = assetFileBlock(t('assets.packs'), assets.packs || [], t('assets.emptyPacks'));
-  $('assetsImageList').innerHTML = assetFileBlock(t('assets.images'), assets.images || [], t('assets.emptyImages'));
-  $('assetsPresetList').innerHTML = assetFileBlock(t('assets.presets'), assets.presets || [], t('assets.emptyPresets'));
+  $('assetsPackStatus').innerHTML = `
+    <article class="resourcePackStatus ${resourcePack.enabled && packUrl ? 'good' : pack ? 'warn' : 'bad'}">
+      <div>
+        <strong>${esc(resourcePack.enabled && packUrl ? t('assets.packPublished') : pack ? t('assets.packReady') : t('assets.packMissing'))}</strong>
+        <span>${esc(pack ? pack.name : t('assets.emptyPacks'))}</span>
+        <small>${esc(packUrl || currentPanelBaseUrl() || '--')}</small>
+      </div>
+      <div class="assetFileActions">
+        ${pack ? `<button type="button" class="smallButton" data-asset-publish-pack="${esc(pack.name)}">${esc(t('assets.publishDefault'))}</button>` : ''}
+        ${packUrl ? `<a class="smallButton" href="${esc(packUrl)}" target="_blank" rel="noreferrer">Download</a>` : ''}
+      </div>
+    </article>
+  `;
+  $('assetPackOptions').innerHTML = (assets.packs || []).map((file) => `<option value="${esc(file.name)}"></option>`).join('');
+  $('assetImageOptions').innerHTML = (assets.images || []).map((file) => `<option value="${esc(file.name)}"></option>`).join('');
+  if (pack && !$('assetsPublishFile').value) $('assetsPublishFile').value = pack.name;
+  if (!$('assetsPublishBaseUrl').value) $('assetsPublishBaseUrl').value = currentPanelBaseUrl();
+  if (pack && !packUrl && !$('assetsPublishSendOnJoin').checked) $('assetsPublishSendOnJoin').checked = true;
+  $('assetsPackList').innerHTML = assetFileBlock(t('assets.packs'), assets.packs || [], t('assets.emptyPacks'), 'pack');
+  $('assetsImageList').innerHTML = assetFileBlock(t('assets.images'), assets.images || [], t('assets.emptyImages'), 'image');
+  $('assetsPresetList').innerHTML = assetFileBlock(t('assets.presets'), assets.presets || [], t('assets.emptyPresets'), 'preset');
   $('assetsItemList').innerHTML = (assets.items || []).map((item) => `
     <article class="pluginItem">
       <div class="pluginTop"><span>${esc(item.name || item.id)}<small>${esc(item.id)} · ${esc(item.material)} · CMD ${esc(item.customModelData)}</small></span></div>
@@ -1848,8 +2087,19 @@ function renderAssets(assets) {
   ].join('') || `<p class="mutedState">No validation issues.</p>`;
 }
 
-function assetFileBlock(title, files, emptyText) {
-  const rows = files.map((file) => dataItem(file.name, formatBytes(file.size || 0))).join('');
+function assetFileBlock(title, files, emptyText, type) {
+  const rows = files.map((file) => {
+    const actions = type === 'pack'
+      ? `<button type="button" class="smallButton" data-asset-use-pack="${esc(file.name)}">Use for item</button>
+         <button type="button" class="smallButton" data-asset-publish-pack="${esc(file.name)}">Publish</button>`
+      : type === 'image'
+        ? `<button type="button" class="smallButton" data-asset-use-icon="${esc(file.name)}">Use as icon</button>`
+        : '';
+    return `<article class="dataItem assetFileCard">
+      <span>${esc(file.name)}<small>${esc(formatBytes(file.size || 0))}</small></span>
+      ${actions ? `<span class="assetFileActions">${actions}</span>` : ''}
+    </article>`;
+  }).join('');
   return `<div class="assetListBlock">
     <div class="listHeader"><h4>${esc(title)}</h4><span>${files.length}</span></div>
     ${rows || `<p class="mutedState">${esc(emptyText)}</p>`}
@@ -2042,6 +2292,8 @@ function renderWebSettings(settings) {
   $('authWebLoginEnabled').checked = Boolean(settings.authWebLoginEnabled);
   $('authGuiEnabled').checked = Boolean(settings.authGuiEnabled);
   $('authOpenGuiOnJoin').checked = Boolean(settings.authOpenGuiOnJoin);
+  $('authResourcePackGui').checked = settings.authResourcePackGui !== false;
+  $('authResourcePackPromptOnJoin').checked = settings.authResourcePackPromptOnJoin !== false;
   $('authMinimumPasswordLength').value = settings.authMinimumPasswordLength ?? '';
   $('authLoginTimeoutSeconds').value = settings.authLoginTimeoutSeconds ?? '';
   $('authMaxLoginAttempts').value = settings.authMaxLoginAttempts ?? '';
@@ -2294,6 +2546,30 @@ function renderAiSettings(settings) {
   $('aiKeyStatus').textContent = settings.apiKeyConfigured ? t('ai.keyConfigured') : t('ai.keyMissing');
 }
 
+function renderPermissionSettings(settings) {
+  if (!state.session?.admin || !settings) return;
+  if (document.activeElement && document.activeElement.closest('[data-settings-scope="permissions"]')) return;
+  $('permissionFakePlayersChatControlEnabled').checked = Boolean(settings.fakePlayersChatControlEnabled);
+  $('permissionFakePlayersChatControlAmbientEnabled').checked = Boolean(settings.fakePlayersChatControlAmbientEnabled);
+  $('permissionFakePlayersChatControlRequirePermission').checked = Boolean(settings.fakePlayersChatControlRequirePermission);
+  $('permissionFakePlayersChatControlPermission').value = settings.fakePlayersChatControlPermission || '';
+  $('permissionFakePlayersChatControlPrefix').value = settings.fakePlayersChatControlPrefix || '';
+  $('permissionFakePlayersChatControlCooldownSeconds').value = settings.fakePlayersChatControlCooldownSeconds ?? '';
+  const permissions = settings.guiPermissions || {};
+  $('guiPermissionList').innerHTML = `
+    <div class="permissionGridHead" data-i18n="permissions.guiPermissions">${esc(t('permissions.guiPermissions'))}</div>
+    ${GUI_PERMISSION_FIELDS.map(([key, label]) => {
+      const item = permissions[key] || {};
+      const fallback = item.defaultPermission || '';
+      return `<label class="fieldLabel permissionField">
+        <span>${esc(guiPermissionLabel(key, label))}</span>
+        <input data-gui-permission-key="${esc(key)}" form="permissionSettingsForm" value="${esc(item.permission || fallback)}" placeholder="${esc(fallback)}">
+        <small>${esc(t('permissions.default', { permission: fallback }))}</small>
+      </label>`;
+    }).join('')}
+  `;
+}
+
 async function refresh() {
   if (standaloneFrontend() && !state.backendUrl) {
     renderBackendConnection();
@@ -2327,6 +2603,7 @@ async function refresh() {
   renderCommandMessages(data.commandMessages);
   renderAiApprovals(data.aiApprovals);
   renderAiSettings(data.aiSettings);
+  renderPermissionSettings(data.permissionSettings);
   refreshChat().catch(() => {});
   const targetInterval = Math.max(1500, Math.min(15000, Number(data.optimization?.guestStatusCacheMillis || 5000) * 2));
   if (state.refreshTimer && state.pollMillis !== targetInterval) {
@@ -2788,6 +3065,8 @@ function bindEvents() {
       authWebLoginEnabled: String($('authWebLoginEnabled').checked),
       authGuiEnabled: String($('authGuiEnabled').checked),
       authOpenGuiOnJoin: String($('authOpenGuiOnJoin').checked),
+      authResourcePackGui: String($('authResourcePackGui').checked),
+      authResourcePackPromptOnJoin: String($('authResourcePackPromptOnJoin').checked),
       authMinimumPasswordLength: $('authMinimumPasswordLength').value,
       authLoginTimeoutSeconds: $('authLoginTimeoutSeconds').value,
       authMaxLoginAttempts: $('authMaxLoginAttempts').value,
@@ -2986,6 +3265,30 @@ function bindEvents() {
     }
   });
 
+  $('permissionSettingsForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = {
+      fakePlayersChatControlEnabled: String($('permissionFakePlayersChatControlEnabled').checked),
+      fakePlayersChatControlAmbientEnabled: String($('permissionFakePlayersChatControlAmbientEnabled').checked),
+      fakePlayersChatControlRequirePermission: String($('permissionFakePlayersChatControlRequirePermission').checked),
+      fakePlayersChatControlPermission: $('permissionFakePlayersChatControlPermission').value,
+      fakePlayersChatControlPrefix: $('permissionFakePlayersChatControlPrefix').value,
+      fakePlayersChatControlCooldownSeconds: $('permissionFakePlayersChatControlCooldownSeconds').value
+    };
+    $$('[data-gui-permission-key]').forEach((input) => {
+      payload[`guiPermission.${input.dataset.guiPermissionKey}`] = input.value;
+    });
+    try {
+      const result = await json('/api/admin/permission-settings', { method: 'POST', body: JSON.stringify(payload) });
+      setOutput(t('permissions.saved'));
+      if (result.settings) renderPermissionSettings(result.settings);
+      if (result.aiSettings) renderAiSettings(result.aiSettings);
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
   $('aiTestForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
@@ -3098,8 +3401,8 @@ function bindEvents() {
     const item = (state.lastData?.assets?.items || []).find((entry) => entry.id === (button.dataset.assetEdit || button.dataset.assetRemove));
     if (button.dataset.assetEdit && item) {
       $('assetItemId').value = item.id || '';
-      $('assetItemNameZh').value = item.name || '';
-      $('assetItemNameEn').value = item.name || '';
+      $('assetItemNameZh').value = item.nameZhCn || item.name || '';
+      $('assetItemNameEn').value = item.nameEnUs || item.name || '';
       $('assetItemMaterial').value = item.material || 'PAPER';
       $('assetItemCmd').value = item.customModelData || 0;
       $('assetItemAmount').value = item.amount || 1;
@@ -3108,6 +3411,8 @@ function bindEvents() {
       $('assetItemPermission').value = item.permission || '';
       $('assetItemIcon').value = item.icon || '';
       $('assetItemDescription').value = item.description || '';
+      $('assetItemLoreZh').value = (item.loreZhCn || []).join('\n');
+      $('assetItemLoreEn').value = (item.loreEnUs || []).join('\n');
       $('assetItemEnabled').checked = item.enabled !== false;
       return;
     }
@@ -3121,6 +3426,37 @@ function bindEvents() {
         setOutput(t('command.error', { message: error.message }));
       }
     }
+  });
+
+  const handleAssetPackClick = (event) => {
+    const use = event.target.closest('[data-asset-use-pack]');
+    const publish = event.target.closest('[data-asset-publish-pack]');
+    if (use) {
+      $('assetItemPack').value = use.dataset.assetUsePack || '';
+      $('assetItemPack').focus();
+    }
+    if (publish) {
+      $('assetsPublishFile').value = publish.dataset.assetPublishPack || '';
+      if (!$('assetsPublishBaseUrl').value) $('assetsPublishBaseUrl').value = currentPanelBaseUrl();
+      $('assetsPublishFile').focus();
+    }
+  };
+  $('assetsPackList')?.addEventListener('click', handleAssetPackClick);
+  $('assetsPackStatus')?.addEventListener('click', handleAssetPackClick);
+  $('assetsPublishDefaultButton')?.addEventListener('click', () => {
+    const pack = defaultAssetPack(state.lastData?.assets);
+    if (!pack) return;
+    $('assetsPublishFile').value = pack.name || '';
+    if (!$('assetsPublishBaseUrl').value) $('assetsPublishBaseUrl').value = currentPanelBaseUrl();
+    $('assetsPublishSendOnJoin').checked = true;
+    $('assetsPublishFile').focus();
+  });
+
+  $('assetsImageList')?.addEventListener('click', (event) => {
+    const use = event.target.closest('[data-asset-use-icon]');
+    if (!use) return;
+    $('assetItemIcon').value = use.dataset.assetUseIcon || '';
+    $('assetItemIcon').focus();
   });
 
   $('assetsPromptForm')?.addEventListener('submit', async (event) => {
@@ -3270,9 +3606,20 @@ function bindEvents() {
   });
 
   $('pluginSearch').addEventListener('input', () => {
+    state.pluginPage = 0;
     if (state.lastData) renderOverview(state.lastData);
   });
   $('pluginFilter').addEventListener('change', () => {
+    state.pluginPage = 0;
+    if (state.lastData) renderOverview(state.lastData);
+  });
+
+  $('pluginPager')?.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('[data-plugin-page]') : null;
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return;
+    const page = Number(button.dataset.pluginPage);
+    if (!Number.isFinite(page)) return;
+    state.pluginPage = Math.max(0, page);
     if (state.lastData) renderOverview(state.lastData);
   });
 

@@ -17,4 +17,26 @@ public final class HunterCommands {
         final Command command = new HunterCoreCommand();
         server.server.getCommandMap().register(HunterCoreCommand.COMMAND_LABEL, HunterCoreRuntime.COMMAND_NAMESPACE, command);
     }
+
+    public static String sanitizeConsoleCommand(final String command) {
+        if (command == null || command.isEmpty()) {
+            return "";
+        }
+        StringBuilder sanitized = null;
+        for (int index = 0; index < command.length(); index++) {
+            final char character = command.charAt(index);
+            if (Character.isISOControl(character)) {
+                if (sanitized == null) {
+                    sanitized = new StringBuilder(command.length());
+                    sanitized.append(command, 0, index);
+                }
+                sanitized.append(' ');
+                continue;
+            }
+            if (sanitized != null) {
+                sanitized.append(character);
+            }
+        }
+        return sanitized == null ? command : sanitized.toString().trim();
+    }
 }

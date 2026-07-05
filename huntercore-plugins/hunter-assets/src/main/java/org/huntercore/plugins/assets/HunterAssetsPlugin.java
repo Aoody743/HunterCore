@@ -2,8 +2,13 @@ package org.huntercore.plugins.assets;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -19,6 +24,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -33,11 +39,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class HunterAssetsPlugin extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
     private static final int GUI_PAGE_SIZE = 45;
+    private static final String DEFAULT_PACK_NAME = "HunterCore-default-ui.zip";
+    private static final String DEFAULT_PACK_RESOURCE = "default-packs/" + DEFAULT_PACK_NAME;
     private final Map<String, CustomAssetItem> items = new LinkedHashMap<>();
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        ensureDefaultWorkspace();
         reloadState();
         Bukkit.getPluginManager().registerEvents(this, this);
         final PluginCommand command = getCommand("hunterassets");
@@ -51,6 +60,10 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
     public boolean onCommand(final CommandSender sender, final Command command, final String label, final String[] args) {
         if (args.length == 0) {
             if (sender instanceof Player player) {
+                if (!player.hasPermission("hunterassets.use")) {
+                    player.sendMessage(color(text("&cNo permission for HunterAssets.", "&cNo permission for HunterAssets.")));
+                    return true;
+                }
                 openAssetsMenu(player, 0);
             } else {
                 sender.sendMessage(color(text("可用: /hunterassets gui|reload|list|give|sendpack", "Available: /hunterassets gui|reload|list|give|sendpack")));
@@ -112,6 +125,10 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
             openAssetsMenu(player, holder.page() - 1);
             return;
         }
+        if (slot == 48) {
+            printResourcePackStatus(player);
+            return;
+        }
         if (slot == 49) {
             if (applyResourcePack(player)) {
                 player.sendMessage(color(text("&a已重新发送 HunterAssets 资源包。", "&aHunterAssets resource pack resent.")));
@@ -138,7 +155,7 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
         if (customItem == null) {
             return;
         }
-        if (!player.hasPermission("hunterassets.give")) {
+        if (!canReceiveAsset(player, customItem)) {
             player.sendMessage(color(text("&c你没有领取自定义物品的权限。", "&cYou do not have permission to take custom items.")));
             return;
         }
@@ -163,6 +180,10 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
         }
         if (target == null) {
             sender.sendMessage(color(text("&c找不到该玩家。", "&cPlayer not found.")));
+            return true;
+        }
+        if (!target.hasPermission("hunterassets.use") && !sender.hasPermission("hunterassets.admin")) {
+            sender.sendMessage(color(text("&cNo permission for HunterAssets.", "&cNo permission for HunterAssets.")));
             return true;
         }
         openAssetsMenu(target, 0);
@@ -266,10 +287,20 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
             inventory.setItem(slot, createMenuItem(customItem));
             ((AssetsMenuHolder) inventory.getHolder()).entries().put(slot, customItem);
         }
+        if (allItems.isEmpty()) {
+            inventory.setItem(22, menuButton(Material.BOOK, text("&eNo custom items yet", "&eNo custom items yet"), List.of(
+                text("&7Create items in the web Assets workbench.", "&7Create items in the web Assets workbench."),
+                text("&7The default resource pack is already prepared.", "&7The default resource pack is already prepared.")
+            )));
+        }
         inventory.setItem(45, menuButton(Material.ARROW, text("&b上一页", "&bPrevious"), List.of(text("&7返回上一页物品", "&7Go to the previous page"))));
         inventory.setItem(49, menuButton(Material.FILLED_MAP, text("&b发送资源包", "&bSend Resource Pack"), List.of(
             text("&7点击向自己重新发送资源包", "&7Resend the resource pack to yourself"),
             text("&7Shift 点击物品可领取更多数量", "&7Shift-click item entries for more quantity")
+        )));
+        inventory.setItem(48, menuButton(resourcePackReady() ? Material.LIME_DYE : Material.GRAY_DYE, text("&bResource Pack Status", "&bResource Pack Status"), List.of(
+            resourcePackSummary(),
+            text("&7Click to print full pack details.", "&7Click to print full pack details.")
         )));
         if (player.hasPermission("hunterassets.admin")) {
             inventory.setItem(50, menuButton(Material.REPEATER, text("&6重载配置", "&6Reload Config"), List.of(text("&7重新加载 HunterAssets 配置", "&7Reload HunterAssets configuration"))));
@@ -285,6 +316,15 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
             final List<String> lore = new ArrayList<>(Objects.requireNonNullElse(meta.getLore(), List.of()));
             lore.add(color(text("&8ID: &f", "&8ID: &f") + customItem.id()));
             lore.add(color(text("&8CMD: &f", "&8CMD: &f") + customItem.customModelData()));
+            if (!customItem.category().isBlank()) {
+                lore.add(color(text("&8Category: &f", "&8Category: &f") + customItem.category()));
+            }
+            if (!customItem.pack().isBlank()) {
+                lore.add(color(text("&8Pack: &f", "&8Pack: &f") + customItem.pack()));
+            }
+            if (!customItem.permission().isBlank()) {
+                lore.add(color(text("&8Permission: &f", "&8Permission: &f") + customItem.permission()));
+            }
             lore.add(color(text("&7点击领取默认数量", "&7Click to receive the default amount")));
             lore.add(color(text("&7Shift 点击领取更多", "&7Shift-click to receive more")));
             meta.setLore(lore);
@@ -307,30 +347,146 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
     private void reloadState() {
         items.clear();
         final ConfigurationSection section = getConfig().getConfigurationSection("items");
-        if (section == null) {
+        if (section != null) {
+            for (final String key : section.getKeys(false)) {
+                final ConfigurationSection itemSection = section.getConfigurationSection(key);
+                if (itemSection != null) {
+                    loadItemDefinition(key, itemSection, "config.yml");
+                }
+            }
+        }
+        final Path itemDirectory = getDataFolder().toPath().resolve("items");
+        try {
+            Files.createDirectories(itemDirectory);
+            try (var stream = Files.list(itemDirectory)) {
+                for (final Path path : stream.filter(file -> file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".yml"))
+                    .sorted(Comparator.comparing(file -> file.getFileName().toString()))
+                    .toList()) {
+                    final YamlConfiguration yaml = YamlConfiguration.loadConfiguration(path.toFile());
+                    final String id = yaml.getString("id", path.getFileName().toString().replaceFirst("\\.yml$", ""));
+                    loadItemDefinition(id, yaml, path.getFileName().toString());
+                }
+            }
+        } catch (final Exception ex) {
+            getLogger().warning("Failed to load HunterAssets item workspace: " + ex.getMessage());
+        }
+    }
+
+    private void loadItemDefinition(final String rawId, final ConfigurationSection itemSection, final String source) {
+        final String id = normalizeId(rawId);
+        if (id.isBlank() || !itemSection.getBoolean("enabled", true)) {
             return;
         }
-        for (final String key : section.getKeys(false)) {
-            final ConfigurationSection itemSection = section.getConfigurationSection(key);
-            if (itemSection == null) {
-                continue;
-            }
-            final Material material = Material.matchMaterial(itemSection.getString("material", "PAPER"));
-            if (material == null || material.isAir()) {
-                getLogger().warning("Skipping HunterAssets item " + key + " because material is invalid.");
-                continue;
-            }
-            items.put(key.toLowerCase(Locale.ROOT), new CustomAssetItem(
-                key,
-                material,
-                Math.max(1, itemSection.getInt("amount", 1)),
-                itemSection.getInt("custom-model-data", 0),
-                itemSection.getString("name-zh-cn", key),
-                itemSection.getString("name-en-us", key),
-                itemSection.getStringList("lore-zh-cn"),
-                itemSection.getStringList("lore-en-us")
-            ));
+        final Material material = Material.matchMaterial(itemSection.getString("material", "PAPER"));
+        if (material == null || material.isAir()) {
+            getLogger().warning("Skipping HunterAssets item " + id + " from " + source + " because material is invalid.");
+            return;
         }
+        items.put(id, new CustomAssetItem(
+            id,
+            material,
+            Math.max(1, itemSection.getInt("amount", 1)),
+            Math.max(0, itemSection.getInt("custom-model-data", 0)),
+            itemSection.getString("name-zh-cn", id),
+            itemSection.getString("name-en-us", id),
+            itemSection.getStringList("lore-zh-cn"),
+            itemSection.getStringList("lore-en-us"),
+            itemSection.getString("category", "items"),
+            itemSection.getString("permission", ""),
+            itemSection.getString("pack", ""),
+            itemSection.getString("icon", ""),
+            itemSection.getString("description", "")
+        ));
+    }
+
+    private void ensureDefaultWorkspace() {
+        try {
+            final Path root = getDataFolder().toPath();
+            Files.createDirectories(root.resolve("packs"));
+            Files.createDirectories(root.resolve("items"));
+            Files.createDirectories(root.resolve("images"));
+            Files.createDirectories(root.resolve("presets"));
+            final Path defaultPack = root.resolve("packs").resolve(DEFAULT_PACK_NAME);
+            try (var input = getResource(DEFAULT_PACK_RESOURCE)) {
+                if (input != null) {
+                    final byte[] embeddedPack = input.readAllBytes();
+                    if (Files.notExists(defaultPack) || !Arrays.equals(Files.readAllBytes(defaultPack), embeddedPack)) {
+                        Files.write(defaultPack, embeddedPack);
+                    }
+                }
+            }
+            ensureDefaultItemConfig();
+        } catch (final Exception ex) {
+            getLogger().warning("Failed to prepare HunterAssets workspace: " + ex.getMessage());
+        }
+    }
+
+    private void ensureDefaultItemConfig() {
+        boolean changed = false;
+        getConfig().set("resource-pack.prompt-zh-cn", "Install the HunterCore UI and assets resource pack. You can decline and keep using the classic login GUI.");
+        getConfig().set("resource-pack.prompt-en-us", "Install the HunterCore UI and assets resource pack. You can decline and keep using the classic login GUI.");
+        changed = true;
+        if (!getConfig().isConfigurationSection("items") || Objects.requireNonNull(getConfig().getConfigurationSection("items")).getKeys(false).isEmpty()) {
+            getConfig().set("items.sample_blade.material", "IRON_SWORD");
+            getConfig().set("items.sample_blade.amount", 1);
+            getConfig().set("items.sample_blade.custom-model-data", 200001);
+            getConfig().set("items.sample_blade.name-zh-cn", "&b示例长剑");
+            getConfig().set("items.sample_blade.name-en-us", "&bSample Blade");
+            getConfig().set("items.sample_blade.lore-zh-cn", List.of("&7自定义材质示例"));
+            getConfig().set("items.sample_blade.lore-en-us", List.of("&7Custom texture example"));
+            changed = true;
+        }
+        if (getConfig().isConfigurationSection("items.sample_blade")) {
+            getConfig().set("items.sample_blade.name-zh-cn", "&bSample Blade");
+            getConfig().set("items.sample_blade.name-en-us", "&bSample Blade");
+            getConfig().set("items.sample_blade.lore-zh-cn", List.of("&7Custom texture example"));
+            getConfig().set("items.sample_blade.lore-en-us", List.of("&7Custom texture example"));
+            changed = true;
+            changed |= setIfBlank("items.sample_blade.category", "starter");
+            changed |= setIfBlank("items.sample_blade.permission", "hunterassets.item.sample_blade");
+            changed |= setIfBlank("items.sample_blade.pack", DEFAULT_PACK_NAME);
+            changed |= setIfBlank("items.sample_blade.icon", "assets/huntercore/textures/item/sample_blade.png");
+            changed |= setIfBlank("items.sample_blade.description", "HunterAssets starter custom item.");
+        }
+        if (changed) {
+            saveConfig();
+        }
+    }
+
+    private boolean setIfBlank(final String path, final String value) {
+        final String current = getConfig().getString(path, "");
+        if (current == null || current.isBlank()) {
+            getConfig().set(path, value);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean setIfBrokenOrBlank(final String path, final String value) {
+        final String current = getConfig().getString(path, "");
+        if (current == null || current.isBlank() || looksBrokenDefaultText(current)) {
+            getConfig().set(path, value);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean setListIfBrokenOrBlank(final String path, final List<String> value) {
+        final List<String> current = getConfig().getStringList(path);
+        if (current.isEmpty() || current.stream().anyMatch(HunterAssetsPlugin::looksBrokenDefaultText)) {
+            getConfig().set(path, value);
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean looksBrokenDefaultText(final String value) {
+        final String text = Objects.requireNonNullElse(value, "");
+        return text.contains("�")
+            || text.contains("鑷")
+            || text.contains("绀")
+            || text.contains("鍖")
+            || text.contains("prompt-en-us:");
     }
 
     private ItemStack createItem(final CustomAssetItem customItem, final int amount) {
@@ -371,6 +527,46 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
         ));
         player.setResourcePack(url, hash, prompt, getConfig().getBoolean("resource-pack.required"));
         return true;
+    }
+
+    private boolean resourcePackReady() {
+        return getConfig().getBoolean("resource-pack.enabled") && !getConfig().getString("resource-pack.url", "").trim().isBlank();
+    }
+
+    private String resourcePackSummary() {
+        final boolean enabled = getConfig().getBoolean("resource-pack.enabled");
+        final String url = getConfig().getString("resource-pack.url", "").trim();
+        if (enabled && !url.isBlank()) {
+            return text("Published, join send " + (getConfig().getBoolean("resource-pack.send-on-join") ? "on" : "off"), "Published, join send " + (getConfig().getBoolean("resource-pack.send-on-join") ? "on" : "off"));
+        }
+        final Path defaultPack = getDataFolder().toPath().resolve("packs").resolve(DEFAULT_PACK_NAME);
+        if (Files.isRegularFile(defaultPack)) {
+            return text("Default pack ready; publish it from the web Assets page", "Default pack ready; publish it from the web Assets page");
+        }
+        return text("Resource pack not published", "Resource pack not published");
+    }
+
+    private void printResourcePackStatus(final Player player) {
+        player.sendMessage(color("&6HunterAssets resource pack"));
+        player.sendMessage(color("&7" + resourcePackSummary()));
+        final String url = getConfig().getString("resource-pack.url", "").trim();
+        if (!url.isBlank()) {
+            player.sendMessage(color("&8URL: &f" + url));
+        }
+        final String sha1 = getConfig().getString("resource-pack.sha1", "").trim();
+        if (!sha1.isBlank()) {
+            player.sendMessage(color("&8SHA1: &f" + sha1));
+        }
+    }
+
+    private boolean canReceiveAsset(final Player player, final CustomAssetItem customItem) {
+        if (player.hasPermission("hunterassets.give")) {
+            return true;
+        }
+        if (!customItem.permission().isBlank()) {
+            return player.hasPermission(customItem.permission());
+        }
+        return player.hasPermission("hunterassets.use");
     }
 
     private byte[] sha1Bytes(final String sha1) {
@@ -418,6 +614,10 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
         return candidates.stream().filter(value -> value.toLowerCase(Locale.ROOT).startsWith(needle)).toList();
     }
 
+    private static String normalizeId(final String value) {
+        return Objects.requireNonNullElse(value, "").trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]+", "_");
+    }
+
     private record CustomAssetItem(
         String id,
         Material material,
@@ -426,11 +626,21 @@ public final class HunterAssetsPlugin extends JavaPlugin implements Listener, Co
         String nameZhCn,
         String nameEnUs,
         List<String> loreZhCn,
-        List<String> loreEnUs
+        List<String> loreEnUs,
+        String category,
+        String permission,
+        String pack,
+        String icon,
+        String description
     ) {
         private CustomAssetItem {
             loreZhCn = List.copyOf(loreZhCn == null ? List.of() : loreZhCn);
             loreEnUs = List.copyOf(loreEnUs == null ? List.of() : loreEnUs);
+            category = Objects.requireNonNullElse(category, "");
+            permission = Objects.requireNonNullElse(permission, "");
+            pack = Objects.requireNonNullElse(pack, "");
+            icon = Objects.requireNonNullElse(icon, "");
+            description = Objects.requireNonNullElse(description, "");
         }
     }
 

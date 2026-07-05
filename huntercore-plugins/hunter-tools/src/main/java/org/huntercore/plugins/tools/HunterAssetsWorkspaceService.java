@@ -22,6 +22,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 final class HunterAssetsWorkspaceService {
+    private static final String DEFAULT_PACK_NAME = "HunterCore-default-ui.zip";
     private final HunterToolsPlugin plugin;
     private final HunterToolsPreferences preferences;
 
@@ -247,6 +248,39 @@ final class HunterAssetsWorkspaceService {
         return new PublishedPack(file.getFileName().toString(), url, sha1, required, sendOnJoin);
     }
 
+    PublishedPack publishDefaultPackIfNeeded() throws IOException {
+        this.ensureLayout();
+        final Path file = this.packsDirectory().resolve(DEFAULT_PACK_NAME);
+        if (!Files.isRegularFile(file)) {
+            throw new IOException("Default pack file not found: " + DEFAULT_PACK_NAME);
+        }
+        final byte[] bytes = Files.readAllBytes(file);
+        final String sha1 = sha1Hex(bytes);
+        final String publicBase = normalizeBaseUrl(this.plugin.webPanelAddress());
+        final String url = publicBase + "/api/assets/download/" + file.getFileName();
+        final YamlConfiguration yaml = YamlConfiguration.loadConfiguration(this.legacyConfigPath().toFile());
+        final String currentUrl = yaml.getString("resource-pack.url", "").trim();
+        final String currentSha1 = yaml.getString("resource-pack.sha1", "").trim();
+        final boolean defaultUrl = currentUrl.endsWith("/api/assets/download/" + DEFAULT_PACK_NAME);
+        final boolean firstPublish = currentUrl.isBlank();
+        if (!firstPublish && !defaultUrl && !currentSha1.isBlank()) {
+            return null;
+        }
+        if (!firstPublish && currentSha1.equalsIgnoreCase(sha1) && yaml.getBoolean("resource-pack.enabled", false)
+            && yaml.getBoolean("resource-pack.send-on-join", false)) {
+            return null;
+        }
+        yaml.set("resource-pack.url", url);
+        yaml.set("resource-pack.sha1", sha1);
+        yaml.set("resource-pack.required", false);
+        if (firstPublish || defaultUrl) {
+            yaml.set("resource-pack.enabled", true);
+            yaml.set("resource-pack.send-on-join", true);
+        }
+        yaml.save(this.legacyConfigPath().toFile());
+        return new PublishedPack(file.getFileName().toString(), url, sha1, false, yaml.getBoolean("resource-pack.send-on-join", true));
+    }
+
     String summaryJson(final String language) {
         final List<AssetItemDefinition> items = this.loadItems();
         final ValidationResult validation = this.validate();
@@ -277,7 +311,11 @@ final class HunterAssetsWorkspaceService {
             json.append("\"pack\":").append(string(item.pack())).append(',');
             json.append("\"icon\":").append(string(item.icon())).append(',');
             json.append("\"description\":").append(string(item.description())).append(',');
-            json.append("\"name\":").append(string(language != null && language.toLowerCase(Locale.ROOT).startsWith("zh") ? item.nameZhCn() : item.nameEnUs()));
+            json.append("\"name\":").append(string(language != null && language.toLowerCase(Locale.ROOT).startsWith("zh") ? item.nameZhCn() : item.nameEnUs())).append(',');
+            json.append("\"nameZhCn\":").append(string(item.nameZhCn())).append(',');
+            json.append("\"nameEnUs\":").append(string(item.nameEnUs())).append(',');
+            json.append("\"loreZhCn\":").append(stringArrayJson(item.loreZhCn())).append(',');
+            json.append("\"loreEnUs\":").append(stringArrayJson(item.loreEnUs()));
             json.append('}');
         }
         json.append("],\"packs\":").append(directoryListJson(this.packsDirectory())).append(',');
@@ -387,6 +425,18 @@ final class HunterAssetsWorkspaceService {
             .replace("\"", "\\\"")
             .replace("\r", "\\r")
             .replace("\n", "\\n")) + "\"";
+    }
+
+    private static String stringArrayJson(final List<String> values) {
+        final StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append(string(values.get(i)));
+        }
+        json.append(']');
+        return json.toString();
     }
 
     record AssetItemDefinition(

@@ -168,12 +168,16 @@ public final class HunterCoreCommand extends Command {
         for (final HunterCommandExtension extension : this.builtIns.values()) {
             final String permission = extension.permission();
             if (permission != null) {
-                this.addPermission(pluginManager, new Permission(
-                    permission,
-                    permission.equals(BASE_PERMISSION + ".language") ? PermissionDefault.OP : PermissionDefault.TRUE
-                ));
+                this.addPermission(pluginManager, new Permission(permission, defaultPermission(permission)));
             }
         }
+    }
+
+    private static PermissionDefault defaultPermission(final String permission) {
+        return switch (permission) {
+            case BASE_PERMISSION + ".language", BASE_PERMISSION + ".preferences", BASE_PERMISSION + ".reload" -> PermissionDefault.OP;
+            default -> PermissionDefault.TRUE;
+        };
     }
 
     private void addPermission(final PluginManager pluginManager, final Permission permission) {

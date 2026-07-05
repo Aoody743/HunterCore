@@ -42,7 +42,7 @@ final class HunterToolsPreferences {
         final Path path = Bukkit.getPluginsFolder().toPath().resolve("HunterCore").resolve("preferences.yml");
         final YamlConfiguration config = loadConfigurationSafely(plugin, path, true);
         final HunterToolsPreferences preferences = new HunterToolsPreferences(plugin, path, config);
-        if (preferences.applyDefaults() || !Files.exists(path)) {
+        if (preferences.applyDefaults() || preferences.applyReleaseSafetyMigrations() || !Files.exists(path)) {
             preferences.saveNow();
         }
         return preferences;
@@ -52,7 +52,7 @@ final class HunterToolsPreferences {
         this.flushPendingSaves();
         synchronized (this.lock) {
             this.config = loadConfigurationSafely(this.plugin, this.path, true);
-            if (this.applyDefaults()) {
+            if (this.applyDefaults() || this.applyReleaseSafetyMigrations()) {
                 this.saveNow();
             }
         }
@@ -615,8 +615,11 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.ai.fake-players.chat-control.ambient-enabled", true);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.trigger-prefix", "@bot");
         changed |= this.setDefault("modules.ai.fake-players.chat-control.cooldown-seconds", 3);
-        changed |= this.setDefault("modules.ai.fake-players.chat-control.require-permission", false);
+        changed |= this.setDefault("modules.ai.fake-players.chat-control.require-permission", true);
         changed |= this.setDefault("modules.ai.fake-players.chat-control.permission", "huntertools.ai.fakeplayer");
+        for (final String feature : guiPermissionFeatures()) {
+            changed |= this.setDefault("modules.gui.permissions." + feature, guiPermissionDefault(feature));
+        }
         changed |= this.setDefault("modules.ai.fake-players.system-prompt", "You control a HunterCore real fake player in Minecraft. Return only bracketed action lines. Never write prose, reasoning, translations, summaries, or chain-of-thought. Available actions: [respawn], [look:yaw pitch], [look-at:x y z], [turn:yaw pitch], [look-at-player:player=name], [move:forward=1,sideways=0,ticks=60,sprint=true,jump=false,sneak=false], [goto:x y z,ticks=240,sprint=true], [follow:player=name,ticks=260,distance=2.4], [mine:ticks=40], [use:ticks=20], [attack:ticks=60], [attack-player:player=name,ticks=120], [attack-nearest:ticks=120], [jump], [sneak:on], [sneak:off], [sprint:on], [sprint:off], [equip:slot=1,material=oak_planks,amount=64], [wear:material=iron_helmet], [wear:material=iron_chestplate], [wear:material=iron_leggings], [wear:material=iron_boots], [build-house], [build-cabin], [build-cottage], [build-barn], [build-greenhouse], [build-bunker], [build-farm], [build-stairs], [build-tower], [build-bridge], [build-rope-bridge], [build-wall], [build-platform], [build-dock], [build-well], [build-camp], [build-mine], [build-market], [build-gate], [build-road], [build-windmill], [clear-build], [we-fill:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7,material=oak_planks], [we-clear:dx1=0,dy1=0,dz1=2,dx2=5,dy2=3,dz2=7], [we-undo:steps=1], [slot:1], [place:x y z,face=auto], [place:dx=0,dy=0,dz=1,face=auto], [say:OK.], [drop], [dropstack], [swap], [wait:ticks=20], [stop]. If dead, use [respawn] first. Use exactly one build/worldedit/place construction macro per reply, and at most one short [say:...] after useful actions.");
         changed |= this.setDefault("modules.ai.fake-players.high-risk-protection", true);
         changed |= this.setDefault("modules.ai.fake-players.high-risk-approval-window-seconds", 120);
@@ -647,6 +650,8 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.auth.web-login-enabled", true);
         changed |= this.setDefault("modules.auth.gui-enabled", true);
         changed |= this.setDefault("modules.auth.open-gui-on-join", true);
+        changed |= this.setDefault("modules.auth.resource-pack-gui", true);
+        changed |= this.setDefault("modules.auth.resource-pack-prompt-on-join", true);
         changed |= this.setDefault("modules.auth.minimum-password-length", 6);
         changed |= this.setDefault("modules.auth.login-timeout-seconds", 90);
         changed |= this.setDefault("modules.auth.max-login-attempts", 5);
@@ -728,11 +733,69 @@ final class HunterToolsPreferences {
         return true;
     }
 
+    private boolean applyReleaseSafetyMigrations() {
+        boolean changed = false;
+        if (!this.config.getBoolean("migrations.2-5-0-safe-defaults", false)) {
+            if (this.config.getBoolean("modules.tps-display.enabled", false)) {
+                this.config.set("modules.tps-display.enabled", false);
+                changed = true;
+            }
+            if (this.config.getBoolean("modules.tps-display.actionbar", false)) {
+                this.config.set("modules.tps-display.actionbar", false);
+                changed = true;
+            }
+            if (this.config.getBoolean("modules.sidebar.enabled", false)) {
+                this.config.set("modules.sidebar.enabled", false);
+                changed = true;
+            }
+            if (!this.config.getBoolean("modules.ai.fake-players.chat-control.require-permission", true)) {
+                this.config.set("modules.ai.fake-players.chat-control.require-permission", true);
+                changed = true;
+            }
+            this.config.set("migrations.2-5-0-safe-defaults", true);
+            changed = true;
+        }
+        return changed;
+    }
+
     static List<String> essentialsCommands() {
         return List.of(
             "heal", "feed", "fly", "gm", "day", "night", "sun", "rain", "thunder", "broadcast", "clearchat",
             "speed", "spawn", "setspawn", "back", "hat", "craft", "enderchest", "trash"
         );
+    }
+
+    static List<String> guiPermissionFeatures() {
+        return List.of(
+            "admin", "fake-players", "npcs", "story", "titles", "title-admin",
+            "teleport", "homes", "random-teleport", "assets", "assets-give", "assets-admin", "auth",
+            "tps", "heal", "feed", "fly", "gamemode", "time", "weather", "broadcast", "clearchat",
+            "speed", "spawn", "setspawn", "back", "hat", "craft", "enderchest", "trash", "menu", "profile", "settings"
+        );
+    }
+
+    static String guiPermissionDefault(final String feature) {
+        return switch (normalize(feature).replace('_', '-')) {
+            case "admin" -> "huntertools.command.admin";
+            case "fake-players" -> "huntertools.command.hplayer";
+            case "npcs" -> "huntertools.command.npc";
+            case "story" -> "huntertools.command.story";
+            case "titles" -> "huntertools.command.title";
+            case "title-admin" -> "huntertools.command.title.admin";
+            case "teleport" -> "huntertpa.command.tpgui";
+            case "homes" -> "huntertpa.command.homes";
+            case "random-teleport" -> "huntertpa.command.rtp";
+            case "assets" -> "hunterassets.use";
+            case "assets-give" -> "hunterassets.give";
+            case "assets-admin" -> "hunterassets.admin";
+            case "auth" -> "hunterauth.command.login";
+            case "gamemode" -> "huntertools.command.gamemode";
+            case "time" -> "huntertools.command.time";
+            case "weather" -> "huntertools.command.weather";
+            case "broadcast" -> "huntertools.command.broadcast";
+            case "clearchat" -> "huntertools.command.clearchat";
+            default -> "huntertools.command." + normalize(feature).replace('_', '-');
+        };
     }
 
     boolean singleThreadMode() {
