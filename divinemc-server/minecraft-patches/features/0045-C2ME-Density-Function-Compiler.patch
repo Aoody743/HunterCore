@@ -68,7 +68,7 @@ index 110e50665256d1bf9fe49c7769be927ec50168a9..e87c5c061ead272da25bd9e77da3ba9b
      }
  }
 diff --git a/net/minecraft/world/level/levelgen/DensityFunctions.java b/net/minecraft/world/level/levelgen/DensityFunctions.java
-index d59d96e1016796f1a780d89a338c14ddb6398654..dc79daafcd5e2f0c5617dac1ce00f680dac52a6f 100644
+index d59d96e1016796f1a780d89a338c14ddb6398654..84347533319ec4fc8ccf3d3323a4eccfb7c70ac6 100644
 --- a/net/minecraft/world/level/levelgen/DensityFunctions.java
 +++ b/net/minecraft/world/level/levelgen/DensityFunctions.java
 @@ -299,38 +299,66 @@ public final class DensityFunctions {
@@ -295,6 +295,15 @@ index d59d96e1016796f1a780d89a338c14ddb6398654..dc79daafcd5e2f0c5617dac1ce00f680
              Interpolated("interpolated"),
              FlatCache("flat_cache"),
              Cache2D("cache_2d"),
+@@ -668,7 +696,7 @@ public final class DensityFunctions {
+         }
+     }
+ 
+-    private record IntervalSelect(DensityFunction input, DoubleList thresholds, List<DensityFunction> functions) implements DensityFunction {
++    public record IntervalSelect(DensityFunction input, DoubleList thresholds, List<DensityFunction> functions) implements DensityFunction {
+         private static final Codec<DoubleList> THRESHOLDS_CODEC = DensityFunctions.NOISE_VALUE_CODEC.listOf().xmap(DoubleArrayList::new, Function.identity());
+         public static final MapCodec<DensityFunctions.IntervalSelect> DATA_CODEC = RecordCodecBuilder.<DensityFunctions.IntervalSelect>mapCodec(
+                 i -> i.group(
 diff --git a/net/minecraft/world/level/levelgen/NoiseChunk.java b/net/minecraft/world/level/levelgen/NoiseChunk.java
 index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44caebf54b65 100644
 --- a/net/minecraft/world/level/levelgen/NoiseChunk.java
