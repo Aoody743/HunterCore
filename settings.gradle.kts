@@ -32,7 +32,7 @@ if (!file(".git").exists()) {
 
 rootProject.name = "HunterCore"
 
-for (name in listOf("divinemc-api", "divinemc-server", "huntercore-plugins:hunter-tpa", "huntercore-plugins:hunter-auth", "huntercore-plugins:hunter-tools")) {
+for (name in listOf("divinemc-api", "divinemc-server", "huntercore-network-common", "huntercore-network-bungee", "huntercore-network-velocity", "huntercore-plugins:hunter-tpa", "huntercore-plugins:hunter-auth", "huntercore-plugins:hunter-tools")) {
     val projName = name.lowercase(Locale.ENGLISH)
     include(projName)
     findProject(":$projName")!!.projectDir = file(name.replace(":", "/"))

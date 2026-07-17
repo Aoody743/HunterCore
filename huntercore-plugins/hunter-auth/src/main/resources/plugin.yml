@@ -4,7 +4,7 @@ main: org.huntercore.plugins.auth.HunterAuthPlugin
 api-version: '1.21'
 author: HunterCore
 description: Built-in HunterCore offline-mode login plugin.
-softdepend: [HuntEngine]
+softdepend: [HuntEngine, SkinsRestorer]
 commands:
   register:
     description: Register your HunterAuth password.

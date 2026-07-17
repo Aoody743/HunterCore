@@ -15,7 +15,6 @@ import org.bxteam.divinemc.region.Flusher;
 import org.bxteam.divinemc.region.buffered.BufferedRegionFileFlusher;
 import org.bxteam.divinemc.region.linear.LinearImplementation;
 import org.bxteam.divinemc.region.linear.LinearRegionFileFlusher;
-import org.huntercore.optimization.HunterCoreOptimizer;
 import org.jetbrains.annotations.Nullable;
 import org.simpleyaml.configuration.comments.CommentType;
 import org.simpleyaml.configuration.file.YamlFile;
@@ -37,9 +36,13 @@ import java.util.Random;
 @SuppressWarnings({"SameParameterValue", "DataFlowIssue"})
 public class DivineConfig {
     private static final String HEADER = """
-        This is the main low-level performance configuration file for HunterCore.
-        Most server operators should use plugins/HunterCore/preferences.yml or the HunterCore web panel first.
-        Advanced settings here are kept for compatibility with the upstream performance layer.""";
+        This is the main configuration file for DivineMC.
+        If you need help with the configuration or have any questions related to DivineMC,
+        join us in our Discord server.
+
+        Discord: https://discord.gg/qNyybSSPm5
+        Docs: https://bxteam.org/docs/divinemc
+        Downloads: https://bxteam.org/downloads/divinemc""";
 
     public static final Logger LOGGER = LogManager.getLogger(DivineConfig.class.getSimpleName());
     public static final int CONFIG_VERSION = 8;
@@ -205,7 +208,7 @@ public class DivineConfig {
 
         // Async pathfinding settings
         public static boolean asyncPathfinding = true;
-        public static int asyncPathfindingMaxThreads = 0;
+        public static int asyncPathfindingMaxThreads = 1;
         public static int asyncPathfindingKeepalive = 60;
         public static int asyncPathfindingQueueSize = 0;
         public static PathfindTaskRejectPolicy asyncPathfindingRejectPolicy = PathfindTaskRejectPolicy.CALLER_RUNS;
@@ -213,13 +216,13 @@ public class DivineConfig {
         // Multithreaded tracker settings
         public static boolean multithreadedEnabled = true;
         public static boolean multithreadedCompatModeEnabled = false;
-        public static int asyncEntityTrackerMaxThreads = 0;
+        public static int asyncEntityTrackerMaxThreads = 1;
         public static int asyncEntityTrackerKeepalive = 60;
         public static int asyncEntityTrackerQueueSize = 0;
 
         // Async chunk sending settings
         public static boolean asyncChunkSendingEnabled = true;
-        public static int asyncChunkSendingMaxThreads = 0;
+        public static int asyncChunkSendingMaxThreads = 1;
 
         // Async mob spawning settings
         public static boolean enableAsyncSpawning = true;
@@ -247,10 +250,6 @@ public class DivineConfig {
                 "Enables per-world TPS bar, which shows the TPS of the world the player is currently in. TPS bar can be turned on/off with /tpsbar command.");
             showTPSOfServerInsteadOfWorld = getBoolean(ConfigCategory.ASYNC.key("parallel-world-ticking.show-tps-of-server-instead-of-world"), showTPSOfServerInsteadOfWorld,
                 "Enables showing the TPS of the entire server instead of the world in the TPS bar.");
-            if (!HunterCoreOptimizer.experimentalRegionTickingAllowed() && enableParallelWorldTicking) {
-                LOGGER.warn("HunterCore disabled parallel world ticking because it is experimental and can break Paper plugin compatibility. Set optimizations.cpu.allow-experimental-region-ticking=true only if you accept that risk.");
-                enableParallelWorldTicking = false;
-            }
         }
 
         private static void regionizedChunkTicking() {
@@ -263,17 +262,10 @@ public class DivineConfig {
                 "The amount of threads to allocate to regionized chunk ticking.");
             regionizedChunkTickingExecutorThreadPriority = getInt(ConfigCategory.ASYNC.key("regionized-chunk-ticking.executor-thread-priority"), regionizedChunkTickingExecutorThreadPriority,
                 "Configures the thread priority of the executor");
-            if (regionizedChunkTickingExecutorThreadCount == 4) {
-                regionizedChunkTickingExecutorThreadCount = HunterCoreOptimizer.recommendedRegionTickThreads();
-            }
 
-            if (regionizedChunkTickingExecutorThreadCount < 1 || regionizedChunkTickingExecutorThreadCount > 24) {
-                LOGGER.warn("Invalid regionized chunk ticking thread count: {}, resetting to HunterCore recommendation", regionizedChunkTickingExecutorThreadCount);
-                regionizedChunkTickingExecutorThreadCount = HunterCoreOptimizer.recommendedRegionTickThreads();
-            }
-            if (!HunterCoreOptimizer.experimentalRegionTickingAllowed() && enableRegionizedChunkTicking) {
-                LOGGER.warn("HunterCore disabled regionized chunk ticking because it is experimental and not full Paper-plugin compatible. Use multi-thread mode for safe background parallelism instead.");
-                enableRegionizedChunkTicking = false;
+            if (regionizedChunkTickingExecutorThreadCount < 1 || regionizedChunkTickingExecutorThreadCount > 10) {
+                LOGGER.warn("Invalid regionized chunk ticking thread count: {}, resetting to default (4)", regionizedChunkTickingExecutorThreadCount);
+                regionizedChunkTickingExecutorThreadCount = 4;
             }
         }
 
@@ -282,11 +274,6 @@ public class DivineConfig {
             asyncPathfindingMaxThreads = getInt(ConfigCategory.ASYNC.key("pathfinding.max-threads"), asyncPathfindingMaxThreads);
             asyncPathfindingKeepalive = getInt(ConfigCategory.ASYNC.key("pathfinding.keepalive"), asyncPathfindingKeepalive);
             asyncPathfindingQueueSize = getInt(ConfigCategory.ASYNC.key("pathfinding.queue-size"), asyncPathfindingQueueSize);
-            if (HunterCoreOptimizer.singleThreadMode()) {
-                asyncPathfinding = false;
-            } else if (HunterCoreOptimizer.multiThreadMode() && asyncPathfindingMaxThreads == 0) {
-                asyncPathfindingMaxThreads = HunterCoreOptimizer.recommendedPathfindingThreads();
-            }
 
             final int maxThreads = Runtime.getRuntime().availableProcessors();
             if (asyncPathfindingMaxThreads < 0) {
@@ -329,12 +316,6 @@ public class DivineConfig {
             asyncEntityTrackerMaxThreads = getInt(ConfigCategory.ASYNC.key("multithreaded-tracker.max-threads"), asyncEntityTrackerMaxThreads);
             asyncEntityTrackerKeepalive = getInt(ConfigCategory.ASYNC.key("multithreaded-tracker.keepalive"), asyncEntityTrackerKeepalive);
             asyncEntityTrackerQueueSize = getInt(ConfigCategory.ASYNC.key("multithreaded-tracker.queue-size"), asyncEntityTrackerQueueSize);
-            if (HunterCoreOptimizer.singleThreadMode()) {
-                multithreadedEnabled = false;
-            } else if (HunterCoreOptimizer.multiThreadMode() && asyncEntityTrackerMaxThreads == 0) {
-                asyncEntityTrackerMaxThreads = HunterCoreOptimizer.recommendedTrackerThreads();
-                multithreadedCompatModeEnabled = true;
-            }
 
             if (asyncEntityTrackerMaxThreads < 0) {
                 asyncEntityTrackerMaxThreads = Math.max(Runtime.getRuntime().availableProcessors() + asyncEntityTrackerMaxThreads, 1);
@@ -355,11 +336,6 @@ public class DivineConfig {
             asyncChunkSendingEnabled = getBoolean(ConfigCategory.ASYNC.key("chunk-sending.enable"), asyncChunkSendingEnabled,
                 "Makes chunk sending asynchronous, which can significantly reduce main thread load when many players are loading chunks.");
             asyncChunkSendingMaxThreads = getInt(ConfigCategory.ASYNC.key("chunk-sending.max-threads"), asyncChunkSendingMaxThreads);
-            if (HunterCoreOptimizer.singleThreadMode()) {
-                asyncChunkSendingEnabled = false;
-            } else if (HunterCoreOptimizer.multiThreadMode() && asyncChunkSendingMaxThreads == 0) {
-                asyncChunkSendingMaxThreads = HunterCoreOptimizer.recommendedChunkSendThreads();
-            }
 
             if (asyncChunkSendingMaxThreads < 0) {
                 asyncChunkSendingMaxThreads = Math.max(Runtime.getRuntime().availableProcessors() + asyncChunkSendingMaxThreads, 1);
@@ -373,10 +349,6 @@ public class DivineConfig {
                 "Enables optimization that will offload much of the computational effort involved with spawning new mobs to a different thread.");
             asyncNaturalSpawn = getBoolean(ConfigCategory.ASYNC.key("mob-spawning.async-natural-spawn"), asyncNaturalSpawn,
                 "Enables offloading of natural spawning to a different thread");
-            if (HunterCoreOptimizer.singleThreadMode()) {
-                enableAsyncSpawning = false;
-                asyncNaturalSpawn = false;
-            }
         }
     }
 
@@ -471,8 +443,7 @@ public class DivineConfig {
                 "This value is used in the calculation 'range/16' to get the distance in chunks any player must be to allow the check to pass.",
                 "By default, this range is computed to 8, meaning a player must be within an 8 chunk radius of a chunk position to pass.",
                 "Keep in mind the result is rounded to the nearest whole number.");
-            final ChunkSystemAlgorithm defaultChunkWorkerAlgorithm = HunterCoreOptimizer.multiThreadMode() ? ChunkSystemAlgorithm.C2ME_NEW : ChunkSystemAlgorithm.MOONRISE;
-            chunkWorkerAlgorithm = ChunkSystemAlgorithm.valueOf(getString(ConfigCategory.PERFORMANCE.key("chunks.chunk-worker-algorithm"), defaultChunkWorkerAlgorithm.name(),
+            chunkWorkerAlgorithm = ChunkSystemAlgorithm.valueOf(getString(ConfigCategory.PERFORMANCE.key("chunks.chunk-worker-algorithm"), chunkWorkerAlgorithm.name(),
                 "Algorithm used to determine the number of worker threads for chunk loading and generation.",
                 "",
                 "Available algorithms:",
@@ -764,7 +735,7 @@ public class DivineConfig {
         public static int playerProfileResultCachingTimeout = 1440;
 
         // No chat reports
-        public static boolean noChatReportsEnabled = true;
+        public static boolean noChatReportsEnabled = false;
         public static boolean noChatReportsAddQueryData = true;
         public static boolean noChatReportsConvertToGameMessage = true;
         public static boolean noChatReportsDebugLog = false;

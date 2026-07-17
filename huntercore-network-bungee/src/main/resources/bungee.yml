@@ -1,0 +1,4 @@
+name: HunterCore-Network-Bungee
+main: org.huntercore.network.bungee.HunterCoreBungeePlugin
+version: ${version}
+author: HunterCore

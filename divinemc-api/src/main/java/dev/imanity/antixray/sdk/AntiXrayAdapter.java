@@ -3,6 +3,7 @@ package dev.imanity.antixray.sdk;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
 public interface AntiXrayAdapter {
     /**
@@ -16,7 +17,7 @@ public interface AntiXrayAdapter {
      * @param z        the z
      * @param material the bukkit material
      */
-    void callBlockChange(World world, int x, int y, int z, Material material);
+    void callBlockChange(@NotNull World world, int x, int y, int z, @NotNull Material material);
 
     /**
      * Call a player left click block to the AntiXray system
@@ -29,5 +30,5 @@ public interface AntiXrayAdapter {
      * @param y      the y
      * @param z      the z
      */
-    void callPlayerLeftClickBlock(World world, Player player, int x, int y, int z);
+    void callPlayerLeftClickBlock(@NotNull World world, @NotNull Player player, int x, int y, int z);
 }

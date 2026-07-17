@@ -153,6 +153,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private HunterWebPanelManager webPanelManager;
     private HunterTitleManager titleManager;
     private HunterStoryModeManager storyModeManager;
+    private HunterNetworkBridge networkBridge;
     private HunterGuiRegistration sharedGuiRegistration;
     private ExecutorService workerExecutor;
     private MetricsSnapshot snapshot = MetricsSnapshot.empty();
@@ -205,6 +206,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.registerHunterCoreCommands();
         this.getServer().getPluginManager().registerEvents(this, this);
         this.getServer().getPluginManager().registerEvents(this.gameplayRuleManager, this);
+        this.networkBridge = new HunterNetworkBridge(this);
+        this.networkBridge.enable();
         this.refreshAuthChatGuard();
         this.startTasks();
         this.actorManager.reload();
@@ -229,6 +232,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     @Override
     public void onDisable() {
         this.cancelTasks();
+        if (this.networkBridge != null) {
+            this.networkBridge.disable();
+            this.networkBridge = null;
+        }
         if (this.sharedGuiRegistration != null) {
             this.sharedGuiRegistration.close();
             this.sharedGuiRegistration = null;

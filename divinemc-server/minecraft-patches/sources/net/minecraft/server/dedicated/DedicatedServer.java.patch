@@ -48,6 +48,12 @@
  
          // CraftBukkit start
          /*
-@@ -606,1 +_,1 @@
+@@ -603,7 +_,7 @@
+             return;
+         }
+         // Paper end - rewrite chunk system
 -        this.serverCommandQueue.add(new ConsoleInput(msg, source)); // Paper - Perf: use proper queue
 +        this.serverCommandQueue.add(new ConsoleInput(org.huntercore.command.HunterCommands.sanitizeConsoleCommand(msg), source)); // Paper - Perf: use proper queue // HunterCore - sanitize illegal console control characters
+     }
+ 
+     public void handleConsoleInputs() {

@@ -20,6 +20,8 @@ public final class DivineCommands {
     }
 
     public static void registerCommands(final MinecraftServer server) {
-        org.huntercore.command.HunterCommands.registerCommands(server); // HunterCore
+        COMMANDS.forEach((s, command) -> {
+            server.server.getCommandMap().register(s, "DivineMC", command);
+        });
     }
 }

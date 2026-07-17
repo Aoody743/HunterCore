@@ -100,8 +100,9 @@ jobs:
 
           git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
           git fetch --no-tags origin '+refs/heads/codex/mc-26.2-experimental:refs/remotes/origin/codex/mc-26.2-experimental' || true
+          git fetch --no-tags origin '+refs/heads/codex/v2.9.16-release:refs/remotes/origin/codex/v2.9.16-release' || true
           allowed_source=false
-          for branch in origin/main origin/codex/mc-26.2-experimental; do
+          for branch in origin/main origin/codex/mc-26.2-experimental origin/codex/v2.9.16-release; do
             if git rev-parse --verify "$branch^{commit}" >/dev/null 2>&1 && git merge-base --is-ancestor "$GITHUB_SHA" "$branch"; then
               allowed_source=true
               break
@@ -121,6 +122,7 @@ jobs:
           ./gradlew :huntercore-plugins:hunter-auth:test --stacktrace --no-daemon
           ./gradlew :huntercore-plugins:hunter-tools:test --stacktrace --no-daemon
           ./gradlew :huntercore-plugins:hunter-tpa:test --stacktrace --no-daemon
+          ./gradlew :huntercore-network-common:test :huntercore-network-bungee:compileJava :huntercore-network-velocity:compileJava --stacktrace --no-daemon
           ./gradlew :divinemc-server:compileJava --stacktrace --no-daemon
 
       - name: Build HunterCore release assets
@@ -128,7 +130,7 @@ jobs:
           RELEASE_BUILD_NUMBER: ${{ steps.release.outputs.huntercore_build }}
         run: |
           set -euo pipefail
-          BUILD_NUMBER="$RELEASE_BUILD_NUMBER" ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease --stacktrace --no-daemon --no-configuration-cache
+          BUILD_NUMBER="$RELEASE_BUILD_NUMBER" ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease :huntercore-network-bungee:jar :huntercore-network-velocity:jar --stacktrace --no-daemon --no-configuration-cache
 
       - name: Prepare release assets
         id: assets
@@ -144,9 +146,13 @@ jobs:
           mkdir -p "$out"
           jar_name="$RELEASE_JAR_NAME"
           web_name="$RELEASE_WEB_NAME"
+          bungee_name="HunterCore-${RELEASE_VERSION_LABEL}-Network-Bungee.jar"
+          velocity_name="HunterCore-${RELEASE_VERSION_LABEL}-Network-Velocity.jar"
           test -f "$out/${jar_name}"
           test -f "$out/${web_name}"
-          (cd "$out" && sha256sum "$jar_name" "$web_name" > SHA256SUMS.txt)
+          cp "huntercore-network-bungee/build/libs/HunterCore-Network-Bungee-${{ steps.release.outputs.version }}.jar" "$out/$bungee_name"
+          cp "huntercore-network-velocity/build/libs/HunterCore-Network-Velocity-${{ steps.release.outputs.version }}.jar" "$out/$velocity_name"
+          (cd "$out" && sha256sum "$jar_name" "$web_name" "$bungee_name" "$velocity_name" > SHA256SUMS.txt)
           {
             echo "out=$out"
           } >> "$GITHUB_OUTPUT"
@@ -162,6 +168,10 @@ jobs:
           - Optimized web panel layout with Settings / Access / AI / Admin pages and in-page category navigation.
           - Unified command system around /hc, /hplayer, and /hnpc with Chinese/English help and language switching.
           - HunterAuth web registration/login, TPA/Home commands, and clickable teleport accept/deny chat UI.
+          - Hybrid direct, BungeeCord, and Velocity ingress with per-connection HunterAuth bypass, SkinsRestorer application, network-aware Tab lists, and group chat.
+          - Optional BungeeCord and Velocity companion jars for multi-proxy player-list and chat synchronization.
+          - DivineMC/Purpur 26.2 optimization refresh retaining C2ME, Lithium, Matter secure seed, regionized ticking, and Leaves protocols.
+          - CoreProtect 24.0 restored and enabled by default with a persistent content-addressed build cache.
           - Web-editable MOTD, F3 server name, sidebar, TPS actionbar/subtitle text, and AI settings.
           - Common-native release jar keeping Linux/macOS/Windows x86_64/aarch64 native libraries.
           - Standalone WebPanel zip for separated frontend deployments with backend URL and optional API key connection.
@@ -169,6 +179,8 @@ jobs:
           Assets:
           - ${jar_name}
           - ${web_name}
+          - ${bungee_name}
+          - ${velocity_name}
           - SHA256SUMS.txt
           EOF
 
@@ -184,6 +196,8 @@ jobs:
           assets=(
             "$out/$RELEASE_JAR_NAME"
             "$out/$RELEASE_WEB_NAME"
+            "$out/HunterCore-${{ steps.release.outputs.version_label }}-Network-Bungee.jar"
+            "$out/HunterCore-${{ steps.release.outputs.version_label }}-Network-Velocity.jar"
             "$out/SHA256SUMS.txt"
           )
           if gh release view "$tag" >/dev/null 2>&1; then

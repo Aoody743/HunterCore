@@ -41,7 +41,7 @@ public class SubCompiledDensityFunction implements DensityFunction {
     }
 
     public double compute(FunctionContext pos) {
-        if (pos.getBlender() != Blender.empty()) {
+        if (pos instanceof NoiseChunk sampler && sampler.getBlender() != Blender.empty()) {
             DensityFunction fallback = this.getFallback();
             if (fallback == null) {
                 throw new IllegalStateException("blendingFallback is no more");
@@ -92,6 +92,32 @@ public class SubCompiledDensityFunction implements DensityFunction {
             }
 
             this.multiMethod.evalMulti(densities, x, y, z, EvalType.from(applier), cache);
+        }
+    }
+
+    public DensityFunction mapChildren(Visitor visitor) {
+        if (this.getClass() != SubCompiledDensityFunction.class) {
+            throw new AbstractMethodError();
+        } else {
+            if (visitor instanceof IBlendingAwareVisitor blendingAwareVisitor && blendingAwareVisitor.c2me$isBlendingEnabled()) {
+                DensityFunction fallback1 = this.getFallback();
+                if (fallback1 == null) {
+                    throw new IllegalStateException("blendingFallback is no more");
+                }
+
+                return visitor.apply(fallback1);
+            }
+
+            boolean modified = false;
+            Supplier<DensityFunction> fallback = this.blendingFallback != null ? Suppliers.memoize(() -> {
+                DensityFunction densityFunction = (DensityFunction)this.blendingFallback.get();
+                return densityFunction != null ? visitor.apply(densityFunction) : null;
+            }) : null;
+            if (fallback != this.blendingFallback) {
+                modified = true;
+            }
+
+            return modified ? new SubCompiledDensityFunction(this.singleMethod, this.multiMethod, fallback) : this;
         }
     }
 

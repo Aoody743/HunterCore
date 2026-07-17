@@ -1,18 +1,19 @@
 package gg.pufferfish.pufferfish.simd;
 
 import jdk.incubator.vector.VectorSpecies;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 
 public class SIMDChecker {
     private final VectorSpecies<Integer> ISPEC;
     private final VectorSpecies<Float> FSPEC;
 
-    public SIMDChecker(VectorSpecies<Integer> ISPEC, VectorSpecies<Float> FSPEC) {
+    public SIMDChecker(@NotNull VectorSpecies<Integer> ISPEC, @NotNull VectorSpecies<Float> FSPEC) {
         this.ISPEC = ISPEC;
         this.FSPEC = FSPEC;
     }
 
-    public boolean canEnable(Logger logger) {
+    public boolean canEnable(@NotNull Logger logger) {
         try {
             if ((SIMDDetection.getJavaVersion() < SIMDDetection.MIN_JAVA_VERSION || SIMDDetection.getJavaVersion() > SIMDDetection.MAX_JAVA_VERSION)) {
                 return false;

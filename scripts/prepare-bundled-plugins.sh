@@ -453,10 +453,28 @@ YAML
 }
 
 prepare_coreprotect() {
-  local commit="bf0e9cf6616816d4ecc3bbe8b2b4bcb9e20b8440"
-  local version="23.2"
+  # CoreProtect Community Edition v24.0 adds the Minecraft 26.2 compatibility
+  # fixes required by the HunterCore 2.9.16 release. Keep the exact source
+  # commit pinned so the locally built artifact is reproducible and can be
+  # retained in the content-addressed bundled-plugin cache below.
+  local commit="b5f534fd2c735c6f094cda8ca50a66324e81b048"
+  local version="24.0"
   local source_dir="$WORK_DIR/CoreProtect-$commit"
   local mvn_cmd
+  local file_name="CoreProtect-$version.jar"
+  local output_jar="$PLUGINS_DIR/$file_name"
+  local pointer_dir="$CACHE_DIR/builds/coreprotect"
+  local pointer_file="$pointer_dir/$commit.sha256"
+
+  if [[ -f "$pointer_file" ]]; then
+    local cached_digest
+    cached_digest="$(tr -d '[:space:]' < "$pointer_file")"
+    if valid_digest sha256 "$cached_digest" && restore_checked_cache sha256 "$cached_digest" "$output_jar"; then
+      manifest_entry "coreprotect" "CoreProtect" "$version" "$file_name" "https://github.com/PlayPro/CoreProtect/commit/$commit"
+      return
+    fi
+    rm -f "$pointer_file"
+  fi
 
   if [[ ! -d "$source_dir/.git" ]] || [[ "$(git -C "$source_dir" rev-parse HEAD 2>/dev/null || true)" != "$commit" ]]; then
     rm -rf "$source_dir"
@@ -465,9 +483,6 @@ prepare_coreprotect() {
     git -C "$source_dir" fetch -q --depth 1 origin "$commit"
     git -C "$source_dir" checkout -q --detach "$commit"
   fi
-
-  perl -0pi -e 's/public static final String LATEST_VERSION = "26\.1";/public static final String LATEST_VERSION = "26.1.2";/' \
-    "$source_dir/src/main/java/net/coreprotect/config/ConfigHandler.java"
 
   if command -v mvn >/dev/null 2>&1; then
     mvn_cmd="mvn"
@@ -502,8 +517,15 @@ prepare_coreprotect() {
     exit 1
   fi
 
-  local file_name="CoreProtect-$version.jar"
-  cp "$jar_path" "$PLUGINS_DIR/$file_name"
+  cp "$jar_path" "$output_jar"
+  local built_digest
+  built_digest="$(sha256_file "$output_jar")"
+  store_checked_cache sha256 "$built_digest" "$output_jar"
+  mkdir -p "$pointer_dir"
+  local pointer_tmp
+  pointer_tmp="$(mktemp "$pointer_dir/.${commit}.tmp.XXXXXX")"
+  printf '%s\n' "$built_digest" > "$pointer_tmp"
+  mv -f "$pointer_tmp" "$pointer_file"
   manifest_entry "coreprotect" "CoreProtect" "$version" "$file_name" "https://github.com/PlayPro/CoreProtect/commit/$commit"
 }
 

@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Aoody743 <andyxecm@gmail.com>
+Date: Fri, 17 Jul 2026 15:42:16 +0800
+Subject: [PATCH] Expose HunterCore login connection metadata
+
+
+diff --git a/src/main/java/io/papermc/paper/connection/PaperPlayerLoginConnection.java b/src/main/java/io/papermc/paper/connection/PaperPlayerLoginConnection.java
+index 6fcaa17ff5d9f9b77e166732cae151d728d8bb51..4a2ad71c75ce12f7fa49c17a2d5bb0f91453f335 100644
+--- a/src/main/java/io/papermc/paper/connection/PaperPlayerLoginConnection.java
++++ b/src/main/java/io/papermc/paper/connection/PaperPlayerLoginConnection.java
+@@ -11,7 +11,7 @@ import org.jspecify.annotations.NullMarked;
+ import org.jspecify.annotations.Nullable;
+ 
+ @NullMarked
+-public class PaperPlayerLoginConnection extends ReadablePlayerCookieConnectionImpl implements PlayerLoginConnection {
++public class PaperPlayerLoginConnection extends ReadablePlayerCookieConnectionImpl implements PlayerLoginConnection, org.huntercore.api.network.HunterConnectionInfo {
+ 
+     private final ServerLoginPacketListenerImpl packetListener;
+ 
+@@ -66,4 +66,24 @@ public class PaperPlayerLoginConnection extends ReadablePlayerCookieConnectionIm
+     public boolean isConnected() {
+         return this.packetListener.connection.isConnected();
+     }
++
++    @Override
++    public org.huntercore.api.network.HunterConnectionSource hunterConnectionSource() {
++        return this.packetListener.connection.hunterConnectionSource();
++    }
++
++    @Override
++    public String hunterProxyId() {
++        return this.packetListener.connection.hunterProxyId();
++    }
++
++    @Override
++    public String hunterNetworkId() {
++        return this.packetListener.connection.hunterNetworkId();
++    }
++
++    @Override
++    public boolean hunterOnlineAuthenticated() {
++        return this.packetListener.connection.hunterOnlineAuthenticated();
++    }
+ }

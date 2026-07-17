@@ -15,7 +15,6 @@ import org.checkerframework.framework.qual.DefaultQualifier;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
 
 import static net.kyori.adventure.text.format.NamedTextColor.*;
 
@@ -40,19 +39,18 @@ public final class ReloadCommand extends DivineSubCommandPermission {
 
         MinecraftServer server = ((CraftServer) sender.getServer()).getServer();
 
-        org.huntercore.optimization.HunterCoreOptimizer.applyEarlyPreferenceDefaults(Path.of("plugins", "HunterCore", "preferences.yml"));
         DivineConfig.init((File) server.options.valueOf("divinemc-settings"));
 
         for (ServerLevel level : server.getAllLevels()) {
             try {
                 level.divineConfig.init();
             } catch (IOException e) {
-                MinecraftServer.LOGGER.error("Failed to reload HunterCore world config for level {}", level.dimension().identifier(), e);
+                MinecraftServer.LOGGER.error("Failed to reload DivineMC world config for level {}", level.dimension().identifier(), e);
             }
             level.resetBreedingCooldowns();
         }
         server.server.reloadCount++;
 
-        Command.broadcastCommandMessage(sender, Component.text("HunterCore config reload complete.", GREEN));
+        Command.broadcastCommandMessage(sender, Component.text("DivineMC config reload complete.", GREEN));
     }
 }

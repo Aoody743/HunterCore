@@ -70,6 +70,7 @@ import org.huntercore.api.gui.HunterGuiTheme;
 import org.huntercore.api.gui.HunterGuiView;
 import org.huntercore.api.huntengine.HuntEngineService;
 import org.huntercore.api.huntengine.HuntEngineServices;
+import org.huntercore.api.network.HunterConnectionSource;
 import org.jetbrains.annotations.NotNull;
 
 public final class HunterAuthPlugin extends JavaPlugin implements Listener, CommandExecutor {
@@ -132,11 +133,15 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     private File sharedPreferencesFile;
     private YamlConfiguration sharedPreferences;
     private long sharedPreferencesModified;
+    private HunterAuthSkinManager skinManager;
 
     @Override
     public void onEnable() {
         this.getConfig().addDefault("enabled", false);
-        this.getConfig().addDefault("online-mode-bypass", true);
+        this.getConfig().addDefault("online-mode-bypass", false);
+        this.getConfig().addDefault("online-authenticated-bypass", true);
+        this.getConfig().addDefault("trusted-proxy-bypass", true);
+        this.getConfig().addDefault("apply-skin-on-login", true);
         this.getConfig().addDefault("registration-required", true);
         this.getConfig().addDefault("web-registration-required", false);
         this.getConfig().addDefault("gui-enabled", true);
@@ -155,6 +160,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.reloadUsers();
         this.sharedPreferencesFile = Bukkit.getPluginsFolder().toPath().resolve("HunterCore").resolve("preferences.yml").toFile();
         this.reloadSharedPreferences();
+        this.skinManager = new HunterAuthSkinManager(this);
 
         for (final String command : List.of("register", "login", "logout", "changepassword")) {
             final org.bukkit.command.PluginCommand pluginCommand = this.getCommand(command);
@@ -184,6 +190,9 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.resourcePackStates.clear();
         this.loginFailures.clear();
         this.lockedUntil.clear();
+        if (this.skinManager != null) {
+            this.skinManager.clear();
+        }
     }
 
     private void registerSharedGui() {
@@ -237,7 +246,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPreLogin(final AsyncPlayerPreLoginEvent event) {
-        if (this.shouldBypass() || !this.registrationRequired() || !this.webRegistrationRequired()) {
+        if (this.shouldBypass(event.getConnection()) || !this.registrationRequired() || !this.webRegistrationRequired()) {
             return;
         }
         if (this.isRegistered(event.getUniqueId(), event.getName())) {
@@ -255,7 +264,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(final PlayerJoinEvent event) {
         final Player player = event.getPlayer();
-        if (this.shouldBypass()) {
+        if (this.shouldBypass(player)) {
             this.markAuthenticated(player);
             return;
         }
@@ -290,6 +299,9 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.resourcePackStates.remove(playerId);
         this.loginFailures.remove(playerId);
         this.lockedUntil.remove(playerId);
+        if (this.skinManager != null) {
+            this.skinManager.cancel(playerId);
+        }
     }
 
     @EventHandler
@@ -556,7 +568,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.sendMessage(this.text("HunterAuth 当前未启用。", "HunterAuth is currently disabled."));
             return true;
         }
-        if (this.onlineMode()) {
+        if (this.onlineAuthenticated(player)) {
             return this.registerOnlineModeAccount(player, args);
         }
         if (!this.registrationRequired()) {
@@ -596,7 +608,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.sendMessage(this.text("HunterAuth 当前未启用。", "HunterAuth is currently disabled."));
             return true;
         }
-        if (this.onlineMode()) {
+        if (this.onlineAuthenticated(player)) {
             return this.claimOnlineModeWebAccount(player, args);
         }
         if (!this.isRegistered(player)) {
@@ -704,7 +716,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private boolean logout(final Player player) {
-        if (this.shouldBypass()) {
+        if (this.shouldBypass(player)) {
             player.sendMessage(this.text("HunterAuth 当前未启用或已被正版模式绕过。", "HunterAuth is disabled or bypassed while the server is in online mode."));
             return true;
         }
@@ -719,7 +731,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.sendMessage(this.text("HunterAuth 当前未启用。", "HunterAuth is currently disabled."));
             return true;
         }
-        if (this.onlineMode()) {
+        if (this.onlineAuthenticated(player)) {
             return this.changeOnlineModePassword(player, args);
         }
         if (!this.isRegistered(player)) {
@@ -789,7 +801,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
             player.sendMessage(this.text("HunterAuth is currently disabled.", "HunterAuth is currently disabled."));
             return true;
         }
-        if (this.onlineMode()) {
+        if (this.onlineAuthenticated(player)) {
             if (!this.isAuthenticated(player)) {
                 this.openAuthGui(player);
                 player.sendMessage(this.text(
@@ -824,7 +836,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private boolean openAuthGuiCommand(final Player player) {
-        if (this.shouldBypass()) {
+        if (this.shouldBypass(player)) {
             player.sendMessage(this.text("HunterAuth is disabled or bypassed while the server is in online mode.", "HunterAuth is disabled or bypassed while the server is in online mode."));
             return true;
         }
@@ -1321,19 +1333,35 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private boolean shouldBypass() {
-        return this.authDisabled() || this.onlineModeBypass();
+        return this.authDisabled();
+    }
+
+    private boolean shouldBypass(final io.papermc.paper.connection.PlayerLoginConnection connection) {
+        if (this.shouldBypass()) {
+            return true;
+        }
+        final var connections = HunterCoreProvider.get().connections();
+        final HunterConnectionSource source = connections.source(connection);
+        return this.setting("online-authenticated-bypass", true) && connections.onlineAuthenticated(connection)
+            || this.setting("trusted-proxy-bypass", true) && source.proxied();
+    }
+
+    private boolean shouldBypass(final Player player) {
+        if (this.shouldBypass()) {
+            return true;
+        }
+        final var connections = HunterCoreProvider.get().connections();
+        final HunterConnectionSource source = connections.source(player);
+        return this.setting("online-authenticated-bypass", true) && connections.onlineAuthenticated(player)
+            || this.setting("trusted-proxy-bypass", true) && source.proxied();
     }
 
     private boolean authDisabled() {
         return !this.setting("enabled", true);
     }
 
-    private boolean onlineMode() {
-        return Bukkit.getOnlineMode();
-    }
-
-    private boolean onlineModeBypass() {
-        return this.onlineMode() && this.setting("online-mode-bypass", true);
+    private boolean onlineAuthenticated(final Player player) {
+        return HunterCoreProvider.get().connections().onlineAuthenticated(player);
     }
 
     private boolean registrationRequired() {
@@ -1392,7 +1420,7 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
     }
 
     private boolean isAuthenticated(final Player player) {
-        return this.shouldBypass() || this.authenticated.contains(player.getUniqueId());
+        return this.shouldBypass(player) || this.authenticated.contains(player.getUniqueId());
     }
 
     private void markAuthenticated(final Player player) {
@@ -1402,6 +1430,9 @@ public final class HunterAuthPlugin extends JavaPlugin implements Listener, Comm
         this.pendingInputs.remove(playerId);
         this.clearGuiSession(playerId);
         this.closeManagedInventory(player);
+        if (this.skinManager != null) {
+            this.skinManager.applyAfterAuthentication(player);
+        }
     }
 
     private void markUnauthenticated(final Player player) {

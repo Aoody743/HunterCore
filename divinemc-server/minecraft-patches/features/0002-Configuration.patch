@@ -5,20 +5,19 @@ Subject: [PATCH] Configuration
 
 
 diff --git a/net/minecraft/server/dedicated/DedicatedServer.java b/net/minecraft/server/dedicated/DedicatedServer.java
-index 2627039d46af92de3f68a2e508c9c2e17822e10d..0bb234aa21d7580becf3ab6a4e53ed38537320ef 100644
+index 84b2a90812e05515beb20b681c4b7ce8d6b02310..0b723c4566faa993c8a9dc79ae9f1af6010c3db7 100644
 --- a/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/net/minecraft/server/dedicated/DedicatedServer.java
-@@ -230,6 +230,9 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+@@ -230,6 +230,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
              this.setLocalIp(properties.serverIp);
          }
  
-+        org.huntercore.bootstrap.HunterCoreBootstrap.init(); // HunterCore - initialize threading mode before DivineMC config
 +        org.bxteam.divinemc.config.DivineConfig.init((java.io.File) options.valueOf("divinemc-settings")); // DivineMC - Configuration
 +
          // Spigot start
          this.setPlayerList(new DedicatedPlayerList(this, this.registries(), this.playerDataStorage));
          org.spigotmc.SpigotConfig.init((java.io.File) this.options.valueOf("spigot-settings"));
-@@ -244,6 +247,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+@@ -244,6 +246,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
          }
          org.purpurmc.purpur.PurpurConfig.registerCommands();
          // Purpur end - Migrate Setting to reintroduce end void rings
@@ -27,7 +26,7 @@ index 2627039d46af92de3f68a2e508c9c2e17822e10d..0bb234aa21d7580becf3ab6a4e53ed38
          this.paperConfigurations.initializeGlobalConfiguration(this.registryAccess());
          this.paperConfigurations.initializeWorldDefaultsConfiguration(this.registryAccess());
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index 9d7a27783c3b75d8a70b59e959aa8d17e51674ab..3447f25881be5054ff5cd2a6aff4cb5849bc67d0 100644
+index d272874549a71b77fadeaa39f655ddc6d51f75a7..0e91b5de2b888c7c2fb573fb9d685a5321ae5368 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -173,6 +173,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl

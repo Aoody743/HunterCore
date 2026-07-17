@@ -5,6 +5,7 @@ import org.huntercore.api.fakeplayer.HunterFakePlayerService;
 import org.huntercore.api.gui.HunterGuiService;
 import org.huntercore.api.huntengine.HuntEngineService;
 import org.huntercore.api.huntengine.HuntEngineServices;
+import org.huntercore.api.network.HunterConnectionService;
 import org.jetbrains.annotations.NotNull;
 
 public interface HunterCoreApi {
@@ -37,6 +38,10 @@ public interface HunterCoreApi {
      */
     default @NotNull HuntEngineService huntEngine() {
         return HuntEngineServices.get();
+    }
+
+    default @NotNull HunterConnectionService connections() {
+        return HunterConnectionService.unavailable();
     }
 
     default @NotNull String language() {

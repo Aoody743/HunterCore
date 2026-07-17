@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - codex/mc-26.2-experimental
+      - codex/v2.9.16-release
   pull_request:
     branches:
       - main
       - codex/mc-26.2-experimental
+      - codex/v2.9.16-release
   workflow_dispatch:
 
 permissions:
@@ -75,10 +77,11 @@ jobs:
           ./gradlew :huntercore-plugins:hunter-auth:test --stacktrace --no-daemon
           ./gradlew :huntercore-plugins:hunter-tools:test --stacktrace --no-daemon
           ./gradlew :huntercore-plugins:hunter-tpa:test --stacktrace --no-daemon
+          ./gradlew :huntercore-network-common:test :huntercore-network-bungee:compileJava :huntercore-network-velocity:compileJava --stacktrace --no-daemon
           ./gradlew :divinemc-server:compileJava --stacktrace --no-daemon
 
       - name: Build verified release assets
-        run: ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease --stacktrace --no-daemon --no-configuration-cache
+        run: ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease :huntercore-network-bungee:jar :huntercore-network-velocity:jar --stacktrace --no-daemon --no-configuration-cache
 
       - name: Prepare artifacts
         run: |
@@ -96,7 +99,9 @@ jobs:
           test -f "$source/$web_name"
           cp "$source/$jar_name" "$out/$jar_name"
           cp "$source/$web_name" "$out/$web_name"
-          (cd "$out" && sha256sum "$jar_name" "$web_name" > SHA256SUMS.txt)
+          cp "huntercore-network-bungee/build/libs/HunterCore-Network-Bungee-${huntercore_version}.jar" "$out/HunterCore-${version_label}-Network-Bungee.jar"
+          cp "huntercore-network-velocity/build/libs/HunterCore-Network-Velocity-${huntercore_version}.jar" "$out/HunterCore-${version_label}-Network-Velocity.jar"
+          (cd "$out" && sha256sum "$jar_name" "$web_name" "HunterCore-${version_label}-Network-Bungee.jar" "HunterCore-${version_label}-Network-Velocity.jar" > SHA256SUMS.txt)
 
       - name: Upload jars
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5

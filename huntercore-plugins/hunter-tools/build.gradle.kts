@@ -1,11 +1,17 @@
 dependencies {
     compileOnly(project(":divinemc-api"))
+    implementation(project(":huntercore-network-common"))
     // The panel's focused unit tests exercise static helpers on a class that references Bukkit.
     // Keep the API compile-only for the shipped plugin, but provide the local API project at test runtime.
     testRuntimeOnly(project(":divinemc-api"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.3")
+}
+
+tasks.jar {
+    dependsOn(":huntercore-network-common:jar")
+    from({ zipTree(project(":huntercore-network-common").tasks.jar.get().archiveFile) })
 }
 
 tasks.test {

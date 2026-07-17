@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Aoody743 <andyxecm@gmail.com>
+Date: Fri, 17 Jul 2026 22:18:40 +0800
+Subject: [PATCH] Expose interval select for C2ME compiler
+
+
+diff --git a/net/minecraft/world/level/levelgen/DensityFunctions.java b/net/minecraft/world/level/levelgen/DensityFunctions.java
+index dc79daafcd5e2f0c5617dac1ce00f680dac52a6f..84347533319ec4fc8ccf3d3323a4eccfb7c70ac6 100644
+--- a/net/minecraft/world/level/levelgen/DensityFunctions.java
++++ b/net/minecraft/world/level/levelgen/DensityFunctions.java
+@@ -696,7 +696,7 @@ public final class DensityFunctions {
+         }
+     }
+ 
+-    private record IntervalSelect(DensityFunction input, DoubleList thresholds, List<DensityFunction> functions) implements DensityFunction {
++    public record IntervalSelect(DensityFunction input, DoubleList thresholds, List<DensityFunction> functions) implements DensityFunction {
+         private static final Codec<DoubleList> THRESHOLDS_CODEC = DensityFunctions.NOISE_VALUE_CODEC.listOf().xmap(DoubleArrayList::new, Function.identity());
+         public static final MapCodec<DensityFunctions.IntervalSelect> DATA_CODEC = RecordCodecBuilder.<DensityFunctions.IntervalSelect>mapCodec(
+                 i -> i.group(

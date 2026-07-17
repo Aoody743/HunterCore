@@ -146,7 +146,7 @@ public final class HunterPreferences {
         changed |= this.setDefault("bundled-plugins.write-disabled-marker", true);
         for (final HunterBundledPluginRecord plugin : bundledPlugins) {
             final String pluginId = normalize(plugin.id());
-            final boolean enabledByDefault = !pluginId.equals("coreprotect");
+            final boolean enabledByDefault = true;
             changed |= this.setDefault("bundled-plugins.plugins." + normalize(plugin.id()), enabledByDefault);
         }
 

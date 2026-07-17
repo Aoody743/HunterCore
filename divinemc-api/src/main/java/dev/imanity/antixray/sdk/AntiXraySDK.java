@@ -1,13 +1,15 @@
 package dev.imanity.antixray.sdk;
 
-public class AntiXraySDK {
-    private static AntiXrayAdapter ADAPTER;
+import org.jetbrains.annotations.Nullable;
 
-    public static AntiXrayAdapter getAdapter() {
+public class AntiXraySDK {
+    private static @Nullable AntiXrayAdapter ADAPTER;
+
+    public static @Nullable AntiXrayAdapter getAdapter() {
         return ADAPTER;
     }
 
-    public static void setAdapter(AntiXrayAdapter adapter) {
+    public static void setAdapter(@Nullable AntiXrayAdapter adapter) {
         ADAPTER = adapter;
     }
 }

@@ -272,7 +272,7 @@ WorldEdit 7.4.3
 WorldGuard 7.0.17
 Multiverse-Core 5.7.1
 LuckPerms 5.5.53
-CoreProtect 23.2
+CoreProtect 24.0
 HunterTPA builtin
 HunterAuth builtin
 HunterTools builtin
@@ -364,6 +364,8 @@ shasum -a 256 HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
 只有 `packageHunterCoreRelease` 和 `:divinemc-server:createPaperclipJar` 会准备外部内置插件，因此发行构建需要可访问 GitHub、Modrinth、PaperMC 和脚本中列出的固定下载源。
 
 HuntEngine 是独立固定源码构建，必须先构建并验证产物；HunterCore 不使用 Gradle composite build，也不会在首次启动时下载它的运行时依赖。
+
+HunterCore 2.9.16 支持同一后端同时接受直连、多个 BungeeCord 和多个 Velocity。入口信任与认证策略位于 `plugins/HunterCore/proxies.yml`；群组范围 Tab/聊天需要把 Release 中对应的 `HunterCore-Network-Bungee` / `HunterCore-Network-Velocity` 伴生 Jar 安装到代理端，并让 `network.properties` 的 `node-id` 与 `proxies.yml` 对应节点一致。
 
 ```bash
 (cd third-party/hunt-engine && ./gradlew assembleHuntEngine --no-daemon)

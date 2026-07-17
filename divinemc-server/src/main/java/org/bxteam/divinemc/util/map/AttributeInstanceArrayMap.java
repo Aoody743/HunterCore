@@ -14,13 +14,18 @@ import java.util.AbstractMap.SimpleEntry;
  * @author hayanesuru
  */
 public final class AttributeInstanceArrayMap implements Map<Holder<Attribute>, AttributeInstance>, Cloneable {
+    private static final int VANILLA_ATTRIBUTE_SIZE = 35; // 1.21.6
+
     private int size = 0;
-    private transient AttributeInstance[] a = new AttributeInstance[initialCapacity()];
+    private transient AttributeInstance[] a = new AttributeInstance[VANILLA_ATTRIBUTE_SIZE];
     private transient KeySet keys;
     private transient Values values;
     private transient EntrySet entries;
 
     public AttributeInstanceArrayMap() {
+        if (BuiltInRegistries.ATTRIBUTE.size() != VANILLA_ATTRIBUTE_SIZE) {
+            throw new IllegalStateException("Unexpected registry minecraft:attribute size");
+        }
     }
 
     public AttributeInstanceArrayMap(final @NotNull Map<Holder<Attribute>, AttributeInstance> m) {
@@ -29,7 +34,6 @@ public final class AttributeInstanceArrayMap implements Map<Holder<Attribute>, A
     }
 
     private void setByIndex(int index, @Nullable AttributeInstance instance) {
-        ensureCapacity(index);
         boolean empty = a[index] == null;
         if (instance == null) {
             if (!empty) {
@@ -70,12 +74,12 @@ public final class AttributeInstanceArrayMap implements Map<Holder<Attribute>, A
 
     @Override
     public AttributeInstance get(Object key) {
-        return key instanceof Holder<?> holder && holder.value() instanceof Attribute attribute ? getInstance(attribute.uid) : null;
+        return key instanceof Holder<?> holder && holder.value() instanceof Attribute attribute ? a[attribute.uid] : null;
     }
 
     @Nullable
     public AttributeInstance getInstance(int key) {
-        return key >= 0 && key < a.length ? a[key] : null;
+        return a[key];
     }
 
     @Override
@@ -318,20 +322,5 @@ public final class AttributeInstanceArrayMap implements Map<Holder<Attribute>, A
             }
         }
         return -1;
-    }
-
-    private static int initialCapacity() {
-        return Math.max(64, BuiltInRegistries.ATTRIBUTE.size());
-    }
-
-    private void ensureCapacity(int index) {
-        if (index < a.length) {
-            return;
-        }
-        int newLength = a.length;
-        while (newLength <= index) {
-            newLength = Math.max(newLength * 2, index + 1);
-        }
-        a = Arrays.copyOf(a, newLength);
     }
 }

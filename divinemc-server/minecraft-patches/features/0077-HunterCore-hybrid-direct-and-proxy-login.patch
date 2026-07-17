@@ -1,0 +1,308 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Aoody743 <andyxecm@gmail.com>
+Date: Fri, 17 Jul 2026 15:41:45 +0800
+Subject: [PATCH] HunterCore hybrid direct and proxy login
+
+
+diff --git a/net/minecraft/network/Connection.java b/net/minecraft/network/Connection.java
+index 454ebf5c35676bfe2d9ef1a8d3a5b9ff9c2caea0..cc03cc05ab52cab6307b3312d8623b51a1b191be 100644
+--- a/net/minecraft/network/Connection.java
++++ b/net/minecraft/network/Connection.java
+@@ -55,7 +55,7 @@ import org.slf4j.Logger;
+ import org.slf4j.Marker;
+ import org.slf4j.MarkerFactory;
+ 
+-public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
++public class Connection extends SimpleChannelInboundHandler<Packet<?>> implements org.huntercore.api.network.HunterConnectionInfo {
+     private static final float AVERAGE_PACKETS_SMOOTHING = 0.75F;
+     private static final Logger LOGGER = LogUtils.getLogger();
+     public static final Marker ROOT_MARKER = MarkerFactory.getMarker("NETWORK");
+@@ -72,6 +72,10 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+     public java.util.UUID spoofedUUID;
+     public com.mojang.authlib.properties.Property[] spoofedProfile;
+     public boolean preparing = true;
++    private volatile org.huntercore.api.network.HunterConnectionSource hunterConnectionSource = org.huntercore.api.network.HunterConnectionSource.UNKNOWN;
++    private volatile String hunterProxyId = "";
++    private volatile String hunterNetworkId = "";
++    private volatile boolean hunterOnlineAuthenticated;
+     // Spigot end
+     private volatile @Nullable PacketListener disconnectListener;
+     private volatile @Nullable PacketListener packetListener;
+@@ -615,6 +619,43 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+         return this.address;
+     }
+ 
++    public void hunterMarkDirect(final boolean onlineAuthenticated) {
++        this.hunterConnectionSource = org.huntercore.api.network.HunterConnectionSource.DIRECT;
++        this.hunterProxyId = "";
++        this.hunterNetworkId = "";
++        this.hunterOnlineAuthenticated = onlineAuthenticated;
++    }
++
++    public void hunterMarkProxy(final org.huntercore.api.network.HunterConnectionSource source, final org.huntercore.network.HunterProxyNode node) {
++        if (!source.proxied()) {
++            throw new IllegalArgumentException("Proxy connection source required");
++        }
++        this.hunterConnectionSource = source;
++        this.hunterProxyId = node.id();
++        this.hunterNetworkId = node.networkId();
++        this.hunterOnlineAuthenticated = node.onlineAuthenticated();
++    }
++
++    @Override
++    public org.huntercore.api.network.HunterConnectionSource hunterConnectionSource() {
++        return this.hunterConnectionSource;
++    }
++
++    @Override
++    public String hunterProxyId() {
++        return this.hunterProxyId;
++    }
++
++    @Override
++    public String hunterNetworkId() {
++        return this.hunterNetworkId;
++    }
++
++    @Override
++    public boolean hunterOnlineAuthenticated() {
++        return this.hunterOnlineAuthenticated;
++    }
++
+     public String getLoggableAddress(final boolean logIPs) {
+         if (this.address == null) {
+             return "local";
+diff --git a/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java b/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+index 2d4272b9ee3f9d034fe0585374f0962c67f03294..8dbfe214142209b58eb21c59eb39e90f2ef2d89f 100644
+--- a/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+@@ -116,7 +116,7 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
+         } else {
+             this.connection.setupInboundProtocol(LoginProtocols.SERVERBOUND, new ServerLoginPacketListenerImpl(this.server, this.connection, transfer));
+             // Paper start - PlayerHandshakeEvent
+-            boolean proxyLogicEnabled = org.spigotmc.SpigotConfig.bungee;
++            boolean proxyLogicEnabled = org.spigotmc.SpigotConfig.bungee || org.huntercore.network.HunterProxyRegistry.configured(org.huntercore.network.HunterProxyType.BUNGEECORD);
+             boolean handledByEvent = false;
+             // Try and handle the handshake through the event
+             if (com.destroystokyo.paper.event.player.PlayerHandshakeEvent.getHandlerList().getRegisteredListeners().length != 0) { // Hello? Can you hear me?
+@@ -151,15 +151,32 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
+             // Paper end
+             // Spigot start
+             String[] split = packet.hostName().split("\00");
++            final boolean bungeePayload = split.length == 3 || split.length == 4;
+             if (!handledByEvent && proxyLogicEnabled) { // Paper
+-                // if (org.spigotmc.SpigotConfig.bungee) { // Paper - comment out, we check above!
+-                if ((split.length == 3 || split.length == 4) && (ServerHandshakePacketListenerImpl.BYPASS_HOSTCHECK || ServerHandshakePacketListenerImpl.HOST_PATTERN.matcher(split[1]).matches())) { // Paper - Add bypass host check
++                if (bungeePayload && (ServerHandshakePacketListenerImpl.BYPASS_HOSTCHECK || ServerHandshakePacketListenerImpl.HOST_PATTERN.matcher(split[1]).matches())) { // Paper - Add bypass host check
++                    final java.net.SocketAddress rawAddress = this.connection.channel.remoteAddress();
++                    final java.util.Optional<org.huntercore.network.HunterProxyNode> configuredNode = org.huntercore.network.HunterProxyRegistry.match(org.huntercore.network.HunterProxyType.BUNGEECORD, rawAddress);
++                    if (org.huntercore.network.HunterProxyRegistry.configured(org.huntercore.network.HunterProxyType.BUNGEECORD) && configuredNode.isEmpty()) {
++                        Component message = Component.literal("Untrusted BungeeCord forwarding source.");
++                        this.connection.send(new ClientboundLoginDisconnectPacket(message));
++                        this.connection.disconnect(message);
++                        return;
++                    }
++                    final org.huntercore.network.HunterProxyNode proxyNode = configuredNode.orElseGet(() -> org.huntercore.network.HunterProxyNode.legacy(
++                        "spigot-bungee",
++                        org.huntercore.network.HunterProxyType.BUNGEECORD,
++                        "",
++                        io.papermc.paper.configuration.GlobalConfiguration.get().proxies.bungeeCord.onlineMode
++                    ));
+                     // Paper start - Unix domain socket support
+                     java.net.SocketAddress socketAddress = this.connection.getRemoteAddress();
+                     this.connection.hostname = split[0];
+                     this.connection.address = new java.net.InetSocketAddress(split[1], socketAddress instanceof java.net.InetSocketAddress ? ((java.net.InetSocketAddress) socketAddress).getPort() : 0);
+                     // Paper end - Unix domain socket support
+                     this.connection.spoofedUUID = com.mojang.util.UndashedUuid.fromStringLenient(split[2]);
++                    this.connection.hunterMarkProxy(org.huntercore.api.network.HunterConnectionSource.BUNGEECORD, proxyNode);
++                } else if (split.length == 1) {
++                    this.connection.hostname = packet.hostName();
+                 } else {
+                     Component message = Component.literal("If you wish to use IP forwarding, please enable it in your BungeeCord config as well!");
+                     this.connection.send(new ClientboundLoginDisconnectPacket(message));
+@@ -169,7 +186,15 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
+                 if (split.length == 4) {
+                     this.connection.spoofedProfile = ServerHandshakePacketListenerImpl.gson.fromJson(split[3], com.mojang.authlib.properties.Property[].class);
+                 }
+-            } else if ((split.length == 3 || split.length == 4) && (ServerHandshakePacketListenerImpl.HOST_PATTERN.matcher(split[1]).matches())) {
++            } else if (handledByEvent) {
++                final java.util.Optional<org.huntercore.network.HunterProxyNode> configuredNode = org.huntercore.network.HunterProxyRegistry.match(
++                    org.huntercore.network.HunterProxyType.BUNGEECORD,
++                    this.connection.channel.remoteAddress()
++                );
++                if (configuredNode.isPresent() && this.connection.spoofedUUID != null) {
++                    this.connection.hunterMarkProxy(org.huntercore.api.network.HunterConnectionSource.BUNGEECORD, configuredNode.get());
++                }
++            } else if (bungeePayload && (ServerHandshakePacketListenerImpl.HOST_PATTERN.matcher(split[1]).matches())) {
+                 Component message = Component.literal("Unknown data in login hostname, did you forget to enable BungeeCord in spigot.yml?");
+                 this.connection.send(new ClientboundLoginDisconnectPacket(message));
+                 this.connection.disconnect(message);
+diff --git a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
+index d6d0adcc9847aa5b1c0e7b68fad1a0303ab90ff7..663cd69cba517e819a28da217cb3374fc64b89d8 100644
+--- a/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerLoginPacketListenerImpl.java
+@@ -176,40 +176,62 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+         this.requestedUsername = packet.name();
+         GameProfile singleplayerProfile = this.server.getSingleplayerProfile();
+         if (singleplayerProfile != null && this.requestedUsername.equalsIgnoreCase(singleplayerProfile.name())) {
++            this.connection.hunterMarkDirect(true);
+             this.startClientVerification(singleplayerProfile);
++        } else if (this.connection.isMemoryConnection()) {
++            this.connection.hunterMarkDirect(this.server.usesAuthentication());
++            this.hunterBeginOfflineVerification();
++        } else if (this.connection.hunterConnectionSource() == org.huntercore.api.network.HunterConnectionSource.BUNGEECORD) {
++            this.hunterBeginOfflineVerification();
++        } else if (this.hunterShouldQueryVelocity()) {
++            this.velocityLoginMessageId = java.util.concurrent.ThreadLocalRandom.current().nextInt();
++            net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
++            buf.writeByte(com.destroystokyo.paper.proxy.VelocityProxy.MAX_SUPPORTED_FORWARDING_VERSION);
++            net.minecraft.network.protocol.login.ClientboundCustomQueryPacket packet1 = new net.minecraft.network.protocol.login.ClientboundCustomQueryPacket(this.velocityLoginMessageId, new net.minecraft.network.protocol.login.ClientboundCustomQueryPacket.PlayerInfoChannelPayload(com.destroystokyo.paper.proxy.VelocityProxy.PLAYER_INFO_CHANNEL, buf));
++            this.connection.send(packet1);
+         } else {
+-            if (this.server.usesAuthentication() && !this.connection.isMemoryConnection()) {
+-                this.state = ServerLoginPacketListenerImpl.State.KEY;
+-                this.connection.send(new ClientboundHelloPacket("", this.server.getKeyPair().getPublic().getEncoded(), this.challenge, true));
+-            } else {
+-                // Paper start - Add Velocity IP Forwarding Support
+-                if (io.papermc.paper.configuration.GlobalConfiguration.get().proxies.velocity.enabled) {
+-                    this.velocityLoginMessageId = java.util.concurrent.ThreadLocalRandom.current().nextInt();
+-                    net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+-                    buf.writeByte(com.destroystokyo.paper.proxy.VelocityProxy.MAX_SUPPORTED_FORWARDING_VERSION);
+-                    net.minecraft.network.protocol.login.ClientboundCustomQueryPacket packet1 = new net.minecraft.network.protocol.login.ClientboundCustomQueryPacket(this.velocityLoginMessageId, new net.minecraft.network.protocol.login.ClientboundCustomQueryPacket.PlayerInfoChannelPayload(com.destroystokyo.paper.proxy.VelocityProxy.PLAYER_INFO_CHANNEL, buf));
+-                    this.connection.send(packet1);
+-                    return;
+-                }
+-                // Paper end - Add Velocity IP Forwarding Support
+-                // Paper start - Virtual authenticator threads
+-                authenticatorPool.execute(() -> {
+-                    try {
+-                        GameProfile gameprofile = ServerLoginPacketListenerImpl.this.createOfflineProfile(ServerLoginPacketListenerImpl.this.requestedUsername); // Spigot
+-
+-                        gameprofile = ServerLoginPacketListenerImpl.this.callPlayerPreLoginEvents(gameprofile); // Paper - Add more fields to AsyncPlayerPreLoginEvent
+-                        ServerLoginPacketListenerImpl.LOGGER.info("UUID of player {} is {}", gameprofile.name(), gameprofile.id());
+-                        ServerLoginPacketListenerImpl.this.startClientVerification(gameprofile);
+-                    } catch (Exception ex) {
+-                        ServerLoginPacketListenerImpl.this.disconnect("Failed to verify username!");
+-                        ServerLoginPacketListenerImpl.this.server.server.getLogger().log(java.util.logging.Level.WARNING, "Exception verifying " + ServerLoginPacketListenerImpl.this.requestedUsername, ex);
+-                    }
+-                });
+-                // Paper end - Virtual authenticator threads
+-            }
++            this.hunterBeginDirectLogin();
++        }
++    }
++
++    private boolean hunterShouldQueryVelocity() {
++        if (this.connection.hunterConnectionSource() == org.huntercore.api.network.HunterConnectionSource.BUNGEECORD) {
++            return false;
++        }
++        final java.net.SocketAddress rawAddress = this.connection.channel.remoteAddress();
++        if (org.huntercore.network.HunterProxyRegistry.match(org.huntercore.network.HunterProxyType.VELOCITY, rawAddress).isPresent()) {
++            return true;
++        }
++        return !org.huntercore.network.HunterProxyRegistry.configured(org.huntercore.network.HunterProxyType.VELOCITY)
++            && io.papermc.paper.configuration.GlobalConfiguration.get().proxies.velocity.enabled;
++    }
++
++    private void hunterBeginDirectLogin() {
++        final org.huntercore.network.HunterDirectAuthentication authentication = org.huntercore.network.HunterProxyRegistry.directAuthentication(this.connection.hostname);
++        if (authentication == org.huntercore.network.HunterDirectAuthentication.ONLINE) {
++            this.connection.hunterMarkDirect(true);
++            this.state = ServerLoginPacketListenerImpl.State.KEY;
++            this.connection.send(new ClientboundHelloPacket("", this.server.getKeyPair().getPublic().getEncoded(), this.challenge, true));
++        } else {
++            this.connection.hunterMarkDirect(false);
++            this.hunterBeginOfflineVerification();
+         }
+     }
+ 
++    private void hunterBeginOfflineVerification() {
++        authenticatorPool.execute(() -> {
++            try {
++                GameProfile gameprofile = ServerLoginPacketListenerImpl.this.createOfflineProfile(ServerLoginPacketListenerImpl.this.requestedUsername); // Spigot
++                gameprofile = ServerLoginPacketListenerImpl.this.callPlayerPreLoginEvents(gameprofile);
++                ServerLoginPacketListenerImpl.LOGGER.info("UUID of player {} is {}", gameprofile.name(), gameprofile.id());
++                ServerLoginPacketListenerImpl.this.startClientVerification(gameprofile);
++            } catch (Exception ex) {
++                ServerLoginPacketListenerImpl.this.disconnect("Failed to verify username!");
++                ServerLoginPacketListenerImpl.this.server.server.getLogger().log(java.util.logging.Level.WARNING, "Exception verifying " + ServerLoginPacketListenerImpl.this.requestedUsername, ex);
++            }
++        });
++    }
++
+     private void startClientVerification(final GameProfile profile) {
+         this.authenticatedProfile = profile;
+         this.state = ServerLoginPacketListenerImpl.State.VERIFYING;
+@@ -337,12 +359,6 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+ 
+     // CraftBukkit start
+     private GameProfile callPlayerPreLoginEvents(GameProfile gameprofile) throws Exception { // Paper - Add more fields to AsyncPlayerPreLoginEvent
+-        // Paper start - Add Velocity IP Forwarding Support
+-        if (ServerLoginPacketListenerImpl.this.velocityLoginMessageId == -1 && io.papermc.paper.configuration.GlobalConfiguration.get().proxies.velocity.enabled) {
+-            this.disconnect("This server requires you to connect with Velocity.");
+-            return gameprofile;
+-        }
+-        // Paper end - Add Velocity IP Forwarding Support
+         String playerName = gameprofile.name();
+         java.net.InetAddress address = ((java.net.InetSocketAddress) this.connection.getRemoteAddress()).getAddress();
+         java.util.UUID uniqueId = gameprofile.id();
+@@ -399,15 +415,35 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+         }
+     }
+     private void handleCustomQueryPacket0(final ServerboundCustomQueryAnswerPacket packet) {
+-        if (io.papermc.paper.configuration.GlobalConfiguration.get().proxies.velocity.enabled && packet.transactionId() == this.velocityLoginMessageId) {
++        if (this.velocityLoginMessageId != -1 && packet.transactionId() == this.velocityLoginMessageId) {
+             ServerboundCustomQueryAnswerPacket.QueryAnswerPayload payload = (ServerboundCustomQueryAnswerPacket.QueryAnswerPayload)packet.payload();
+             if (payload == null) {
+-                this.disconnect("This server requires you to connect with Velocity.");
++                this.hunterBeginDirectLogin();
+                 return;
+             }
+ 
+             net.minecraft.network.FriendlyByteBuf buf = payload.buffer;
+-            if (!com.destroystokyo.paper.proxy.VelocityProxy.checkIntegrity(buf)) {
++            if (buf.readableBytes() < 32) {
++                this.disconnect("Unable to verify player details");
++                return;
++            }
++            final byte[] signature = new byte[32];
++            buf.readBytes(signature);
++            final byte[] signedData = new byte[buf.readableBytes()];
++            buf.getBytes(buf.readerIndex(), signedData);
++            final java.net.SocketAddress rawAddress = this.connection.channel.remoteAddress();
++            java.util.Optional<org.huntercore.network.HunterProxyNode> proxyNode = org.huntercore.network.HunterProxyRegistry.verifyVelocity(rawAddress, signature, signedData);
++            if (proxyNode.isEmpty() && !org.huntercore.network.HunterProxyRegistry.configured(org.huntercore.network.HunterProxyType.VELOCITY)
++                && io.papermc.paper.configuration.GlobalConfiguration.get().proxies.velocity.enabled
++                && org.huntercore.network.HunterProxyRegistry.verifyHmac(io.papermc.paper.configuration.GlobalConfiguration.get().proxies.velocity.secret, signature, signedData)) {
++                proxyNode = java.util.Optional.of(org.huntercore.network.HunterProxyNode.legacy(
++                    "paper-velocity",
++                    org.huntercore.network.HunterProxyType.VELOCITY,
++                    io.papermc.paper.configuration.GlobalConfiguration.get().proxies.velocity.secret,
++                    io.papermc.paper.configuration.GlobalConfiguration.get().proxies.velocity.onlineMode
++                ));
++            }
++            if (proxyNode.isEmpty()) {
+                 this.disconnect("Unable to verify player details");
+                 return;
+             }
+@@ -425,6 +461,7 @@ public class ServerLoginPacketListenerImpl implements ServerLoginPacketListener,
+             this.connection.address = new java.net.InetSocketAddress(com.destroystokyo.paper.proxy.VelocityProxy.readAddress(buf), port);
+ 
+             this.authenticatedProfile = com.destroystokyo.paper.proxy.VelocityProxy.createProfile(buf);
++            this.connection.hunterMarkProxy(org.huntercore.api.network.HunterConnectionSource.VELOCITY, proxyNode.get());
+ 
+             //TODO Update handling for lazy sessions, might not even have to do anything?
+ 
+diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
+index df395893a76d58f25aed767e710da717860328c7..8c2317abb2e04e905bd4029468ee18a1a6241e12 100644
+--- a/net/minecraft/server/players/PlayerList.java
++++ b/net/minecraft/server/players/PlayerList.java
+@@ -198,7 +198,7 @@ public abstract class PlayerList {
+                 !immediateRespawn,
+                 doLimitedCrafting,
+                 player.createCommonSpawnInfo(level),
+-                this.server.usesAuthentication(),
++                connection.hunterOnlineAuthenticated(), // HunterCore - per-connection authentication state
+                 org.bxteam.divinemc.config.DivineConfig.NetworkCategory.noChatReportsEnabled || this.server.enforceSecureProfile() // DivineMC - Implement NoChatReports
+             )
+         );
