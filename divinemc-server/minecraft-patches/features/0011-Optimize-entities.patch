@@ -526,10 +526,12 @@ diff --git a/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.jav
 index 3578ece216827fd5d8c1206c689fc608e97b50df..d5934daaf5afbc1165817cc19389a8c0083a62ea 100644
 --- a/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java
 +++ b/net/minecraft/world/entity/ai/sensing/NearestLivingEntitySensor.java
-@@ -17,8 +17,8 @@ public class NearestLivingEntitySensor<T extends LivingEntity> extends Sensor<T>
+@@ -17,8 +17,12 @@ public class NearestLivingEntitySensor<T extends LivingEntity> extends Sensor<T>
      protected void doTick(final ServerLevel level, final T body) {
          double followRange = body.getAttributeValue(Attributes.FOLLOW_RANGE);
          AABB boundingBox = body.getBoundingBox().inflate(followRange, followRange, followRange);
+-        List<LivingEntity> livingEntities = level.getEntitiesOfClass(LivingEntity.class, boundingBox, mob -> mob != body && mob.isAlive());
+-        livingEntities.sort(Comparator.comparingDouble(body::distanceToSqr));
 +        List<LivingEntity> livingEntities = level.getEntitiesOfClass(LivingEntity.class, boundingBox, mob -> mob != body && mob.isAlive());
 +        if (livingEntities instanceof it.unimi.dsi.fastutil.objects.ObjectArrayList<LivingEntity> fastLivingEntities) { // DivineMC - Optimize collections
 +            fastLivingEntities.unstableSort(Comparator.comparingDouble(body::distanceToSqr));
@@ -554,7 +556,7 @@ index 2f3e93d4ccf238d0656e69b789ddb811263df470..c79bad89c918b5e1ee6eafb5cb465ab5
 +        ImmutableList.Builder<LivingEntity> babies = ImmutableList.builder();
 +
 +        for (LivingEntity target : visibleEntities.nearbyEntities) {
-+            if (target.getType() == EntityType.VILLAGER
++            if (target.getType() == EntityTypes.VILLAGER
 +                && target.isBaby()
 +                && visibleEntities.lineOfSightTest.test(target)) {
 +                babies.add(target);

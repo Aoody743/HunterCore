@@ -22,7 +22,7 @@ index 0000000000000000000000000000000000000000..00000000000000000000000000000000
          // Paper - remove debug
          // called with the shape of a VoxelShape, so we can expect the cache to exist
          final ca.spottedleaf.moonrise.patches.collisions.shape.CachedShapeData cache = ((ca.spottedleaf.moonrise.patches.collisions.shape.CollisionDiscreteVoxelShape) shape).moonrise$getOrCreateCachedShapeData();
-@@ -258,6 +265,52 @@ public final class BitSetDiscreteVoxelShape extends DiscreteVoxelShape {
+@@ -258,6 +265,54 @@ public final class BitSetDiscreteVoxelShape extends DiscreteVoxelShape {
      }
      // Paper end - optimise collisions
  
