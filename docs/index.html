@@ -6,10 +6,10 @@
     <title>HunterCore - HuntMC Server Core</title>
     <meta
       name="description"
-      content="HunterCore is the Minecraft server core from HuntMC, with WebPanel, Geyser, resource-pack auth UI, AI, fake players, NPCs, assets, and production-ready optimization."
+      content="HunterCore is the Minecraft server core from HuntMC, with WebPanel, Geyser, HuntEngine custom content, resource-pack auth UI, AI, fake players, NPCs, and production-ready optimization."
     />
     <meta property="og:title" content="HunterCore by HuntMC" />
-    <meta property="og:description" content="A polished Minecraft server core with web operations, GUI workflows, AI tools, and bundled assets." />
+    <meta property="og:description" content="A polished Minecraft server core with web operations, GUI workflows, HuntEngine custom content, and AI tools." />
     <meta property="og:type" content="website" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://unpkg.com" />
@@ -65,7 +65,7 @@
           <p class="eyebrow" data-i18n="hero.eyebrow">Minecraft server core from HuntMC</p>
           <h1>HunterCore</h1>
           <p class="lead" data-i18n="hero.lead">
-            An out-of-the-box Minecraft core for server owners: optimized 26.x runtime, bundled Geyser and Floodgate, WebPanel, custom resource-pack auth UI, GUI command workflows, AI bots, fake players, NPCs, assets, titles, and operations tools.
+            An out-of-the-box Minecraft core for server owners: optimized 26.x runtime, bundled Geyser and Floodgate, WebPanel, HuntEngine custom content, custom resource-pack auth UI, GUI command workflows, AI bots, fake players, NPCs, titles, and operations tools.
           </p>
           <div class="hero-actions">
             <a class="button primary" href="#downloads">
@@ -108,8 +108,8 @@
         <div class="feature-grid">
           <article><i data-lucide="globe-2"></i><h3 data-i18n="feature.geyser.title">Geyser ready</h3><p data-i18n="feature.geyser.body">Geyser and Floodgate are bundled with working defaults, Bedrock UDP 19132, and web-visible configuration.</p></article>
           <article><i data-lucide="shield-check"></i><h3 data-i18n="feature.ncr.title">Chat report protection</h3><p data-i18n="feature.ncr.body">NoChatReports is handled by HunterCore itself, with command, GUI, and WebPanel controls.</p></article>
-          <article><i data-lucide="layout-dashboard"></i><h3 data-i18n="feature.web.title">WebPanel operations</h3><p data-i18n="feature.web.body">Dashboard, assets, permissions, titles, settings, players, chat, maps, plugins, and health views in one web surface.</p></article>
-          <article><i data-lucide="boxes"></i><h3 data-i18n="feature.assets.title">HunterAssets</h3><p data-i18n="feature.assets.body">Publish resource packs, define custom model data items, validate packs, and serve downloads from the panel.</p></article>
+          <article><i data-lucide="layout-dashboard"></i><h3 data-i18n="feature.web.title">WebPanel operations</h3><p data-i18n="feature.web.body">Dashboard, HuntEngine, permissions, titles, settings, players, chat, maps, plugins, and health views in one web surface.</p></article>
+          <article><i data-lucide="boxes"></i><h3 data-i18n="feature.assets.title">HuntEngine</h3><p data-i18n="feature.assets.body">Manage native content packs, custom items, blocks, furniture, validation, and resource-pack publishing.</p></article>
           <article><i data-lucide="bot"></i><h3 data-i18n="feature.ai.title">AI and fake players</h3><p data-i18n="feature.ai.body">AI chat, NPC responses, real fake player actions, safety windows, and workload throttling are built in.</p></article>
           <article><i data-lucide="sparkles"></i><h3 data-i18n="feature.auth.title">Custom login UI</h3><p data-i18n="feature.auth.body">HunterAuth asks players to install the UI pack, opens a custom login GUI, and falls back cleanly if declined.</p></article>
           <article><i data-lucide="map"></i><h3 data-i18n="feature.map.title">Map and server tools</h3><p data-i18n="feature.map.body">BlueMap, Chunky, LuckPerms, WorldEdit, WorldGuard, Vault, ProtocolLib, ViaVersion, and more are prepared.</p></article>
@@ -122,7 +122,7 @@
           <p class="eyebrow" data-i18n="gui.eyebrow">Graphical control</p>
           <h2 data-i18n="gui.title">The `/hc` menu is the front door. Admin commands stay commands.</h2>
           <p data-i18n="gui.body">
-            Players can open `/hc` directly, while admins keep traditional `/hc admin ...` commands. The GUI now routes into real workbenches for AI, optimization, modules, assets, titles, NoChatReports, web settings, fake players, NPCs, story mode, and command categories.
+            Players can open `/hc` directly, while admins keep traditional `/hc admin ...` commands. The GUI now routes into real workbenches for AI, optimization, modules, HuntEngine, titles, NoChatReports, web settings, fake players, NPCs, story mode, and command categories.
           </p>
         </div>
         <div class="mock-panel" aria-label="HunterCore GUI mockup">
@@ -130,7 +130,7 @@
           <div class="mock-grid">
             <div><i data-lucide="bot"></i><span data-i18n="gui.ai">AI</span></div>
             <div><i data-lucide="shield"></i><span data-i18n="gui.ncr">Reports</span></div>
-            <div><i data-lucide="package"></i><span data-i18n="gui.assets">Assets</span></div>
+            <div><i data-lucide="package"></i><span data-i18n="gui.assets">HuntEngine</span></div>
             <div><i data-lucide="users"></i><span data-i18n="gui.players">Bots</span></div>
             <div><i data-lucide="badge"></i><span data-i18n="gui.titles">Titles</span></div>
             <div><i data-lucide="settings-2"></i><span data-i18n="gui.settings">Settings</span></div>
@@ -145,8 +145,8 @@
         </div>
         <div class="web-grid">
           <div><i data-lucide="activity"></i><strong data-i18n="web.health.title">Health</strong><span data-i18n="web.health.body">TPS, MSPT, memory, chunks, entities, plugin state, and warnings.</span></div>
-          <div><i data-lucide="image"></i><strong data-i18n="web.assets.title">Assets</strong><span data-i18n="web.assets.body">Pack publishing, item forms, validation, and clearer resource-pack status.</span></div>
-          <div><i data-lucide="key-round"></i><strong data-i18n="web.permissions.title">Permissions</strong><span data-i18n="web.permissions.body">GUI permission switches for bots, assets, auth, admin paths, and player tools.</span></div>
+          <div><i data-lucide="image"></i><strong data-i18n="web.assets.title">HuntEngine</strong><span data-i18n="web.assets.body">Content packs, item catalogues, validation, publishing, and resource-pack status.</span></div>
+          <div><i data-lucide="key-round"></i><strong data-i18n="web.permissions.title">Permissions</strong><span data-i18n="web.permissions.body">GUI permission switches for bots, HuntEngine, auth, admin paths, and player tools.</span></div>
           <div><i data-lucide="id-card"></i><strong data-i18n="web.titles.title">Titles</strong><span data-i18n="web.titles.body">Labeled fields and safer forms for title text, owner grants, and visibility.</span></div>
         </div>
       </section>
@@ -159,11 +159,11 @@
         <div class="download-grid">
           <article class="download-card featured">
             <div class="download-top"><i data-lucide="cpu"></i><span>Minecraft 26.2</span></div>
-            <h3>HunterCore 2.9.0</h3>
+            <h3>HunterCore 2.9.16</h3>
             <p data-i18n="downloads.262.body">Recommended release with custom auth resource pack UI, built-in chat report protection, improved GUI coverage, and verified Geyser defaults.</p>
             <div class="download-actions">
-              <a class="button primary" href="https://github.com/Aoody743/HunterCore/releases/download/v2.9.0/HunterCore-2.9.0-build.1-MinecraftServer-26.2-release.jar"><i data-lucide="download"></i><span data-i18n="download.serverJar">服务端核心</span></a>
-              <a class="button secondary" href="https://github.com/Aoody743/HunterCore/releases/download/v2.9.0/HunterCore-2.9.0-build.1-WebPanel-26.2-release.zip"><i data-lucide="panel-top"></i><span data-i18n="download.webPanel">网页面板</span></a>
+              <a class="button primary" href="https://github.com/Aoody743/HunterCore/releases/download/v2.9.16/HunterCore-2.9.16-build.1-MinecraftServer-26.2-release.jar"><i data-lucide="download"></i><span data-i18n="download.serverJar">服务端核心</span></a>
+              <a class="button secondary" href="https://github.com/Aoody743/HunterCore/releases/download/v2.9.16/HunterCore-2.9.16-build.1-WebPanel-26.2-release.zip"><i data-lucide="panel-top"></i><span data-i18n="download.webPanel">网页面板</span></a>
             </div>
           </article>
           <article class="download-card">

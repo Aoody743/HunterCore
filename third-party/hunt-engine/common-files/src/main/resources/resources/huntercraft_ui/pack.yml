@@ -1,0 +1,5 @@
+author: HunterCraft
+version: 2.9.16
+description: HunterCraft UI overlay for HuntEngine, HunterAuth, and shared GUI screens
+namespace: huntercore
+enable: true

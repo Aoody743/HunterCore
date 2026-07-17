@@ -1,0 +1,22 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "huntercore:gui/huntercore_menu.png",
+      "ascent": 64,
+      "height": 128,
+      "chars": [
+        ""
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "huntercore:gui/hunterauth_panel.png",
+      "ascent": 86,
+      "height": 171,
+      "chars": [
+        ""
+      ]
+    }
+  ]
+}

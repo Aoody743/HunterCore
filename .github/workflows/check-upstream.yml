@@ -24,7 +24,7 @@ jobs:
       UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
 
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload upstream report
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: DivineMC-upstream-report
           path: build/upstream-check/upstream-report.txt

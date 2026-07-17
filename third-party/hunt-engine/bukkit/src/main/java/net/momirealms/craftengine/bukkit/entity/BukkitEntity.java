@@ -1,0 +1,128 @@
+package net.momirealms.craftengine.bukkit.entity;
+
+import net.momirealms.craftengine.bukkit.api.BukkitAdaptor;
+import net.momirealms.craftengine.bukkit.util.DirectionUtils;
+import net.momirealms.craftengine.bukkit.util.EntityUtils;
+import net.momirealms.craftengine.bukkit.util.LocationUtils;
+import net.momirealms.craftengine.core.entity.AbstractEntity;
+import net.momirealms.craftengine.core.entity.data.EntityData;
+import net.momirealms.craftengine.core.util.Direction;
+import net.momirealms.craftengine.core.util.Key;
+import net.momirealms.craftengine.core.world.World;
+import net.momirealms.craftengine.core.world.WorldPosition;
+import net.momirealms.craftengine.proxy.bukkit.craftbukkit.entity.CraftEntityProxy;
+import net.momirealms.craftengine.proxy.minecraft.network.syncher.SynchedEntityDataProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.entity.EntityProxy;
+import org.bukkit.entity.Entity;
+
+import java.lang.ref.WeakReference;
+import java.util.UUID;
+
+public class BukkitEntity extends AbstractEntity {
+    protected final WeakReference<org.bukkit.entity.Entity> entity;
+
+    public BukkitEntity(org.bukkit.entity.Entity entity) {
+        this.entity = new WeakReference<>(entity);
+    }
+
+    @Override
+    public double x() {
+        return EntityProxy.INSTANCE.getX(serverEntity());
+    }
+
+    @Override
+    public double y() {
+        return EntityProxy.INSTANCE.getY(serverEntity());
+    }
+
+    @Override
+    public double z() {
+        return EntityProxy.INSTANCE.getZ(serverEntity());
+    }
+
+    @Override
+    public void tick() {
+    }
+
+    @Override
+    public WorldPosition position() {
+        return LocationUtils.toWorldPosition(platformEntity().getLocation());
+    }
+
+    @Override
+    public int entityId() {
+        return platformEntity().getEntityId();
+    }
+
+    @Override
+    public float xRot() {
+        return EntityProxy.INSTANCE.getXRot(serverEntity());
+    }
+
+    @Override
+    public float yRot() {
+        return EntityProxy.INSTANCE.getYRot(serverEntity());
+    }
+
+    @Override
+    public World world() {
+        return BukkitAdaptor.adapt(platformEntity().getWorld());
+    }
+
+    @Override
+    public Direction getDirection() {
+        return DirectionUtils.toDirection(platformEntity().getFacing());
+    }
+
+    @Override
+    public org.bukkit.entity.Entity platformEntity() {
+        return this.entity.get();
+    }
+
+    @Override
+    public Object serverEntity() {
+        return CraftEntityProxy.INSTANCE.getEntity(platformEntity());
+    }
+
+    @Override
+    public Key type() {
+        return EntityUtils.getEntityType(platformEntity());
+    }
+
+    @Override
+    public boolean isValid() {
+        Entity bkEntity = platformEntity();
+        if (bkEntity == null) return false;
+        return bkEntity.isValid();
+    }
+
+    @Override
+    public String name() {
+        return platformEntity().getName();
+    }
+
+    @Override
+    public UUID uuid() {
+        return platformEntity().getUniqueId();
+    }
+
+    @Override
+    public Object entityData() {
+        return EntityProxy.INSTANCE.getEntityData(serverEntity());
+    }
+
+    @Override
+    public <T> T getEntityData(EntityData<T> data) {
+        return SynchedEntityDataProxy.INSTANCE.get(entityData(), data.entityDataAccessor());
+    }
+
+    @Override
+    public <T> void setEntityData(EntityData<T> data, T value, boolean force) {
+        SynchedEntityDataProxy.INSTANCE.set(entityData(), data.entityDataAccessor(), value, force);
+    }
+
+    @Override
+    public void remove() {
+        this.platformEntity().remove();
+    }
+}

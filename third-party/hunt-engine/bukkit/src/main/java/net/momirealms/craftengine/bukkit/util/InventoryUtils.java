@@ -1,0 +1,79 @@
+package net.momirealms.craftengine.bukkit.util;
+
+import com.google.common.collect.Lists;
+import net.momirealms.craftengine.bukkit.nms.DelegatingContainer;
+import net.momirealms.craftengine.core.util.VersionHelper;
+import net.momirealms.craftengine.proxy.bukkit.craftbukkit.inventory.CraftInventoryProxy;
+import org.bukkit.entity.HumanEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryEvent;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+
+public final class InventoryUtils {
+    private InventoryUtils() {}
+
+    public static Player getPlayerFromInventoryEvent(InventoryEvent event) {
+        if (VersionHelper.isOrAbove1_21) {
+            return (Player) event.getView().getPlayer();
+        } else {
+            return LegacyInventoryUtils.getPlayerFromInventoryEvent(event);
+        }
+    }
+
+    public static InventoryHolder getInventoryHolder(Inventory inventory) {
+        if (VersionHelper.hasPaperPatch) {
+            return inventory.getHolder(false);
+        } else {
+            return inventory.getHolder();
+        }
+    }
+
+    public static int getSuitableHotBarSlot(PlayerInventory inventory) {
+        int selectedSlot = inventory.getHeldItemSlot();
+        int i;
+        int j;
+        for (j = 0; j < 9; ++j) {
+            i = (selectedSlot + j) % 9;
+            if (ItemStackUtils.isEmpty(inventory.getItem(i))) {
+                return i;
+            }
+        }
+        for (j = 0; j < 9; ++j) {
+            i = (selectedSlot + j) % 9;
+            ItemStack item = inventory.getItem(i);
+            if (ItemStackUtils.isEmpty(item) || item.getEnchantments().isEmpty()) {
+                return i;
+            }
+        }
+        return selectedSlot;
+    }
+
+    public static int findMatchingItemSlot(PlayerInventory inventory, ItemStack itemStack) {
+        ItemStack[] items = inventory.getStorageContents();
+        for (int i = 0; i < items.length; ++i) {
+            ItemStack stack = items[i];
+            if (ItemStackUtils.isEmpty(stack)) continue;
+            if (stack.isSimilar(itemStack)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static boolean isCustomContainer(Inventory inventory) {
+        if (inventory == null) return false;
+        if (!CraftInventoryProxy.CLASS.isInstance(inventory)) return false;
+        Object container = CraftInventoryProxy.INSTANCE.getInventory(inventory);
+        if (container == null) return false;
+        return container instanceof DelegatingContainer;
+    }
+
+    public static int close(Inventory inventory) {
+        int size = inventory.getViewers().size();
+        Lists.newArrayList(inventory.getViewers()).forEach(HumanEntity::closeInventory);
+        return size;
+    }
+}

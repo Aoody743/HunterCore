@@ -4,6 +4,8 @@ import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.bundling.Zip
 import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.register
+import io.papermc.paperweight.tasks.CreateBundlerJar
+import io.papermc.paperweight.tasks.CreatePaperclipJar
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -14,7 +16,7 @@ import java.util.zip.ZipOutputStream
 
 plugins {
     java
-    id("io.papermc.paperweight.patcher") version "2.0.0-SNAPSHOT"
+    id("io.papermc.paperweight.patcher") version "2.0.0-beta.21"
 }
 
 val paperMavenPublicUrl = "https://repo.papermc.io/repository/maven-public/"
@@ -26,6 +28,12 @@ val huntercoreBuildNumber = providers.environmentVariable("BUILD_NUMBER")
     .trim()
 val huntercoreVersionLabel = if (huntercoreBuildNumber.isBlank()) huntercoreVersionName else "$huntercoreVersionName-build.$huntercoreBuildNumber"
 val huntercoreReleaseChannel = providers.gradleProperty("releaseChannel").get().trim()
+val huntercoreReleaseMaxBytes = providers.gradleProperty("huntercoreReleaseMaxBytes")
+    .orElse("220000000")
+    .map { value ->
+        value.toLongOrNull()?.takeIf { it > 0 }
+            ?: error("huntercoreReleaseMaxBytes must be a positive integer, got: $value")
+    }
 val huntercoreMcVersion = providers.gradleProperty("mcVersion").get().trim()
 val huntercoreReleaseJarName = "HunterCore-$huntercoreVersionLabel-MinecraftServer-$huntercoreMcVersion-$huntercoreReleaseChannel.jar"
 val huntercoreWebPanelZipName = "HunterCore-$huntercoreVersionLabel-WebPanel-$huntercoreMcVersion-$huntercoreReleaseChannel.zip"
@@ -211,6 +219,18 @@ subprojects {
 }
 
 val bundledPluginOutput = layout.buildDirectory.dir("huntercore/bundled-plugins")
+val huntEngineArtifact = layout.projectDirectory.file("third-party/hunt-engine/target/HuntEngine.jar")
+val bundledPluginPackagingTasks = setOf("createPaperclipJar", "packageHunterCoreRelease", "verifyHunterCoreRelease")
+val includeBundledPlugins = providers.gradleProperty("includeBundledPlugins")
+    .map { value ->
+        value.toBooleanStrictOrNull()
+            ?: error("Gradle property includeBundledPlugins must be true or false, got: $value")
+    }
+    .orElse(providers.provider {
+        gradle.startParameter.taskNames.any { requestedTask ->
+            requestedTask.substringAfterLast(':') in bundledPluginPackagingTasks
+        }
+    })
 val prepareExternalBundledPlugins by tasks.registering(Exec::class) {
     group = "huntercore"
     description = "Downloads and builds external HunterCore bundled plugin jars."
@@ -220,14 +240,26 @@ val prepareExternalBundledPlugins by tasks.registering(Exec::class) {
     commandLine("bash", layout.projectDirectory.file("scripts/prepare-bundled-plugins.sh").asFile.absolutePath, outputDir.absolutePath)
 }
 
+val verifyHuntEngineArtifact by tasks.registering(Exec::class) {
+    group = "huntercore"
+    description = "Verifies the independently built HuntEngine source provenance and Paper artifact."
+    val verificationScript = layout.projectDirectory.file("scripts/verify-hunt-engine-vendor.sh")
+    inputs.file(verificationScript)
+    inputs.file(huntEngineArtifact)
+    commandLine("bash", verificationScript.asFile.absolutePath, huntEngineArtifact.asFile.absolutePath)
+}
+
 gradle.projectsEvaluated {
+    if (!includeBundledPlugins.get()) {
+        return@projectsEvaluated
+    }
+
     val tpaJar = project(":huntercore-plugins:hunter-tpa").tasks.named<Jar>("jar")
     val authJar = project(":huntercore-plugins:hunter-auth").tasks.named<Jar>("jar")
     val toolsJar = project(":huntercore-plugins:hunter-tools").tasks.named<Jar>("jar")
-    val assetsJar = project(":huntercore-plugins:hunter-assets").tasks.named<Jar>("jar")
 
     project(":divinemc-server").tasks.named<ProcessResources>("processResources") {
-        dependsOn(prepareExternalBundledPlugins, tpaJar, authJar, toolsJar, assetsJar)
+        dependsOn(prepareExternalBundledPlugins, verifyHuntEngineArtifact, tpaJar, authJar, toolsJar)
         from(bundledPluginOutput.map { it.dir("plugins") }) {
             into("META-INF/huntercore/bundled-plugins")
         }
@@ -246,9 +278,9 @@ gradle.projectsEvaluated {
             into("META-INF/huntercore/bundled-plugins")
             rename { "HunterTools.jar" }
         }
-        from(assetsJar.flatMap { it.archiveFile }) {
+        from(huntEngineArtifact) {
             into("META-INF/huntercore/bundled-plugins")
-            rename { "HunterAssets.jar" }
+            rename { "HuntEngine.jar" }
         }
     }
 }
@@ -264,7 +296,8 @@ val preparedHunterCoreWebPanel = layout.buildDirectory.dir("huntercore-web-panel
 val huntercoreWebPanelReadme = """
     HunterCore Web Panel
 
-    Deploy these files to any static web host. Open index.html and fill the backend URL, for example http://server.example.com:8088.
+    Deploy these files to any static web host. Open index.html and fill the HTTPS reverse-proxy URL, for example https://server.example.com.
+    The HunterCore backend is HTTP-only and must not be exposed directly to the public Internet.
     The backend-embedded panel at the server root keeps using backend mode and does not show this connection setup.
 """.trimIndent() + "\n"
 val prepareHunterCoreWebPanel by tasks.registering(Copy::class) {
@@ -292,21 +325,28 @@ tasks.register<Zip>("packageHunterCoreWebPanel") {
     from(preparedHunterCoreWebPanel)
 }
 
+val huntercoreReleaseAssetJar = layout.buildDirectory.file("huntercore-release/$huntercoreReleaseJarName")
+
 tasks.register("packageHunterCoreRelease") {
     group = "huntercore"
     description = "Builds the paperclip jar, trims bundled native libraries to common server platforms, and copies it to the HunterCore release naming scheme."
     dependsOn(":divinemc-server:createPaperclipJar")
-    val serverLibs = layout.projectDirectory.dir("divinemc-server/build/libs")
     val releaseJar = layout.projectDirectory.file("divinemc-server/build/libs/$huntercoreReleaseJarName")
-    val releaseAssetJar = layout.buildDirectory.file("huntercore-release/$huntercoreReleaseJarName")
+    val releaseAssetJar = huntercoreReleaseAssetJar
     outputs.files(releaseJar, releaseAssetJar)
     outputs.upToDateWhen { false }
 
     doLast {
-        val sourceJar = serverLibs.asFile
-            .listFiles { file -> file.isFile && file.name.startsWith("divinemc-paperclip-") && file.name.endsWith(".jar") }
-            ?.maxByOrNull { it.lastModified() }
-            ?: error("Could not locate divinemc-paperclip jar in ${serverLibs.asFile}")
+        val sourceJar = project(":divinemc-server")
+            .tasks
+            .named<CreatePaperclipJar>("createPaperclipJar")
+            .get()
+            .outputZip
+            .get()
+            .asFile
+        if (!sourceJar.isFile) {
+            error("CreatePaperclipJar did not produce its declared output: $sourceJar")
+        }
         val commonNativePrefixes = listOf(
             "linux/amd64/",
             "linux/aarch64/",
@@ -354,12 +394,58 @@ tasks.register("packageHunterCoreRelease") {
         Files.copy(output.toPath(), releaseAsset.toPath(), StandardCopyOption.REPLACE_EXISTING)
         val size = output.length()
         val sizeMb = size / 1_000_000.0
-        if (size >= 180_000_000L) {
-            error("HunterCore release jar is ${"%.2f".format(sizeMb)} MB, expected less than 180 MB")
+        val maximumBytes = huntercoreReleaseMaxBytes.get()
+        if (size >= maximumBytes) {
+            error(
+                "HunterCore release jar is ${"%.2f".format(sizeMb)} MB, " +
+                    "expected less than ${"%.2f".format(maximumBytes / 1_000_000.0)} MB",
+            )
         }
         if (size >= 110_000_000L) {
             println("HunterCore release jar is large because bundled plugins are embedded: ${"%.2f".format(sizeMb)} MB")
         }
         println("HunterCore release jar: ${output.name} (${"%.2f".format(sizeMb)} MB)")
+    }
+}
+
+tasks.register<Exec>("verifyHunterCoreRelease") {
+    group = "verification"
+    description = "Verifies the packaged HunterCore server and web-panel release artifacts."
+    dependsOn(
+        "packageHunterCoreRelease",
+        "packageHunterCoreWebPanel",
+        ":divinemc-server:jar",
+        ":divinemc-server:createBundlerJar",
+        ":divinemc-server:createPaperclipJar",
+    )
+    inputs.file(layout.projectDirectory.file("scripts/verify-huntercore-release.sh"))
+    inputs.file(huntercoreReleaseAssetJar)
+    doFirst {
+        val paperclip = project(":divinemc-server")
+            .tasks
+            .named<CreatePaperclipJar>("createPaperclipJar")
+            .get()
+        val bundler = project(":divinemc-server")
+            .tasks
+            .named<CreateBundlerJar>("createBundlerJar")
+            .get()
+        val serverJar = project(":divinemc-server")
+            .tasks
+            .named<Jar>("jar")
+            .get()
+            .archiveFile
+            .get()
+            .asFile
+        val webPanel = tasks.named<Zip>("packageHunterCoreWebPanel").get().archiveFile.get().asFile
+        commandLine(
+            "bash",
+            layout.projectDirectory.file("scripts/verify-huntercore-release.sh").asFile.absolutePath,
+            huntercoreReleaseAssetJar.get().asFile.absolutePath,
+            serverJar.absolutePath,
+            paperclip.originalBundlerJar.get().asFile.absolutePath,
+            bundler.outputZip.get().asFile.absolutePath,
+            webPanel.absolutePath,
+        )
+        environment("HUNTERCORE_RELEASE_MAX_BYTES", huntercoreReleaseMaxBytes.get().toString())
     }
 }

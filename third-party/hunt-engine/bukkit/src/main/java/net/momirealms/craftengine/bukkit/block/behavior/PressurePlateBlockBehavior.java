@@ -1,0 +1,258 @@
+package net.momirealms.craftengine.bukkit.block.behavior;
+
+import net.momirealms.antigrieflib.Flag;
+import net.momirealms.craftengine.bukkit.plugin.BukkitCraftEngine;
+import net.momirealms.craftengine.bukkit.util.*;
+import net.momirealms.craftengine.bukkit.world.BukkitWorldManager;
+import net.momirealms.craftengine.core.block.BlockDefinition;
+import net.momirealms.craftengine.core.block.ImmutableBlockState;
+import net.momirealms.craftengine.core.block.behavior.BlockBehaviorFactory;
+import net.momirealms.craftengine.core.block.property.Property;
+import net.momirealms.craftengine.core.plugin.config.ConfigSection;
+import net.momirealms.craftengine.core.sound.SoundData;
+import net.momirealms.craftengine.core.util.Direction;
+import net.momirealms.craftengine.core.util.PressurePlateSensitivity;
+import net.momirealms.craftengine.core.util.VersionHelper;
+import net.momirealms.craftengine.core.world.World;
+import net.momirealms.craftengine.core.world.WorldEvents;
+import net.momirealms.craftengine.proxy.bukkit.craftbukkit.block.CraftBlockProxy;
+import net.momirealms.craftengine.proxy.minecraft.core.DirectionProxy;
+import net.momirealms.craftengine.proxy.minecraft.core.Vec3iProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.entity.EntityProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.entity.EntitySelectorProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.entity.LivingEntityProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.EntityGetterProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.LevelAccessorProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.LevelProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.LevelWriterProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.block.BasePressurePlateBlockProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.block.BlockProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.block.BlocksProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.block.state.BlockBehaviourProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.phys.AABBProxy;
+import org.bukkit.GameEvent;
+import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+import org.bukkit.util.Vector;
+
+import javax.annotation.Nullable;
+import java.util.Optional;
+
+public final class PressurePlateBlockBehavior extends BukkitBlockBehavior {
+    public static final BlockBehaviorFactory<PressurePlateBlockBehavior> FACTORY = new Factory();
+    public final Property<Boolean> poweredProperty;
+    public final SoundData onSound;
+    public final SoundData offSound;
+    public final PressurePlateSensitivity pressurePlateSensitivity;
+    public final int pressedTime;
+
+    private PressurePlateBlockBehavior(BlockDefinition block,
+                                       Property<Boolean> poweredProperty,
+                                       SoundData onSound,
+                                       SoundData offSound,
+                                       PressurePlateSensitivity pressurePlateSensitivity,
+                                       int pressedTime) {
+        super(block);
+        this.poweredProperty = poweredProperty;
+        this.onSound = onSound;
+        this.offSound = offSound;
+        this.pressurePlateSensitivity = pressurePlateSensitivity;
+        this.pressedTime = pressedTime;
+    }
+
+    @SuppressWarnings("DuplicatedCode")
+    @Override
+    public Object updateShape(Object thisBlock, Object[] args) {
+        Object state = args[0];
+        Object level = args[updateShape$level];
+        Object blockPos = args[updateShape$blockPos];
+        Direction direction = DirectionUtils.fromNMSDirection(VersionHelper.isOrAbove1_21_2 ? args[4] : args[1]);
+        if (direction == Direction.DOWN && !BlockBehaviourProxy.BlockStateBaseProxy.INSTANCE.canSurvive(state, level, blockPos)) {
+            Optional<ImmutableBlockState> optionalCustomState = BlockStateUtils.getOptionalCustomBlockState(state);
+            if (optionalCustomState.isEmpty()) {
+                return BlocksProxy.AIR$defaultState;
+            }
+            ImmutableBlockState customState = optionalCustomState.get();
+            LevelAccessorProxy.INSTANCE.levelEvent(level, WorldEvents.BLOCK_BREAK_EFFECT, blockPos, customState.customBlockState().registryId());
+            return BlocksProxy.AIR$defaultState;
+        }
+        return state;
+    }
+
+    @Override
+    public boolean canSurvive(Object thisBlock, Object[] args) {
+        Object blockPos = LocationUtils.below(args[2]);
+        Object level = args[1];
+        return BlockProxy.INSTANCE.canSupportRigidBlock(level, blockPos)
+                || BlockProxy.INSTANCE.canSupportCenter(level, blockPos, DirectionProxy.UP);
+    }
+
+    @Override
+    public void tick(Object thisBlock, Object[] args) {
+        Object state = args[0];
+        int signalForState = this.getSignalForState(state);
+        if (signalForState > 0) {
+            this.checkPressed(null, args[1], args[2], state, signalForState, thisBlock);
+        }
+    }
+
+    @Override
+    public void entityInside(Object thisBlock, Object[] args) {
+        Entity entity = EntityProxy.INSTANCE.getBukkitEntity(args[3]);
+        Block block = CraftBlockProxy.INSTANCE.at(args[1], args[2]);
+        if (VersionHelper.hasPaperPatch) {
+            if (EventUtils.fireAndCheckCancel(PaperEventUtils.entityInside(entity, block))) {
+                return;
+            }
+        }
+        boolean cannotInteract = entity instanceof Player p && !BukkitCraftEngine.instance().antiGriefProvider().test(p, Flag.USE_PRESSURE_PLATE, block.getLocation());
+        if (cannotInteract) {
+            return;
+        }
+        Object state = args[0];
+        int signalForState = this.getSignalForState(state);
+        if (signalForState == 0) {
+            this.checkPressed(args[3], args[1], args[2], state, signalForState, thisBlock);
+        }
+    }
+
+    private int getSignalStrength(Object level, Object pos) {
+        Class<?> clazz = switch (this.pressurePlateSensitivity) {
+            case EVERYTHING -> EntityProxy.CLASS;
+            case MOBS -> LivingEntityProxy.CLASS;
+        };
+        Object box = AABBProxy.INSTANCE.move$1(BasePressurePlateBlockProxy.INSTANCE.getTouchAABB(), pos);
+        return !EntityGetterProxy.INSTANCE.getEntitiesOfClass(
+                level, clazz, box,
+                EntitySelectorProxy.NO_SPECTATORS.and(entity -> !EntityProxy.INSTANCE.isIgnoringBlockTriggers(entity))
+        ).isEmpty() ? 15 : 0;
+    }
+
+    private Object setSignalForState(Object state, int strength) {
+        Optional<ImmutableBlockState> optionalCustomState = BlockStateUtils.getOptionalCustomBlockState(state);
+        if (optionalCustomState.isEmpty()) return state;
+        return optionalCustomState.get().with(this.poweredProperty, strength > 0).customBlockState().minecraftState();
+    }
+
+    private void checkPressed(@Nullable Object entity, Object level, Object pos, Object state, int currentSignal, Object thisBlock) {
+        int signalStrength = this.getSignalStrength(level, pos);
+        boolean wasActive = currentSignal > 0;
+        boolean isActive = signalStrength > 0;
+
+        if (currentSignal != signalStrength) {
+            Object blockState = this.setSignalForState(state, signalStrength);
+            LevelWriterProxy.INSTANCE.setBlock(level, pos, blockState, 2);
+            this.updateNeighbours(level, pos, thisBlock);
+            LevelProxy.INSTANCE.setBlocksDirty(level, pos, state, blockState);
+        }
+
+        org.bukkit.World craftWorld = LevelProxy.INSTANCE.getWorld(level);
+        int x = Vec3iProxy.INSTANCE.getX(pos);
+        int y = Vec3iProxy.INSTANCE.getY(pos);
+        int z = Vec3iProxy.INSTANCE.getZ(pos);
+        Vector positionVector = new Vector(x, y, z);
+
+        if (!isActive && wasActive) {
+            handleDeactivation(entity, craftWorld, pos, positionVector);
+        } else if (isActive && !wasActive) {
+            handleActivation(entity, craftWorld, pos, positionVector);
+        }
+
+        if (isActive) {
+            LevelAccessorProxy.INSTANCE.scheduleTick$0(level, pos, thisBlock, this.pressedTime);
+        }
+    }
+
+    private void handleDeactivation(Object entity, org.bukkit.World craftWorld, Object pos, Vector positionVector) {
+        World world = BukkitWorldManager.instance().getWorld(craftWorld).world();
+        world.playBlockSound(LocationUtils.toVec3d(LocationUtils.fromBlockPos(pos)), this.offSound);
+        LevelUtils.sendGameEvent(
+                craftWorld,
+                entity != null ? EntityProxy.INSTANCE.getBukkitEntity(entity) : null,
+                GameEvent.BLOCK_DEACTIVATE,
+                positionVector
+        );
+    }
+
+    private void handleActivation(Object entity, org.bukkit.World craftWorld, Object pos, Vector positionVector) {
+        World world = BukkitWorldManager.instance().getWorld(craftWorld).world();
+        world.playBlockSound(LocationUtils.toVec3d(LocationUtils.fromBlockPos(pos)), this.onSound);
+        LevelUtils.sendGameEvent(
+                craftWorld,
+                entity != null ? EntityProxy.INSTANCE.getBukkitEntity(entity) : null,
+                GameEvent.BLOCK_ACTIVATE,
+                positionVector
+        );
+    }
+
+    @Override
+    public void affectNeighborsAfterRemoval(Object thisBlock, Object[] args) {
+        boolean flag;
+        if (VersionHelper.isOrAbove1_21_5) {
+            flag = !(boolean) args[3];
+        } else {
+            flag = !(boolean) args[4] && !BlockBehaviourProxy.BlockStateBaseProxy.INSTANCE.is$0(args[0], BlockBehaviourProxy.BlockStateBaseProxy.INSTANCE.getBlock(args[3]));
+        }
+        if (flag) {
+            if (this.getSignalForState(args[0]) > 0) {
+                this.updateNeighbours(args[1], args[2], thisBlock);
+            }
+            super.affectNeighborsAfterRemoval(args[0], args);
+        }
+    }
+
+    private void updateNeighbours(Object level, Object pos, Object thisBlock) {
+        if (VersionHelper.isOrAbove1_21_5) {
+            LevelAccessorProxy.INSTANCE.updateNeighborsAt(level, pos, thisBlock);
+            LevelAccessorProxy.INSTANCE.updateNeighborsAt(level, LocationUtils.below(pos), thisBlock);
+        } else {
+            LevelProxy.INSTANCE.updateNeighborsAt(level, pos, thisBlock);
+            LevelProxy.INSTANCE.updateNeighborsAt(level, LocationUtils.below(pos), thisBlock);
+        }
+    }
+
+    @Override
+    public int getSignal(Object thisBlock, Object[] args) {
+        return this.getSignalForState(args[0]);
+    }
+
+    private int getSignalForState(Object state) {
+        Optional<ImmutableBlockState> optionalCustomState = BlockStateUtils.getOptionalCustomBlockState(state);
+        return optionalCustomState.filter(immutableBlockState -> immutableBlockState.get(this.poweredProperty)).map(immutableBlockState -> 15).orElse(0);
+    }
+
+    @Override
+    public int getDirectSignal(Object thisBlock, Object[] args) {
+        Direction direction = DirectionUtils.fromNMSDirection(args[3]);
+        return direction == Direction.UP ? this.getSignalForState(args[0]) : 0;
+    }
+
+    @Override
+    public boolean isSignalSource(Object thisBlock, Object[] args) {
+        return true;
+    }
+
+    private static class Factory implements BlockBehaviorFactory<PressurePlateBlockBehavior> {
+        private static final String[] PRESSED_TIME = new String[] {"pressed_time", "pressed-time"};
+
+        @Override
+        public PressurePlateBlockBehavior create(BlockDefinition block, ConfigSection section) {
+            ConfigSection soundSection = section.getSection("sounds");
+            SoundData onSound = null;
+            SoundData offSound = null;
+            if (soundSection != null) {
+                onSound = soundSection.getValue("on", v -> SoundData.fromConfig(v, SoundData.SoundValue.FIXED_1, SoundData.SoundValue.RANGED_0_9_1));
+                offSound = soundSection.getValue("off", v -> SoundData.fromConfig(v, SoundData.SoundValue.FIXED_1, SoundData.SoundValue.RANGED_0_9_1));
+            }
+            return new PressurePlateBlockBehavior(
+                    block,
+                    BlockBehaviorFactory.getProperty(section.path(), block, "powered", Boolean.class),
+                    onSound,
+                    offSound,
+                    section.getValue("sensitivity", it -> it.getAsEnum(PressurePlateSensitivity.class, PressurePlateSensitivity::byId), PressurePlateSensitivity.EVERYTHING),
+                    section.getInt(PRESSED_TIME, 20)
+            );
+        }
+    }
+}

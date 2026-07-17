@@ -28,25 +28,66 @@
   </svg>
   <main class="app">
     <header class="topChrome">
-      <nav class="topNav" aria-label="Panel sections">
-        <button type="button" class="navButton isActive" data-page-target="map" data-i18n="nav.map">Map</button>
-        <button type="button" class="navButton" data-page-target="overview" data-i18n="nav.overview">Overview</button>
-        <button type="button" class="navButton" data-page-target="runtime" data-i18n="nav.runtime">Runtime</button>
-        <button type="button" class="navButton" data-page-target="plugins" data-i18n="nav.plugins">Plugins</button>
-        <button type="button" class="navButton" data-page-target="tools" data-i18n="nav.tools">Tools</button>
-        <button type="button" class="navButton adminOnly" data-page-target="assets" data-i18n="nav.assets" hidden>Assets</button>
-        <button type="button" class="navButton adminOnly" data-page-target="titles" data-i18n="nav.titles" hidden>Titles</button>
-        <button type="button" class="navButton adminOnly" data-page-target="settings" data-i18n="nav.settings" hidden>Settings</button>
-        <button type="button" class="navButton adminOnly" data-page-target="access" data-i18n="nav.access" hidden>Access</button>
-        <button type="button" class="navButton adminOnly" data-page-target="ai" data-i18n="nav.ai" hidden>AI</button>
-        <button type="button" class="navButton adminOnly" data-page-target="admin" data-i18n="nav.admin" hidden>Admin</button>
-        <button id="sessionToggle" type="button" class="navButton" data-i18n="login.action">Login</button>
-        <button id="registerToggle" type="button" class="navButton" data-i18n="register.action">Register player</button>
-        <button id="logoutButton" type="button" class="navButton" data-i18n="logout.action" hidden>Logout</button>
-        <button id="languageToggle" type="button" class="navButton langButton" data-i18n-title="language.switch">EN</button>
-      </nav>
+      <div class="topShell">
+        <button type="button" class="topBrand" data-page-target="map" aria-label="HunterCore home">
+          <span aria-hidden="true">HC</span>
+          <strong id="topServerName">HunterCore</strong>
+        </button>
+        <nav id="primaryNavigation" class="topNav" aria-label="Panel sections">
+          <div class="navGroup" data-nav-group="public">
+            <button type="button" class="navButton isActive" data-page-target="map" data-i18n="nav.map">Map</button>
+            <button type="button" class="navButton" data-page-target="overview" data-i18n="nav.overview">Overview</button>
+            <button type="button" class="navButton" data-page-target="runtime" data-i18n="nav.runtime">Runtime</button>
+            <button type="button" class="navButton" data-page-target="plugins" data-i18n="nav.plugins">Plugins</button>
+          </div>
+          <div class="navGroup" data-nav-group="player" hidden>
+            <button type="button" class="navButton" data-page-target="tools" data-nav-role="player" data-i18n="nav.tools">Tools</button>
+          </div>
+          <div class="navGroup navGroup--huntEngine" data-nav-group="hunt-engine" hidden>
+            <button type="button" class="navButton huntEngineOnly" data-page-target="hunt-engine" data-i18n="nav.huntEngine" hidden>HuntEngine</button>
+          </div>
+          <div class="navGroup navGroup--admin" data-nav-group="admin" hidden>
+            <button type="button" class="navButton adminOnly" data-page-target="titles" data-i18n="nav.titles" hidden>Titles</button>
+            <button type="button" class="navButton adminOnly" data-page-target="settings" data-i18n="nav.settings" hidden>Settings</button>
+            <button type="button" class="navButton adminOnly" data-page-target="access" data-i18n="nav.access" hidden>Access</button>
+            <button type="button" class="navButton adminOnly" data-page-target="ai" data-i18n="nav.ai" hidden>AI</button>
+            <button type="button" class="navButton adminOnly" data-page-target="admin" data-i18n="nav.admin" hidden>Admin</button>
+          </div>
+        </nav>
+        <div class="topActions" aria-label="Panel actions">
+          <button id="connectionToggle" type="button" class="chromeButton connectionButton" aria-controls="connectionPanel" aria-expanded="false">
+            <span id="connectionIndicator" class="connectionIndicator" aria-hidden="true"></span>
+            <span data-i18n="connection.action">Connection</span>
+          </button>
+          <button id="sessionToggle" type="button" class="chromeButton" data-i18n="login.action">Login</button>
+          <button id="registerToggle" type="button" class="chromeButton" data-i18n="register.action">Register player</button>
+          <button id="logoutButton" type="button" class="chromeButton" data-i18n="logout.action" hidden>Logout</button>
+          <button id="languageToggle" type="button" class="chromeButton langButton" data-i18n-title="language.switch">EN</button>
+          <button id="moreToggle" type="button" class="chromeButton moreButton" aria-controls="primaryNavigation" aria-expanded="false">
+            <span aria-hidden="true">☰</span><span class="srOnly" data-i18n="nav.more">More</span>
+          </button>
+        </div>
+      </div>
     </header>
     <div id="actionToast" class="actionToast" role="status" aria-live="polite" hidden></div>
+    <section id="connectionPanel" class="connectionPanel" aria-labelledby="connectionPanelTitle" hidden>
+      <div class="modalHead">
+        <div>
+          <span class="eyebrow" data-i18n="connection.eyebrow">Connection</span>
+          <h2 id="connectionPanelTitle" data-i18n="connection.title">Backend connection</h2>
+        </div>
+        <button type="button" class="smallButton" data-close-connection data-i18n="action.close">Close</button>
+      </div>
+      <p id="connectionFormState" class="formState" role="status" aria-live="polite"></p>
+      <form id="connectionForm" class="loginForm remoteForm">
+        <p class="subtleLine" data-i18n="remote.description">Standalone mode: fill backend URL and optional API key.</p>
+        <label class="fieldLabel"><span data-i18n="connection.backendUrl">Backend URL</span><input id="backendUrl" autocomplete="url" placeholder="http://127.0.0.1:8088" data-i18n-placeholder="remote.backendUrl"></label>
+        <label class="fieldLabel"><span data-i18n="connection.apiKey">API key</span><input id="backendApiKey" type="password" autocomplete="new-password" placeholder="Optional API key" data-i18n-placeholder="remote.apiKey"></label>
+        <button type="submit" class="primaryButton" data-i18n="remote.connect">Connect backend</button>
+        <button id="clearConnectionButton" type="button" class="secondaryButton" data-i18n="remote.clear">Use local panel</button>
+      </form>
+      <p id="backendLine" class="subtleLine connectionDetails" role="status"></p>
+    </section>
     <div id="authBackdrop" class="authBackdrop" hidden></div>
     <section id="loginModal" class="authModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle" hidden>
       <form id="loginForm" class="loginForm authDialog">
@@ -82,8 +123,14 @@
     <section id="map" class="pageView mapStage isActive" aria-label="Server map">
       <iframe id="mapFrame" title="BlueMap"></iframe>
       <div class="mapShade"></div>
+      <section id="mapState" class="mapState" role="status" aria-live="polite">
+        <span class="eyebrow" data-i18n="map.stateEyebrow">Map</span>
+        <strong id="mapStateTitle" data-i18n="map.loadingTitle">Preparing map</strong>
+        <p id="mapStateLine" data-i18n="map.loadingDescription">Checking the map service…</p>
+        <button id="mapRetryButton" type="button" class="secondaryButton" data-i18n="map.retry">Try again</button>
+      </section>
 
-      <aside id="sessionDock" class="sessionDock" aria-label="Session">
+      <aside id="sessionDock" class="mapStatusDock" aria-label="Server status">
         <div class="dockHeader">
           <div>
             <span class="eyebrow" data-i18n="session.eyebrow">Web console</span>
@@ -91,14 +138,6 @@
           </div>
           <span id="healthStatus" class="statusPill">--</span>
         </div>
-        <form id="connectionForm" class="loginForm remoteForm">
-          <p class="subtleLine" data-i18n="remote.description">Standalone mode: fill backend URL and optional API key.</p>
-          <input id="backendUrl" autocomplete="url" placeholder="http://127.0.0.1:8088" data-i18n-placeholder="remote.backendUrl">
-          <input id="backendApiKey" type="password" autocomplete="new-password" placeholder="Optional API key" data-i18n-placeholder="remote.apiKey">
-          <button type="submit" class="secondaryButton" data-i18n="remote.connect">Connect backend</button>
-          <button id="clearConnectionButton" type="button" class="secondaryButton" data-i18n="remote.clear">Use local panel</button>
-        </form>
-        <p id="backendLine" class="subtleLine"></p>
         <div class="miniMetrics">
           <div><span>TPS</span><strong id="tps">--</strong></div>
           <div><span>MSPT</span><strong id="mspt">--</strong></div>
@@ -122,6 +161,7 @@
           <input id="homeChatInput" maxlength="240" placeholder="Message players..." data-i18n-placeholder="chat.placeholder">
           <button type="submit" class="primaryButton" data-i18n="chat.send">Send</button>
         </form>
+        <p id="chatIdentityClaimNotice" class="subtleLine identityClaimNotice" role="status" data-i18n="identity.claimRequired" hidden>Claim this web account in-game before sending chat.</p>
       </aside>
     </section>
 
@@ -215,6 +255,7 @@
       <div class="toolsLayout">
         <section class="panel commandPanel">
           <h3 data-i18n="console.title">Command console</h3>
+          <p id="commandIdentityClaimNotice" class="subtleLine identityClaimNotice" role="status" data-i18n="identity.claimRequired" hidden>Claim this web account in-game before running commands.</p>
           <form id="commandForm" class="inlineForm">
             <input id="commandInput" placeholder="list" data-i18n-placeholder="console.placeholder">
             <button type="submit" class="primaryButton" data-i18n="console.run">Run</button>
@@ -333,93 +374,129 @@
       </div>
     </section>
 
-    <section id="assets" class="pageView workspace adminOnly" hidden>
+    <section id="hunt-engine" class="pageView workspace huntEngineOnly" hidden>
       <div class="sectionHead">
         <div>
-          <span class="eyebrow" data-i18n="assets.eyebrow">Custom content workbench</span>
-          <h2 data-i18n="assets.title">Assets</h2>
+          <span class="eyebrow" data-i18n="huntEngine.eyebrow">Custom content operations</span>
+          <h2 data-i18n="huntEngine.title">HuntEngine</h2>
         </div>
       </div>
-      <div id="assetsHero" class="summaryGrid"></div>
-      <div id="assetsPackStatus" class="resourcePackBanner"></div>
+      <div id="huntEngineHero" class="summaryGrid"></div>
+      <div id="huntEnginePackStatus" class="resourcePackBanner"></div>
       <div class="overviewGrid">
         <section class="panel">
-          <h3 data-i18n="assets.upload">Upload</h3>
-          <form id="assetsUploadForm" class="stackForm">
-            <div class="formGrid">
-              <select id="assetsUploadScope">
-                <option value="packs">Resource Pack</option>
-                <option value="images">Image</option>
-                <option value="presets">Preset / Template</option>
-              </select>
-              <input id="assetsUploadFile" type="file">
-              <button type="submit" class="primaryButton" data-i18n="assets.uploadAction">Upload file</button>
-            </div>
-          </form>
-          <div id="assetsPackList" class="dataList"></div>
-          <div id="assetsImageList" class="dataList"></div>
-          <div id="assetsPresetList" class="dataList"></div>
+          <h3 data-i18n="huntEngine.catalogue">Content catalogue</h3>
+          <p class="subtleLine" data-i18n="huntEngine.catalogueHint">The engine owns all content definitions; this panel never writes engine YAML.</p>
+          <div id="huntEngineCatalogueList" class="pluginGrid mutedState"></div>
         </section>
         <section class="panel">
-          <h3 data-i18n="assets.itemWizard">Item Wizard</h3>
-          <form id="assetsItemForm" class="stackForm">
-            <div class="formGrid">
-              <label class="fieldLabel"><span data-i18n="assets.itemId">Item ID</span><input id="assetItemId" placeholder="item_id" data-i18n-placeholder="assets.itemIdPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.itemNameZh">Chinese display name</span><input id="assetItemNameZh" placeholder="中文名" data-i18n-placeholder="assets.itemNameZhPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.itemNameEn">English display name</span><input id="assetItemNameEn" placeholder="English name" data-i18n-placeholder="assets.itemNameEnPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.material">Base material</span><input id="assetItemMaterial" placeholder="PAPER" data-i18n-placeholder="assets.materialPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.customModelData">CustomModelData</span><input id="assetItemCmd" placeholder="1001" data-i18n-placeholder="assets.customModelDataPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.amount">Amount</span><input id="assetItemAmount" placeholder="1" data-i18n-placeholder="assets.amountPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.category">Category</span><input id="assetItemCategory" placeholder="weapons / tools / ui" data-i18n-placeholder="assets.categoryPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.packFile">Resource pack file</span><input id="assetItemPack" list="assetPackOptions" placeholder="resource-pack.zip" data-i18n-placeholder="assets.packFilePlaceholder"><small data-i18n="assets.packFileHint">Choose an uploaded pack file used by this item.</small></label>
-              <label class="fieldLabel"><span data-i18n="assets.permission">Permission node</span><input id="assetItemPermission" placeholder="hunterassets.item.example" data-i18n-placeholder="assets.permissionPlaceholder"></label>
-              <label class="fieldLabel"><span data-i18n="assets.iconPath">Icon path</span><input id="assetItemIcon" list="assetImageOptions" placeholder="icons/example.png" data-i18n-placeholder="assets.iconPathPlaceholder"><small data-i18n="assets.iconPathHint">Path inside the resource pack, or an uploaded image file name.</small></label>
+          <h3 data-i18n="huntEngine.packages">Native content packages</h3>
+          <p class="subtleLine" data-i18n="huntEngine.packagesHint">Upload a validated native ZIP package to HuntEngine staging.</p>
+          <h4 class="huntEngineSubhead" data-i18n="huntEngine.simpleItem">Safe simple-item wizard</h4>
+          <p class="subtleLine" data-i18n="huntEngine.simpleItemHint">Creates one vanilla-backed item in the fixed huntercraft namespace. Models, blocks, furniture, recipes, fonts, images, and sounds still use reviewed native ZIP packages.</p>
+          <form id="huntEngineSimpleItemForm" class="stackForm" autocomplete="off">
+            <div class="formGrid simpleItemFormGrid">
+              <label class="fieldLabel"><span data-i18n="huntEngine.simpleItemId">Item ID</span><input id="huntEngineSimpleItemId" maxlength="48" pattern="[a-z0-9][a-z0-9_-]{0,47}" required placeholder="starter_token" data-i18n-placeholder="huntEngine.simpleItemIdPlaceholder" data-hunt-engine-capability="stage"><small data-i18n="huntEngine.simpleItemIdHint">Fixed content ID: huntercraft:&lt;id&gt;. Use lowercase letters, digits, _ or -.</small></label>
+              <label class="fieldLabel"><span data-i18n="huntEngine.simpleItemMaterial">Vanilla material</span><select id="huntEngineSimpleItemMaterial" required data-hunt-engine-capability="stage">
+                <option value="PAPER" selected>PAPER</option>
+                <option value="BOOK">BOOK</option>
+                <option value="BUNDLE">BUNDLE</option>
+                <option value="COMPASS">COMPASS</option>
+                <option value="CLOCK">CLOCK</option>
+                <option value="MAP">MAP</option>
+                <option value="NAME_TAG">NAME_TAG</option>
+                <option value="STICK">STICK</option>
+                <option value="TORCH">TORCH</option>
+                <option value="LANTERN">LANTERN</option>
+                <option value="SOUL_LANTERN">SOUL_LANTERN</option>
+                <option value="CHEST">CHEST</option>
+                <option value="BARREL">BARREL</option>
+                <option value="BOOKSHELF">BOOKSHELF</option>
+                <option value="STONE">STONE</option>
+                <option value="COBBLESTONE">COBBLESTONE</option>
+                <option value="OAK_PLANKS">OAK_PLANKS</option>
+                <option value="GLASS">GLASS</option>
+                <option value="COAL">COAL</option>
+                <option value="CHARCOAL">CHARCOAL</option>
+                <option value="IRON_INGOT">IRON_INGOT</option>
+                <option value="GOLD_INGOT">GOLD_INGOT</option>
+                <option value="COPPER_INGOT">COPPER_INGOT</option>
+                <option value="REDSTONE">REDSTONE</option>
+                <option value="LAPIS_LAZULI">LAPIS_LAZULI</option>
+                <option value="QUARTZ">QUARTZ</option>
+                <option value="AMETHYST_SHARD">AMETHYST_SHARD</option>
+                <option value="EMERALD">EMERALD</option>
+                <option value="DIAMOND">DIAMOND</option>
+                <option value="NETHERITE_INGOT">NETHERITE_INGOT</option>
+                <option value="APPLE">APPLE</option>
+                <option value="GOLDEN_APPLE">GOLDEN_APPLE</option>
+                <option value="BREAD">BREAD</option>
+                <option value="BAKED_POTATO">BAKED_POTATO</option>
+                <option value="HONEY_BOTTLE">HONEY_BOTTLE</option>
+                <option value="ENDER_PEARL">ENDER_PEARL</option>
+                <option value="FIREWORK_ROCKET">FIREWORK_ROCKET</option>
+                <option value="STRING">STRING</option>
+                <option value="LEATHER">LEATHER</option>
+                <option value="FEATHER">FEATHER</option>
+                <option value="BONE">BONE</option>
+                <option value="SLIME_BALL">SLIME_BALL</option>
+                <option value="WOODEN_SWORD">WOODEN_SWORD</option>
+                <option value="STONE_SWORD">STONE_SWORD</option>
+                <option value="IRON_SWORD">IRON_SWORD</option>
+                <option value="DIAMOND_SWORD">DIAMOND_SWORD</option>
+                <option value="NETHERITE_SWORD">NETHERITE_SWORD</option>
+                <option value="WOODEN_PICKAXE">WOODEN_PICKAXE</option>
+                <option value="STONE_PICKAXE">STONE_PICKAXE</option>
+                <option value="IRON_PICKAXE">IRON_PICKAXE</option>
+                <option value="DIAMOND_PICKAXE">DIAMOND_PICKAXE</option>
+                <option value="NETHERITE_PICKAXE">NETHERITE_PICKAXE</option>
+                <option value="WOODEN_AXE">WOODEN_AXE</option>
+                <option value="STONE_AXE">STONE_AXE</option>
+                <option value="IRON_AXE">IRON_AXE</option>
+                <option value="DIAMOND_AXE">DIAMOND_AXE</option>
+                <option value="NETHERITE_AXE">NETHERITE_AXE</option>
+                <option value="WOODEN_SHOVEL">WOODEN_SHOVEL</option>
+                <option value="STONE_SHOVEL">STONE_SHOVEL</option>
+                <option value="IRON_SHOVEL">IRON_SHOVEL</option>
+                <option value="DIAMOND_SHOVEL">DIAMOND_SHOVEL</option>
+                <option value="NETHERITE_SHOVEL">NETHERITE_SHOVEL</option>
+              </select><small data-i18n="huntEngine.simpleItemMaterialHint">Only this safe Bukkit-material allowlist is available in the wizard.</small></label>
+              <label class="fieldLabel fieldLabel--wide"><span data-i18n="huntEngine.simpleItemName">Display name</span><input id="huntEngineSimpleItemName" maxlength="64" required placeholder="Starter Token" data-i18n-placeholder="huntEngine.simpleItemNamePlaceholder" data-hunt-engine-capability="stage"><small data-i18n="huntEngine.simpleItemTextHint">Plain text only; formatting, templates, and click actions are not accepted.</small></label>
+              <label class="fieldLabel fieldLabel--wide"><span data-i18n="huntEngine.simpleItemDescription">Description</span><textarea id="huntEngineSimpleItemDescription" maxlength="256" rows="2" placeholder="A small welcome gift." data-i18n-placeholder="huntEngine.simpleItemDescriptionPlaceholder" data-hunt-engine-capability="stage"></textarea></label>
+              <button type="submit" class="primaryButton simpleItemSubmit" data-hunt-engine-capability="stage" data-i18n="huntEngine.createSimpleItem">Create and stage item</button>
             </div>
-            <label class="fieldLabel"><span data-i18n="assets.description">Description</span><textarea id="assetItemDescription" rows="2" placeholder="What this item is for" data-i18n-placeholder="assets.descriptionPlaceholder"></textarea></label>
-            <label class="fieldLabel"><span data-i18n="assets.loreZh">Chinese lore</span><textarea id="assetItemLoreZh" rows="2" placeholder="中文 Lore，每行一条" data-i18n-placeholder="assets.loreZhPlaceholder"></textarea></label>
-            <label class="fieldLabel"><span data-i18n="assets.loreEn">English lore</span><textarea id="assetItemLoreEn" rows="2" placeholder="English lore, one line each" data-i18n-placeholder="assets.loreEnPlaceholder"></textarea></label>
-            <label class="checkLine"><input id="assetItemEnabled" type="checkbox" checked> <span>Enabled</span></label>
-            <button type="submit" class="primaryButton" data-i18n="assets.saveItem">Save item</button>
           </form>
-          <div id="assetsItemList" class="pluginGrid mutedState"></div>
+          <div class="huntEnginePackageDivider" aria-hidden="true"></div>
+          <form id="huntEngineUploadForm" class="stackForm">
+            <div class="formGrid">
+              <input id="huntEngineUploadFile" type="file" accept=".zip,application/zip">
+              <button type="submit" class="primaryButton" data-hunt-engine-capability="stage" data-i18n="huntEngine.upload">Stage package</button>
+            </div>
+          </form>
+          <div id="huntEnginePackageList" class="dataList mutedState"></div>
         </section>
         <section class="panel">
-          <h3 data-i18n="assets.promptBuilder">AI Prompt Builder</h3>
-          <form id="assetsPromptForm" class="stackForm">
-            <div class="formGrid">
-              <input id="assetsPromptUseCase" placeholder="weapon / badge / menu icon" data-i18n-placeholder="assets.promptUseCase">
-              <input id="assetsPromptTheme" placeholder="ice dragon / sci-fi / fantasy" data-i18n-placeholder="assets.promptTheme">
-              <input id="assetsPromptCategory" placeholder="items" data-i18n-placeholder="assets.promptCategory">
-              <input id="assetsPromptStyle" placeholder="Minecraft pixel art" data-i18n-placeholder="assets.promptStyle">
-              <input id="assetsPromptPalette" placeholder="blue silver high contrast" data-i18n-placeholder="assets.promptPalette">
-              <input id="assetsPromptMaterialFeel" placeholder="metal / cloth / crystal" data-i18n-placeholder="assets.promptMaterialFeel">
-              <input id="assetsPromptResolution" placeholder="16x16 / 32x32" data-i18n-placeholder="assets.promptResolution">
-            </div>
-            <label class="checkLine"><input id="assetsPromptTransparent" type="checkbox" checked> <span>Transparent background</span></label>
-            <button type="submit" class="primaryButton" data-i18n="assets.generatePrompt">Generate prompts</button>
-          </form>
-          <div id="assetsPromptCards" class="dataList"></div>
+          <h3 data-i18n="huntEngine.operations">Build and publish</h3>
+          <p class="subtleLine" data-i18n="huntEngine.operationsHint">Build, publish, and reload are asynchronous. The current pack remains active if an operation fails.</p>
           <div class="quickRow">
-            <button type="button" id="assetsValidateButton" data-i18n="assets.validate">Validate</button>
+            <button type="button" data-hunt-engine-operation="validate" data-hunt-engine-capability="read" data-i18n="huntEngine.validate">Validate</button>
+            <button type="button" data-hunt-engine-operation="build" data-hunt-engine-capability="publish" data-i18n="huntEngine.build">Build</button>
+            <button type="button" data-hunt-engine-operation="publish" data-hunt-engine-capability="publish" data-i18n="huntEngine.publish">Publish</button>
+            <button type="button" data-hunt-engine-operation="reload" data-hunt-engine-capability="publish" data-i18n="huntEngine.reload">Reload</button>
           </div>
-          <div id="assetsValidationList" class="dataList"></div>
-          <form id="assetsPublishForm" class="stackForm">
+          <div id="huntEngineOperationList" class="dataList mutedState"></div>
+          <form id="huntEngineSendPackForm" class="stackForm">
             <div class="formGrid">
-              <label class="fieldLabel"><span data-i18n="assets.publishFileLabel">Pack file</span><input id="assetsPublishFile" list="assetPackOptions" placeholder="resource-pack.zip" data-i18n-placeholder="assets.publishFile"><small data-i18n="assets.publishFileHint">Choose a zip from the Resource packs list.</small></label>
-              <label class="fieldLabel"><span data-i18n="assets.publishBaseUrlLabel">Public base URL</span><input id="assetsPublishBaseUrl" placeholder="https://your-panel-url" data-i18n-placeholder="assets.publishBaseUrl"><small data-i18n="assets.publishBaseUrlHint">Usually the current web panel address.</small></label>
+              <label class="fieldLabel"><span data-i18n="huntEngine.sendPackPlayer">Online player</span><input id="huntEngineSendPackPlayer" maxlength="16" placeholder="Player name"></label>
+              <button type="submit" class="secondaryButton" data-hunt-engine-capability="publish" data-i18n="huntEngine.sendPack">Send active pack</button>
             </div>
-            <label class="checkLine"><input id="assetsPublishRequired" type="checkbox"> <span>Required</span></label>
-            <label class="checkLine"><input id="assetsPublishSendOnJoin" type="checkbox"> <span>Send on join</span></label>
-            <div class="quickRow">
-              <button type="button" id="assetsPublishDefaultButton" data-i18n="assets.publishDefault">Use default pack</button>
-            </div>
-            <button type="submit" class="primaryButton" data-i18n="assets.publish">Publish pack</button>
           </form>
-          <div id="assetsPublishResult" class="dataList"></div>
+          <div class="quickRow">
+            <button type="button" id="huntEngineMigrationButton" data-hunt-engine-capability="admin" data-i18n="huntEngine.migration">Migration diagnostics</button>
+          </div>
+          <div id="huntEngineMigrationList" class="dataList"></div>
         </section>
       </div>
-      <datalist id="assetPackOptions"></datalist>
-      <datalist id="assetImageOptions"></datalist>
     </section>
 
     <section id="titles" class="pageView workspace adminOnly" hidden>
@@ -484,7 +561,7 @@
           </button>
           <button type="button" class="configTab" data-config-target="bundles">
             <strong data-i18n="settings.tab.bundles">Bundled plugins</strong>
-            <span data-i18n="settings.tab.bundlesHint">Geyser, assets and compatibility</span>
+            <span data-i18n="settings.tab.bundlesHint">Geyser, HuntEngine and compatibility</span>
           </button>
           <button type="button" class="configTab" data-config-target="geyser">
             <strong data-i18n="settings.tab.geyser">Geyser</strong>
@@ -532,14 +609,10 @@
             <label class="checkLine"><input id="bundleGeyser" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.geyser">Geyser</span></label>
             <label class="checkLine"><input id="bundleFloodgate" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.floodgate">Floodgate</span></label>
             <button type="button" class="smallButton" data-config-target="geyser" data-i18n="geyser.openSettings">Open Geyser settings</button>
-            <label class="checkLine"><input id="bundleHunterAssets" form="webSettingsForm" type="checkbox"> <span>HunterAssets</span></label>
+            <label class="checkLine"><input id="bundleHuntEngine" form="webSettingsForm" type="checkbox"> <span>HuntEngine</span></label>
             <label class="checkLine"><input id="bundleImageFrame" form="webSettingsForm" type="checkbox"> <span>ImageFrame</span></label>
             <label class="checkLine"><input id="bundleViaLegacy" form="webSettingsForm" type="checkbox"> <span>Via Legacy</span></label>
-            <label class="checkLine"><input id="assetsResourcePackEnabled" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.resourcePackEnabled">Resource Pack Enabled</span></label>
-            <label class="checkLine"><input id="assetsResourcePackRequired" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.resourcePackRequired">Resource Pack Required</span></label>
-            <label class="checkLine"><input id="assetsSendOnJoin" form="webSettingsForm" type="checkbox"> <span data-i18n="bundles.sendOnJoin">Send Pack On Join</span></label>
-            <input id="assetsResourcePackUrl" form="webSettingsForm" placeholder="https://example.com/hunterassets.zip" data-i18n-placeholder="bundles.resourcePackUrl">
-            <input id="assetsResourcePackSha1" form="webSettingsForm" placeholder="40-char sha1" data-i18n-placeholder="bundles.resourcePackSha1">
+            <p id="huntEngineSettingsLine" class="subtleLine" data-i18n="huntEngine.settingsManaged">Resource-pack lifecycle is managed in the HuntEngine workspace.</p>
             <button type="submit" form="webSettingsForm" class="primaryButton" data-i18n="webSettings.save">Save web settings</button>
           </div>
           <p id="noChatReportsLine" class="subtleLine"></p>
@@ -750,9 +823,11 @@
               <input id="webUserName" placeholder="Username" data-i18n-placeholder="webUsers.username">
               <select id="webUserRole">
                 <option value="player">Player</option>
+                <option value="content-editor">Content editor</option>
+                <option value="content-publisher">Content publisher</option>
                 <option value="admin">Admin</option>
               </select>
-              <input id="webUserPassword" type="password" autocomplete="new-password" placeholder="Optional web password" data-i18n-placeholder="webUsers.password">
+              <p class="subtleLine" data-i18n="webUsers.identityRequired">The player must have logged in to HunterAuth in-game once.</p>
               <label class="checkLine"><input id="webUserCommandExecution" type="checkbox" checked> <span data-i18n="webUsers.commands">commands</span></label>
               <select id="webUserAllowedMode">
                 <option value="inherit">Inherit</option>
@@ -977,7 +1052,7 @@
     </section>
     <footer class="brandBlock pageBrand">
       <span id="productMark" class="productMark" aria-hidden="true">
-        <img id="serverIcon" src="assets/server-icon.png" alt="">
+        <img id="serverIcon" alt="" hidden>
         <span id="serverIconFallback">HC</span>
       </span>
       <div>

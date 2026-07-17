@@ -1,0 +1,92 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "minecraft:item/paper"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "custom_model_data": 210000
+      },
+      "model": "huntercore:item/auth_digit"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210001
+      },
+      "model": "huntercore:item/auth_login"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210002
+      },
+      "model": "huntercore:item/auth_register"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210003
+      },
+      "model": "huntercore:item/auth_chat"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210004
+      },
+      "model": "huntercore:item/auth_confirm"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210005
+      },
+      "model": "huntercore:item/auth_backspace"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210006
+      },
+      "model": "huntercore:item/auth_clear"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210007
+      },
+      "model": "huntercore:item/auth_web"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210008
+      },
+      "model": "huntercore:item/auth_help"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210009
+      },
+      "model": "huntercore:item/auth_password"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210010
+      },
+      "model": "huntercore:item/auth_change"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210011
+      },
+      "model": "huntercore:item/auth_close"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210012
+      },
+      "model": "huntercore:item/auth_pack"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 210013
+      },
+      "model": "huntercore:item/auth_shield"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.IntFunction;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -33,16 +35,29 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.huntercore.api.HunterCoreProvider;
 import org.huntercore.api.HunterLanguage;
+import org.huntercore.api.gui.HunterGuiActionContext;
+import org.huntercore.api.gui.HunterGuiConfirmationResult;
+import org.huntercore.api.gui.HunterGuiOpenResult;
+import org.huntercore.api.gui.HunterGuiPage;
+import org.huntercore.api.gui.HunterGuiPagination;
+import org.huntercore.api.gui.HunterGuiRegistration;
+import org.huntercore.api.gui.HunterGuiRenderContext;
+import org.huntercore.api.gui.HunterGuiRoute;
+import org.huntercore.api.gui.HunterGuiScreen;
+import org.huntercore.api.gui.HunterGuiView;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -53,12 +68,44 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
     private static final String HOMES_GUI_TITLE = ChatColor.DARK_GREEN + "HunterTPA · 我的家";
     private static final String DELETE_HOME_GUI_TITLE = ChatColor.DARK_RED + "HunterTPA · Delete Home";
     private static final String REQUESTS_GUI_TITLE = ChatColor.DARK_PURPLE + "HunterTPA · Requests";
+    private static final String SHARED_TELEPORT_SCREEN = "hunter-tpa:teleport";
+    private static final String SHARED_HOMES_SCREEN = "hunter-tpa:homes";
+    private static final String SHARED_REQUESTS_SCREEN = "hunter-tpa:requests";
+    private static final String SHARED_DELETE_HOME_SCREEN = "hunter-tpa:delete-home";
+    private static final String SHARED_HOME_ARGUMENT = "home";
+    private static final String SHARED_PAGE_ARGUMENT = "page";
+    private static final String SHARED_DELETE_HOME_CONFIRMATION_PREFIX = "hunter-tpa:delete-home:";
+    private static final Duration SHARED_DELETE_HOME_CONFIRMATION_TTL = Duration.ofSeconds(40L);
+    private static final int SHARED_LIST_PAGE_SIZE = 36;
+    private static final String ACTION_OPEN_HOMES = "hunter-tpa:open-homes";
+    private static final String ACTION_OPEN_TELEPORT = "hunter-tpa:open-teleport";
+    private static final String ACTION_OPEN_REQUESTS = "hunter-tpa:open-requests";
+    private static final String ACTION_RUN_SPAWN = "hunter-tpa:run-spawn";
+    private static final String ACTION_RUN_BACK = "hunter-tpa:run-back";
+    private static final String ACTION_TOGGLE_REQUESTS = "hunter-tpa:toggle-requests";
+    private static final String ACTION_RANDOM_TELEPORT = "hunter-tpa:random-teleport";
+    private static final String ACTION_CLOSE = "hunter-tpa:close";
+    private static final String ACTION_REQUEST_PLAYER = "hunter-tpa:request-player";
+    private static final String ACTION_CREATE_HOME = "hunter-tpa:create-home";
+    private static final String ACTION_SET_HOME = "hunter-tpa:set-home";
+    private static final String ACTION_REFRESH_HOMES = "hunter-tpa:refresh-homes";
+    private static final String ACTION_UNAVAILABLE_HOME = "hunter-tpa:unavailable-home";
+    private static final String ACTION_HOME = "hunter-tpa:home";
+    private static final String ACTION_ACCEPT_REQUEST = "hunter-tpa:accept-request";
+    private static final String ACTION_DENY_REQUEST = "hunter-tpa:deny-request";
+    private static final String ACTION_CANCEL_OUTGOING = "hunter-tpa:cancel-outgoing";
+    private static final String ACTION_REFRESH_REQUESTS = "hunter-tpa:refresh-requests";
+    private static final String ACTION_CONFIRM_HOME_DELETE = "hunter-tpa:confirm-home-delete";
+    private static final String ACTION_CANCEL_HOME_DELETE = "hunter-tpa:cancel-home-delete";
+    private static final String ACTION_PREVIOUS_PAGE = "hunter-tpa:previous-page";
+    private static final String ACTION_NEXT_PAGE = "hunter-tpa:next-page";
 
     private final Map<UUID, TeleportRequest> incoming = new HashMap<>();
     private final Map<UUID, UUID> outgoing = new HashMap<>();
     private final Map<UUID, PendingTeleport> pendingTeleports = new HashMap<>();
     private final Map<UUID, Long> cooldowns = new HashMap<>();
-    private final Map<UUID, String> pendingHomeDeletes = new HashMap<>();
+    private final Map<UUID, PendingHomeDelete> pendingHomeDeletes = new HashMap<>();
+    private HunterGuiRegistration sharedGuiRegistration;
     private File homesFile;
     private YamlConfiguration homes;
 
@@ -86,8 +133,33 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
                 pluginCommand.setTabCompleter(this);
             }
         }
+        this.sharedGuiRegistration = HunterCoreProvider.get().gui().register(this, List.of(
+            new SharedTeleportGuiScreen(),
+            new SharedHomesGuiScreen(),
+            new SharedRequestsGuiScreen(),
+            new SharedDeleteHomeGuiScreen()
+        ));
         this.getServer().getPluginManager().registerEvents(this, this);
         this.getServer().getScheduler().runTaskTimer(this, this::expireRequests, 20L * 10L, 20L * 10L);
+    }
+
+    @Override
+    public void onDisable() {
+        if (this.sharedGuiRegistration != null) {
+            this.sharedGuiRegistration.close();
+            this.sharedGuiRegistration = null;
+        }
+        for (final Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof TpaGuiHolder) {
+                player.closeInventory();
+            }
+        }
+        this.getServer().getScheduler().cancelTasks(this);
+        this.incoming.clear();
+        this.outgoing.clear();
+        this.pendingTeleports.clear();
+        this.cooldowns.clear();
+        this.pendingHomeDeletes.clear();
     }
 
     @Override
@@ -121,16 +193,28 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
     }
 
     private boolean openTeleportGui(final Player player) {
-        final Inventory inventory = Bukkit.createInventory(player, 54, TELEPORT_GUI_TITLE);
+        if (this.openSharedGui(player, this.sharedTeleportRoute())) {
+            return true;
+        }
+        final TpaGuiHolder holder = new TpaGuiHolder(GuiScreen.TELEPORT);
+        final Inventory inventory = Bukkit.createInventory(holder, 54, TELEPORT_GUI_TITLE);
         inventory.setItem(4, item(Material.ENDER_PEARL, this.text("传送中心", "Teleport Center"), List.of(this.text("左键玩家：传送到对方", "Left-click player: teleport to them"), this.text("右键玩家：让对方传送到你", "Right-click player: invite them to you"))));
         inventory.setItem(45, item(Material.RED_BED, this.text("我的家", "My Homes"), List.of("/homes")));
+        holder.bind(45, GuiAction.of(GuiActionType.OPEN_HOMES));
         inventory.setItem(46, item(Material.COMPASS, "Spawn", List.of("/spawn")));
+        holder.bind(46, GuiAction.of(GuiActionType.RUN_SPAWN));
         inventory.setItem(47, item(Material.CLOCK, "Back", List.of("/back")));
+        holder.bind(47, GuiAction.of(GuiActionType.RUN_BACK));
         inventory.setItem(48, this.requestsMenuItem(player));
+        holder.bind(48, GuiAction.of(GuiActionType.OPEN_REQUESTS));
         inventory.setItem(49, item(this.requestsDisabled(player) ? Material.REDSTONE_BLOCK : Material.EMERALD_BLOCK, this.requestsDisabled(player) ? this.text("TPA 已关闭", "TPA disabled") : this.text("TPA 已开启", "TPA enabled"), List.of(this.text("点击切换是否接收传送请求。", "Click to toggle incoming teleport requests."))));
+        holder.bind(49, GuiAction.of(GuiActionType.TOGGLE_REQUESTS));
         inventory.setItem(51, item(Material.GRASS_BLOCK, "RTP", List.of(this.text("随机传送到当前世界的安全位置。", "Random teleport to a safe location in this world."))));
+        holder.bind(51, GuiAction.of(GuiActionType.RANDOM_TELEPORT));
         inventory.setItem(53, item(Material.BARRIER, this.text("关闭", "Close"), List.of()));
+        holder.bind(53, GuiAction.of(GuiActionType.CLOSE));
         inventory.setItem(52, this.outgoingRequestItem(player));
+        holder.bind(52, GuiAction.of(GuiActionType.OPEN_REQUESTS));
         int slot = 9;
         for (final Player online : Bukkit.getOnlinePlayers()) {
             if (slot >= 45) {
@@ -139,18 +223,24 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             if (online.getUniqueId().equals(player.getUniqueId())) {
                 continue;
             }
-            inventory.setItem(slot++, item(Material.PLAYER_HEAD, online.getName(), List.of(
+            inventory.setItem(slot, item(Material.PLAYER_HEAD, online.getName(), List.of(
                 this.text("世界：", "World: ") + online.getWorld().getName(),
                 this.text("左键：/tpa ", "Left: /tpa ") + online.getName(),
                 this.text("右键：/tpahere ", "Right: /tpahere ") + online.getName()
             )));
+            holder.bind(slot, GuiAction.withPayload(GuiActionType.REQUEST_PLAYER, online.getUniqueId().toString()));
+            slot++;
         }
         player.openInventory(inventory);
         return true;
     }
 
     private boolean openHomesGui(final Player player) {
-        final Inventory inventory = Bukkit.createInventory(player, 54, HOMES_GUI_TITLE);
+        if (this.openSharedGui(player, this.sharedHomesRoute())) {
+            return true;
+        }
+        final TpaGuiHolder holder = new TpaGuiHolder(GuiScreen.HOMES);
+        final Inventory inventory = Bukkit.createInventory(holder, 54, HOMES_GUI_TITLE);
         inventory.setItem(4, item(Material.RED_BED, this.text("我的家", "My Homes"), List.of(
             this.text("左键传送，右键重命名提示，Shift 右键删除。", "Left-click to teleport, right-click rename hint, shift-right-click to delete."),
             this.text("/homes list 可输出文字列表。", "/homes list prints a text list.")
@@ -168,7 +258,7 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
                 default -> Material.GRASS_BLOCK;
             };
             final boolean currentWorld = world != null && world.equals(player.getWorld());
-            inventory.setItem(slot++, item(material, home, List.of(
+            inventory.setItem(slot, item(material, home, List.of(
                 world == null ? this.text("世界：未知或已删除", "World: unknown or deleted") : this.text("世界：", "World: ") + world.getName(),
                 location == null ? this.text("坐标：未知", "Coords: unknown") : this.text("坐标：", "Coords: ") + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ(),
                 currentWorld ? this.text("当前世界 Home", "Home in your current world") : "",
@@ -176,32 +266,63 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
                 this.text("右键：重命名提示", "Right-click: rename hint"),
                 this.text("Shift 右键：删除", "Shift-right-click: delete")
             ), currentWorld));
+            holder.bind(slot, location == null || world == null
+                ? GuiAction.of(GuiActionType.UNAVAILABLE_HOME)
+                : GuiAction.withPayload(GuiActionType.HOME, home));
+            slot++;
         }
         inventory.setItem(45, item(Material.LIME_BED, this.text("新建 Home", "New Home"), List.of(this.text("保存当前位置为下一个 home。", "Save this location as the next home."))));
+        holder.bind(45, GuiAction.of(GuiActionType.CREATE_HOME));
         inventory.setItem(46, item(Material.ENDER_PEARL, this.text("传送中心", "Teleport Center"), List.of("/tpgui")));
+        holder.bind(46, GuiAction.of(GuiActionType.OPEN_TELEPORT));
         inventory.setItem(47, item(Material.NAME_TAG, this.text("设置 default home", "Set default home"), List.of("/sethome home")));
+        holder.bind(47, GuiAction.withPayload(GuiActionType.SET_HOME, DEFAULT_HOME));
         inventory.setItem(48, item(Material.NAME_TAG, this.text("设置 home1", "Set home1"), List.of("/sethome home1")));
+        holder.bind(48, GuiAction.withPayload(GuiActionType.SET_HOME, "home1"));
         inventory.setItem(49, item(Material.NAME_TAG, this.text("刷新", "Refresh"), List.of(this.text("重新加载 Home GUI。", "Refresh this homes GUI."))));
+        holder.bind(49, GuiAction.of(GuiActionType.REFRESH_HOMES));
         inventory.setItem(50, item(Material.NAME_TAG, this.text("设置 home2", "Set home2"), List.of("/sethome home2")));
+        holder.bind(50, GuiAction.withPayload(GuiActionType.SET_HOME, "home2"));
         inventory.setItem(51, item(Material.NAME_TAG, this.text("设置 home3", "Set home3"), List.of("/sethome home3")));
+        holder.bind(51, GuiAction.withPayload(GuiActionType.SET_HOME, "home3"));
         inventory.setItem(52, item(Material.NAME_TAG, this.text("设置 home4", "Set home4"), List.of("/sethome home4")));
+        holder.bind(52, GuiAction.withPayload(GuiActionType.SET_HOME, "home4"));
         inventory.setItem(53, item(Material.BARRIER, this.text("关闭", "Close"), List.of()));
+        holder.bind(53, GuiAction.of(GuiActionType.CLOSE));
         player.openInventory(inventory);
         return true;
     }
 
     private void openDeleteHomeGui(final Player player, final String home) {
-        this.pendingHomeDeletes.put(player.getUniqueId(), home);
-        final Inventory inventory = Bukkit.createInventory(player, 27, DELETE_HOME_GUI_TITLE);
-        inventory.setItem(11, item(Material.LIME_WOOL, this.text("确认删除 ", "Confirm delete ") + home, List.of(this.text("这个操作不可撤销。", "This cannot be undone."))));
+        if (!this.homeExists(player, home)) {
+            player.sendMessage(this.text("这个家已不存在，已刷新列表。", "That home no longer exists. The list was refreshed."));
+            this.openHomesGui(player);
+            return;
+        }
+        this.pendingHomeDeletes.put(
+            player.getUniqueId(),
+            new PendingHomeDelete(home, System.currentTimeMillis() + SHARED_DELETE_HOME_CONFIRMATION_TTL.toMillis())
+        );
+        final TpaGuiHolder holder = new TpaGuiHolder(GuiScreen.DELETE_HOME);
+        final Inventory inventory = Bukkit.createInventory(holder, 27, DELETE_HOME_GUI_TITLE);
+        inventory.setItem(11, item(Material.LIME_WOOL, this.text("确认删除 ", "Confirm delete ") + home, List.of(
+            this.text("这个操作不可撤销。", "This cannot be undone."),
+            this.text("确认窗口将在 40 秒后失效。", "This confirmation expires after 40 seconds.")
+        )));
+        holder.bind(11, GuiAction.of(GuiActionType.CONFIRM_HOME_DELETE));
         inventory.setItem(13, item(Material.RED_BED, home, List.of(this.text("即将删除这个家。", "This home will be deleted."))));
         inventory.setItem(15, item(Material.RED_WOOL, this.text("取消", "Cancel"), List.of(this.text("返回家列表。", "Return to homes."))));
+        holder.bind(15, GuiAction.of(GuiActionType.CANCEL_HOME_DELETE));
         player.openInventory(inventory);
     }
 
     private boolean openRequestsGui(final Player player) {
-        final Inventory inventory = Bukkit.createInventory(player, 27, REQUESTS_GUI_TITLE);
-        final TeleportRequest incomingRequest = this.incoming.get(player.getUniqueId());
+        if (this.openSharedGui(player, this.sharedRequestsRoute())) {
+            return true;
+        }
+        final TpaGuiHolder holder = new TpaGuiHolder(GuiScreen.REQUESTS);
+        final Inventory inventory = Bukkit.createInventory(holder, 27, REQUESTS_GUI_TITLE);
+        final TeleportRequest incomingRequest = this.incomingRequestFor(player.getUniqueId());
         final TeleportRequest outgoingRequest = this.outgoingRequestFor(player);
 
         inventory.setItem(4, item(Material.ENCHANTED_BOOK, this.text("Requests", "Requests"), List.of(
@@ -211,23 +332,499 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         inventory.setItem(11, incomingRequest == null
             ? item(Material.GRAY_DYE, this.text("Accept", "Accept"), List.of(this.text("No incoming request.", "No incoming request.")))
             : item(Material.LIME_WOOL, this.text("Accept", "Accept"), List.of(this.requestSummary(incomingRequest, true))));
+        if (incomingRequest != null) {
+            holder.bind(11, GuiAction.of(GuiActionType.ACCEPT_REQUEST));
+        }
         inventory.setItem(13, incomingRequest == null
             ? item(Material.GRAY_DYE, this.text("Inbox", "Inbox"), List.of(this.text("Nothing to review.", "Nothing to review.")))
             : item(Material.PLAYER_HEAD, this.text("Requester", "Requester"), List.of(this.requestSummary(incomingRequest, true))));
         inventory.setItem(15, incomingRequest == null
             ? item(Material.GRAY_DYE, this.text("Deny", "Deny"), List.of(this.text("No incoming request.", "No incoming request.")))
             : item(Material.RED_WOOL, this.text("Deny", "Deny"), List.of(this.requestSummary(incomingRequest, true))));
+        if (incomingRequest != null) {
+            holder.bind(15, GuiAction.of(GuiActionType.DENY_REQUEST));
+        }
         inventory.setItem(21, outgoingRequest == null
             ? item(Material.GRAY_DYE, this.text("Outgoing", "Outgoing"), List.of(this.text("No outgoing request.", "No outgoing request.")))
             : item(Material.CLOCK, this.text("Cancel outgoing", "Cancel outgoing"), List.of(this.requestSummary(outgoingRequest, false))));
+        if (outgoingRequest != null) {
+            holder.bind(21, GuiAction.of(GuiActionType.CANCEL_OUTGOING));
+        }
         inventory.setItem(23, item(Material.COMPASS, this.text("Refresh", "Refresh"), List.of(this.text("Reload the request state.", "Reload the request state."))));
+        holder.bind(23, GuiAction.of(GuiActionType.REFRESH_REQUESTS));
         inventory.setItem(26, item(Material.ARROW, this.text("Back", "Back"), List.of("/tpgui")));
+        holder.bind(26, GuiAction.of(GuiActionType.OPEN_TELEPORT));
         player.openInventory(inventory);
         return true;
     }
 
+    private boolean openSharedGui(final Player player, final HunterGuiRoute route) {
+        final HunterGuiRegistration registration = this.sharedGuiRegistration;
+        if (registration == null || !registration.active()) {
+            return false;
+        }
+        final HunterGuiOpenResult result = registration.open(player, route);
+        if (result.opened()) {
+            return true;
+        }
+        this.getLogger().fine("HunterTPA shared GUI unavailable for " + player.getName() + ": " + result.name());
+        return false;
+    }
+
+    private HunterGuiRoute sharedTeleportRoute() {
+        return this.sharedTeleportRoute(0);
+    }
+
+    private HunterGuiRoute sharedTeleportRoute(final int page) {
+        return this.sharedPagedRoute(SHARED_TELEPORT_SCREEN, page);
+    }
+
+    private HunterGuiRoute sharedHomesRoute() {
+        return this.sharedHomesRoute(0);
+    }
+
+    private HunterGuiRoute sharedHomesRoute(final int page) {
+        return this.sharedPagedRoute(SHARED_HOMES_SCREEN, page);
+    }
+
+    private HunterGuiRoute sharedRequestsRoute() {
+        return HunterGuiRoute.of(SHARED_REQUESTS_SCREEN);
+    }
+
+    private HunterGuiRoute sharedDeleteHomeRoute(final String home) {
+        return HunterGuiRoute.of(SHARED_DELETE_HOME_SCREEN, Map.of(SHARED_HOME_ARGUMENT, home));
+    }
+
+    private HunterGuiRoute sharedPagedRoute(final String screenId, final int page) {
+        if (page <= 0) {
+            return HunterGuiRoute.of(screenId);
+        }
+        return HunterGuiRoute.of(screenId, Map.of(SHARED_PAGE_ARGUMENT, Integer.toString(page)));
+    }
+
+    private HunterGuiView renderSharedTeleportGui(final HunterGuiRenderContext context) {
+        final boolean chinese = this.usesChinese(context);
+        final Player player = context.player();
+        final HunterGuiView.Builder view = HunterGuiView.builder(
+            Component.text(this.sharedText(chinese, "HunterTPA · 传送中心", "HunterTPA · Teleport Center")),
+            6
+        );
+        view.item(4, this.item(Material.ENDER_PEARL, this.sharedText(chinese, "传送中心", "Teleport Center"), List.of(
+            this.sharedText(chinese, "左键玩家：传送到对方", "Left-click player: teleport to them"),
+            this.sharedText(chinese, "右键玩家：让对方传送到你", "Right-click player: invite them to you")
+        )));
+        view.button(45, this.item(Material.RED_BED, this.sharedText(chinese, "我的家", "My Homes"), List.of("/homes")), ACTION_OPEN_HOMES,
+            action -> action.navigate(this.sharedHomesRoute()));
+        view.button(46, this.item(Material.COMPASS, "Spawn", List.of("/spawn")), ACTION_RUN_SPAWN, action -> {
+            action.player().performCommand("spawn");
+            action.refresh();
+        });
+        view.button(47, this.item(Material.CLOCK, "Back", List.of("/back")), ACTION_RUN_BACK, action -> {
+            action.player().performCommand("back");
+            action.refresh();
+        });
+        view.button(48, this.sharedRequestsMenuItem(player, chinese), ACTION_OPEN_REQUESTS,
+            action -> action.navigate(this.sharedRequestsRoute()));
+        final boolean requestsDisabled = this.requestsDisabled(player);
+        view.button(
+            49,
+            this.item(
+                requestsDisabled ? Material.REDSTONE_BLOCK : Material.EMERALD_BLOCK,
+                requestsDisabled ? this.sharedText(chinese, "TPA 已关闭", "TPA disabled") : this.sharedText(chinese, "TPA 已开启", "TPA enabled"),
+                List.of(this.sharedText(chinese, "点击切换是否接收传送请求。", "Click to toggle incoming teleport requests."))
+            ),
+            ACTION_TOGGLE_REQUESTS,
+            action -> {
+                this.toggleRequests(action.player());
+                action.refresh();
+            }
+        );
+        view.button(51, this.item(Material.GRASS_BLOCK, "RTP", List.of(
+            this.sharedText(chinese, "随机传送到当前世界的安全位置。", "Random teleport to a safe location in this world.")
+        )), ACTION_RANDOM_TELEPORT, action -> {
+            this.randomTeleport(action.player());
+            action.close();
+        });
+        view.button(52, this.sharedOutgoingRequestItem(player, chinese), ACTION_OPEN_REQUESTS,
+            action -> action.navigate(this.sharedRequestsRoute()));
+        view.button(53, this.item(Material.BARRIER, this.sharedText(chinese, "关闭", "Close"), List.of()), ACTION_CLOSE, action -> {
+            this.playGuiSound(action.player(), Sound.UI_BUTTON_CLICK);
+            action.close();
+        });
+
+        final List<Player> targets = new ArrayList<>();
+        for (final Player online : Bukkit.getOnlinePlayers()) {
+            if (!online.getUniqueId().equals(player.getUniqueId())) {
+                targets.add(online);
+            }
+        }
+        final HunterGuiPage<Player> targetPage = HunterGuiPagination.page(
+            targets,
+            this.sharedRoutePage(context.route()),
+            SHARED_LIST_PAGE_SIZE
+        );
+        this.addSharedPagination(view, chinese, targetPage, this::sharedTeleportRoute);
+
+        int slot = 9;
+        for (final Player online : targetPage.items()) {
+            final UUID targetId = online.getUniqueId();
+            final String targetName = online.getName();
+            final String targetWorld = online.getWorld().getName();
+            view.button(slot, this.item(Material.PLAYER_HEAD, targetName, List.of(
+                this.sharedText(chinese, "世界：", "World: ") + targetWorld,
+                this.sharedText(chinese, "左键：/tpa ", "Left: /tpa ") + targetName,
+                this.sharedText(chinese, "右键：/tpahere ", "Right: /tpahere ") + targetName
+            )), ACTION_REQUEST_PLAYER, action -> this.requestSharedTeleport(action, targetId));
+            slot++;
+        }
+        return view.build();
+    }
+
+    private void requestSharedTeleport(final HunterGuiActionContext context, final UUID targetId) {
+        final Player requester = context.player();
+        final ClickType click = context.clickType();
+        if (!click.isLeftClick() && !click.isRightClick()) {
+            requester.sendMessage(this.sharedText(this.usesChinese(context), "请使用左键或右键发送传送请求。", "Use left-click or right-click to send a teleport request."));
+            context.refresh();
+            return;
+        }
+        final Player target = Bukkit.getPlayer(targetId);
+        if (target == null || !target.isOnline() || target.getUniqueId().equals(requester.getUniqueId())) {
+            requester.sendMessage(this.sharedText(this.usesChinese(context), "该玩家已不在线，已刷新列表。", "That player is no longer online. The list was refreshed."));
+            context.refresh();
+            return;
+        }
+        this.requestTeleport(
+            requester,
+            target,
+            click.isRightClick() ? TeleportType.TARGET_TO_REQUESTER : TeleportType.TO_TARGET
+        );
+        context.close();
+    }
+
+    private void addSharedPagination(
+        final HunterGuiView.Builder view,
+        final boolean chinese,
+        final HunterGuiPage<?> page,
+        final IntFunction<HunterGuiRoute> routeForPage
+    ) {
+        final String pageSummary = this.sharedText(
+            chinese,
+            "第 " + (page.pageIndex() + 1) + " / " + page.pageCount() + " 页 · 共 " + page.totalItems() + " 项",
+            "Page " + (page.pageIndex() + 1) + " / " + page.pageCount() + " · " + page.totalItems() + " total"
+        );
+        if (page.hasPrevious()) {
+            view.button(0, this.item(Material.ARROW, this.sharedText(chinese, "上一页", "Previous page"), List.of(pageSummary)), ACTION_PREVIOUS_PAGE,
+                action -> action.navigate(routeForPage.apply(page.pageIndex() - 1)));
+        } else {
+            view.item(0, this.item(Material.GRAY_DYE, this.sharedText(chinese, "已是第一页", "First page"), List.of(pageSummary)));
+        }
+        if (page.hasNext()) {
+            view.button(8, this.item(Material.ARROW, this.sharedText(chinese, "下一页", "Next page"), List.of(pageSummary)), ACTION_NEXT_PAGE,
+                action -> action.navigate(routeForPage.apply(page.pageIndex() + 1)));
+        } else {
+            view.item(8, this.item(Material.GRAY_DYE, this.sharedText(chinese, "已是最后一页", "Last page"), List.of(pageSummary)));
+        }
+    }
+
+    private void returnToSharedScreen(final HunterGuiActionContext context, final HunterGuiRoute fallback) {
+        if (!context.back()) {
+            context.navigate(fallback);
+        }
+    }
+
+    private HunterGuiView renderSharedHomesGui(final HunterGuiRenderContext context) {
+        final boolean chinese = this.usesChinese(context);
+        final Player player = context.player();
+        final HunterGuiView.Builder view = HunterGuiView.builder(
+            Component.text(this.sharedText(chinese, "HunterTPA · 我的家", "HunterTPA · My Homes")),
+            6
+        );
+        view.item(4, this.item(Material.RED_BED, this.sharedText(chinese, "我的家", "My Homes"), List.of(
+            this.sharedText(chinese, "左键传送，右键重命名提示，Shift 右键删除。", "Left-click to teleport, right-click rename hint, shift-right-click to delete."),
+            this.sharedText(chinese, "/homes list 可输出文字列表。", "/homes list prints a text list.")
+        )));
+
+        final List<String> canonicalHomes = this.homeNames(player).stream()
+            .filter(HunterTpaPlugin::isCanonicalHomeName)
+            .toList();
+        final HunterGuiPage<String> homesPage = HunterGuiPagination.page(
+            canonicalHomes,
+            this.sharedRoutePage(context.route()),
+            SHARED_LIST_PAGE_SIZE
+        );
+        this.addSharedPagination(view, chinese, homesPage, this::sharedHomesRoute);
+
+        int slot = 9;
+        for (final String home : homesPage.items()) {
+            final Location location = this.loadHome(player, home);
+            final World world = location == null ? null : location.getWorld();
+            final Material material = home.equals(DEFAULT_HOME) ? Material.RED_BED : world == null ? Material.BARRIER : switch (world.getEnvironment()) {
+                case NETHER -> Material.NETHERRACK;
+                case THE_END -> Material.END_STONE;
+                default -> Material.GRASS_BLOCK;
+            };
+            final boolean currentWorld = world != null && world.equals(player.getWorld());
+            final ItemStack homeItem = this.item(material, home, List.of(
+                world == null
+                    ? this.sharedText(chinese, "世界：未知或已删除", "World: unknown or deleted")
+                    : this.sharedText(chinese, "世界：", "World: ") + world.getName(),
+                location == null
+                    ? this.sharedText(chinese, "坐标：未知", "Coords: unknown")
+                    : this.sharedText(chinese, "坐标：", "Coords: ") + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ(),
+                currentWorld ? this.sharedText(chinese, "当前世界 Home", "Home in your current world") : "",
+                this.sharedText(chinese, "左键：传送", "Left-click: teleport"),
+                this.sharedText(chinese, "右键：重命名提示", "Right-click: rename hint"),
+                this.sharedText(chinese, "Shift 右键：删除", "Shift-right-click: delete")
+            ), currentWorld);
+            if (location == null || world == null) {
+                view.button(slot, homeItem, ACTION_UNAVAILABLE_HOME, action -> {
+                    action.player().sendMessage(this.sharedText(this.usesChinese(action), "这个家不可用。", "That home is not available."));
+                    action.refresh();
+                });
+            } else {
+                view.button(slot, homeItem, ACTION_HOME, action -> this.handleSharedHomeAction(action, home));
+            }
+            slot++;
+        }
+
+        view.button(45, this.item(Material.LIME_BED, this.sharedText(chinese, "新建 Home", "New Home"), List.of(
+            this.sharedText(chinese, "保存当前位置为下一个 home。", "Save this location as the next home.")
+        )), ACTION_CREATE_HOME, action -> {
+            this.setHome(action.player(), new String[] {this.nextHomeName(action.player())});
+            action.refresh();
+        });
+        view.button(46, this.item(Material.ENDER_PEARL, this.sharedText(chinese, "传送中心", "Teleport Center"), List.of("/tpgui")), ACTION_OPEN_TELEPORT,
+            action -> this.returnToSharedScreen(action, this.sharedTeleportRoute()));
+        view.button(47, this.item(Material.NAME_TAG, this.sharedText(chinese, "设置 default home", "Set default home"), List.of("/sethome home")), ACTION_SET_HOME,
+            action -> this.setSharedHome(action, DEFAULT_HOME));
+        view.button(48, this.item(Material.NAME_TAG, this.sharedText(chinese, "设置 home1", "Set home1"), List.of("/sethome home1")), ACTION_SET_HOME,
+            action -> this.setSharedHome(action, "home1"));
+        view.button(49, this.item(Material.NAME_TAG, this.sharedText(chinese, "刷新", "Refresh"), List.of(
+            this.sharedText(chinese, "重新加载 Home GUI。", "Refresh this homes GUI.")
+        )), ACTION_REFRESH_HOMES, HunterGuiActionContext::refresh);
+        view.button(50, this.item(Material.NAME_TAG, this.sharedText(chinese, "设置 home2", "Set home2"), List.of("/sethome home2")), ACTION_SET_HOME,
+            action -> this.setSharedHome(action, "home2"));
+        view.button(51, this.item(Material.NAME_TAG, this.sharedText(chinese, "设置 home3", "Set home3"), List.of("/sethome home3")), ACTION_SET_HOME,
+            action -> this.setSharedHome(action, "home3"));
+        view.button(52, this.item(Material.NAME_TAG, this.sharedText(chinese, "设置 home4", "Set home4"), List.of("/sethome home4")), ACTION_SET_HOME,
+            action -> this.setSharedHome(action, "home4"));
+        view.button(53, this.item(Material.BARRIER, this.sharedText(chinese, "关闭", "Close"), List.of()), ACTION_CLOSE, action -> {
+            this.playGuiSound(action.player(), Sound.UI_BUTTON_CLICK);
+            action.close();
+        });
+        return view.build();
+    }
+
+    private void setSharedHome(final HunterGuiActionContext context, final String home) {
+        this.setHome(context.player(), new String[] {home});
+        context.refresh();
+    }
+
+    private void handleSharedHomeAction(final HunterGuiActionContext context, final String home) {
+        final Player player = context.player();
+        final boolean chinese = this.usesChinese(context);
+        if (!this.homeExists(player, home)) {
+            player.sendMessage(this.sharedText(chinese, "这个家已不存在，已刷新列表。", "That home no longer exists. The list was refreshed."));
+            context.refresh();
+            return;
+        }
+
+        final ClickType click = context.clickType();
+        if (click.isShiftClick() && click.isRightClick()) {
+            context.armConfirmation(
+                this.sharedDeleteHomeConfirmationId(home),
+                SHARED_DELETE_HOME_CONFIRMATION_TTL,
+                confirmation -> this.homeExists(confirmation.player(), home)
+            );
+            context.navigate(this.sharedDeleteHomeRoute(home));
+            return;
+        }
+        if (click.isRightClick()) {
+            player.sendMessage(this.sharedText(
+                chinese,
+                "重命名 Home 请使用：/sethome <新名字> 后删除旧 Home。",
+                "Rename homes by using /sethome <newName> and deleting the old home."
+            ));
+            this.playGuiSound(player, Sound.UI_BUTTON_CLICK);
+            context.refresh();
+            return;
+        }
+        if (!click.isLeftClick()) {
+            player.sendMessage(this.sharedText(chinese, "请使用左键或右键操作 Home。", "Use left-click or right-click to manage this home."));
+            context.refresh();
+            return;
+        }
+        if (this.loadHome(player, home) == null) {
+            player.sendMessage(this.sharedText(chinese, "这个家不可用，已刷新列表。", "That home is unavailable. The list was refreshed."));
+            context.refresh();
+            return;
+        }
+        this.home(player, new String[] {home});
+        context.close();
+    }
+
+    private HunterGuiView renderSharedDeleteHomeGui(final HunterGuiRenderContext context) {
+        final boolean chinese = this.usesChinese(context);
+        final String home = this.sharedRouteHome(context.route());
+        final boolean homeExists = home != null && this.homeExists(context.player(), home);
+        final HunterGuiView.Builder view = HunterGuiView.builder(
+            Component.text(this.sharedText(chinese, "HunterTPA · 删除 Home", "HunterTPA · Delete Home")),
+            3
+        );
+        if (homeExists) {
+            view.button(11, this.item(Material.LIME_WOOL, this.sharedText(chinese, "确认删除 ", "Confirm delete ") + home, List.of(
+                this.sharedText(chinese, "这个操作不可撤销。", "This cannot be undone."),
+                this.sharedText(chinese, "确认窗口将在 40 秒后失效。", "This confirmation expires after 40 seconds.")
+            )), ACTION_CONFIRM_HOME_DELETE, action -> this.confirmSharedHomeDelete(action, home));
+        } else {
+            view.item(11, this.item(Material.GRAY_DYE, this.sharedText(chinese, "Home 不可用", "Home unavailable"), List.of(
+                this.sharedText(chinese, "该 Home 已不存在或确认已失效。", "This home no longer exists or the confirmation is no longer valid.")
+            )));
+        }
+        view.item(13, this.item(homeExists ? Material.RED_BED : Material.BARRIER, homeExists ? home : this.sharedText(chinese, "未知 Home", "Unknown home"), List.of(
+            homeExists ? this.sharedText(chinese, "即将删除这个家。", "This home will be deleted.") : this.sharedText(chinese, "请返回家列表并重新选择。", "Return to the homes list and choose again.")
+        )));
+        view.button(15, this.item(Material.RED_WOOL, this.sharedText(chinese, "取消", "Cancel"), List.of(
+            this.sharedText(chinese, "返回家列表。", "Return to homes.")
+        )), ACTION_CANCEL_HOME_DELETE, action -> {
+            final String routeHome = this.sharedRouteHome(action.route());
+            if (routeHome != null) {
+                action.clearConfirmation(this.sharedDeleteHomeConfirmationId(routeHome));
+            }
+            this.playGuiSound(action.player(), Sound.UI_BUTTON_CLICK);
+            this.returnToSharedScreen(action, this.sharedHomesRoute());
+        });
+        return view.build();
+    }
+
+    private void confirmSharedHomeDelete(final HunterGuiActionContext context, final String home) {
+        final Player player = context.player();
+        final boolean chinese = this.usesChinese(context);
+        final HunterGuiConfirmationResult confirmation = context.consumeConfirmation(this.sharedDeleteHomeConfirmationId(home));
+        if (!confirmation.confirmed() || !this.homeExists(player, home)) {
+            player.sendMessage(this.sharedText(
+                chinese,
+                "删除确认已过期，或 Home 状态已变化。",
+                "The delete confirmation expired or the home changed."
+            ));
+            this.returnToSharedScreen(context, this.sharedHomesRoute());
+            return;
+        }
+        this.deleteHome(player, new String[] {home});
+        this.playGuiSound(player, Sound.ENTITY_EXPERIENCE_ORB_PICKUP);
+        this.returnToSharedScreen(context, this.sharedHomesRoute());
+    }
+
+    private HunterGuiView renderSharedRequestsGui(final HunterGuiRenderContext context) {
+        final boolean chinese = this.usesChinese(context);
+        final Player player = context.player();
+        final TeleportRequest incomingRequest = this.incomingRequestFor(player.getUniqueId());
+        final TeleportRequest outgoingRequest = this.outgoingRequestFor(player);
+        final HunterGuiView.Builder view = HunterGuiView.builder(
+            Component.text(this.sharedText(chinese, "HunterTPA · 请求", "HunterTPA · Requests")),
+            3
+        );
+
+        view.item(4, this.item(Material.ENCHANTED_BOOK, this.sharedText(chinese, "传送请求", "Requests"), List.of(
+            incomingRequest == null
+                ? this.sharedText(chinese, "没有收到的请求。", "No incoming request.")
+                : this.sharedRequestSummary(incomingRequest, true, chinese),
+            outgoingRequest == null
+                ? this.sharedText(chinese, "没有发出的请求。", "No outgoing request.")
+                : this.sharedRequestSummary(outgoingRequest, false, chinese)
+        )));
+        if (incomingRequest == null) {
+            view.item(11, this.item(Material.GRAY_DYE, this.sharedText(chinese, "接受", "Accept"), List.of(
+                this.sharedText(chinese, "没有收到的请求。", "No incoming request.")
+            )));
+            view.item(13, this.item(Material.GRAY_DYE, this.sharedText(chinese, "收件箱", "Inbox"), List.of(
+                this.sharedText(chinese, "没有需要处理的请求。", "Nothing to review.")
+            )));
+            view.item(15, this.item(Material.GRAY_DYE, this.sharedText(chinese, "拒绝", "Deny"), List.of(
+                this.sharedText(chinese, "没有收到的请求。", "No incoming request.")
+            )));
+        } else {
+            view.button(11, this.item(Material.LIME_WOOL, this.sharedText(chinese, "接受", "Accept"), List.of(
+                this.sharedRequestSummary(incomingRequest, true, chinese)
+            )), ACTION_ACCEPT_REQUEST, action -> {
+                this.answerRequest(action.player(), new String[0], true);
+                action.refresh();
+            });
+            view.item(13, this.item(Material.PLAYER_HEAD, this.sharedText(chinese, "请求者", "Requester"), List.of(
+                this.sharedRequestSummary(incomingRequest, true, chinese)
+            )));
+            view.button(15, this.item(Material.RED_WOOL, this.sharedText(chinese, "拒绝", "Deny"), List.of(
+                this.sharedRequestSummary(incomingRequest, true, chinese)
+            )), ACTION_DENY_REQUEST, action -> {
+                this.answerRequest(action.player(), new String[0], false);
+                action.refresh();
+            });
+        }
+        if (outgoingRequest == null) {
+            view.item(21, this.item(Material.GRAY_DYE, this.sharedText(chinese, "发出请求", "Outgoing"), List.of(
+                this.sharedText(chinese, "没有发出的请求。", "No outgoing request.")
+            )));
+        } else {
+            view.button(21, this.item(Material.CLOCK, this.sharedText(chinese, "取消发出的请求", "Cancel outgoing"), List.of(
+                this.sharedRequestSummary(outgoingRequest, false, chinese)
+            )), ACTION_CANCEL_OUTGOING, action -> {
+                this.cancelRequest(action.player());
+                action.refresh();
+            });
+        }
+        view.button(23, this.item(Material.COMPASS, this.sharedText(chinese, "刷新", "Refresh"), List.of(
+            this.sharedText(chinese, "重新加载请求状态。", "Reload the request state.")
+        )), ACTION_REFRESH_REQUESTS, HunterGuiActionContext::refresh);
+        view.button(26, this.item(Material.ARROW, this.sharedText(chinese, "返回", "Back"), List.of("/tpgui")), ACTION_OPEN_TELEPORT,
+            action -> this.returnToSharedScreen(action, this.sharedTeleportRoute()));
+        return view.build();
+    }
+
+    private ItemStack sharedRequestsMenuItem(final Player player, final boolean chinese) {
+        final TeleportRequest incomingRequest = this.incomingRequestFor(player.getUniqueId());
+        return this.item(
+            incomingRequest == null ? Material.BOOK : Material.ENCHANTED_BOOK,
+            this.sharedText(chinese, "传送请求", "Requests"),
+            List.of(incomingRequest == null
+                ? this.sharedText(chinese, "打开传送请求收件箱。", "Open the request inbox.")
+                : this.sharedRequestSummary(incomingRequest, true, chinese))
+        );
+    }
+
+    private ItemStack sharedOutgoingRequestItem(final Player player, final boolean chinese) {
+        final TeleportRequest outgoingRequest = this.outgoingRequestFor(player);
+        return this.item(
+            outgoingRequest == null ? Material.GRAY_DYE : Material.CLOCK,
+            this.sharedText(chinese, "发出请求", "Outgoing"),
+            List.of(outgoingRequest == null
+                ? this.sharedText(chinese, "没有发出的请求。", "No outgoing request.")
+                : this.sharedRequestSummary(outgoingRequest, false, chinese))
+        );
+    }
+
+    private String sharedRequestSummary(final TeleportRequest request, final boolean incomingView, final boolean chinese) {
+        final UUID otherId = incomingView ? request.requester() : request.target();
+        final Player other = Bukkit.getPlayer(otherId);
+        final String otherName = other == null
+            ? this.sharedText(chinese, "未知玩家", "Unknown")
+            : other.getName();
+        final String direction;
+        if (request.type() == TeleportType.TO_TARGET) {
+            direction = incomingView
+                ? this.sharedText(chinese, "传送到你", "to you")
+                : this.sharedText(chinese, "传送到对方", "to target");
+        } else {
+            direction = incomingView
+                ? this.sharedText(chinese, "让你传送到请求者", "to requester")
+                : this.sharedText(chinese, "让对方传送到你", "to you");
+        }
+        final long seconds = Math.max(0L, (request.expiresAt() - System.currentTimeMillis() + 999L) / 1000L);
+        return otherName + " · " + direction + " · " + seconds + (chinese ? "秒" : "s");
+    }
+
     private ItemStack requestsMenuItem(final Player player) {
-        final TeleportRequest incomingRequest = this.incoming.get(player.getUniqueId());
+        final TeleportRequest incomingRequest = this.incomingRequestFor(player.getUniqueId());
         return item(
             incomingRequest == null ? Material.BOOK : Material.ENCHANTED_BOOK,
             this.text("Requests", "Requests"),
@@ -249,8 +846,17 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         if (targetId == null) {
             return null;
         }
+        final TeleportRequest request = this.incomingRequestFor(targetId);
+        if (request == null || !request.requester().equals(player.getUniqueId())) {
+            this.outgoing.remove(player.getUniqueId(), targetId);
+            return null;
+        }
+        return request;
+    }
+
+    private @Nullable TeleportRequest incomingRequestFor(final UUID targetId) {
         final TeleportRequest request = this.incoming.get(targetId);
-        if (request == null || !request.requester().equals(player.getUniqueId()) || request.isExpired()) {
+        if (request == null || !request.target().equals(targetId) || request.isExpired()) {
             return null;
         }
         return request;
@@ -274,11 +880,13 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             requester.sendMessage(type == TeleportType.TO_TARGET ? "/tpa <player>" : "/tpahere <player>");
             return true;
         }
+        return this.requestTeleport(requester, Bukkit.getPlayerExact(args[0]), type);
+    }
+
+    private boolean requestTeleport(final Player requester, final @Nullable Player target, final TeleportType type) {
         if (!this.checkCooldown(requester)) {
             return true;
         }
-
-        final Player target = Bukkit.getPlayerExact(args[0]);
         if (target == null || !target.isOnline()) {
             requester.sendMessage(this.text("该玩家不在线。", "That player is not online."));
             return true;
@@ -295,7 +903,7 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         this.removeOutgoing(requester.getUniqueId());
         final TeleportRequest oldIncoming = this.incoming.remove(target.getUniqueId());
         if (oldIncoming != null) {
-            this.outgoing.remove(oldIncoming.requester());
+            this.outgoing.remove(oldIncoming.requester(), target.getUniqueId());
         }
 
         final TeleportRequest request = new TeleportRequest(requester.getUniqueId(), target.getUniqueId(), type, System.currentTimeMillis() + REQUEST_TTL_MILLIS);
@@ -331,7 +939,8 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
     }
 
     private boolean answerRequest(final Player target, final String[] args, final boolean accept) {
-        TeleportRequest request = this.incoming.get(target.getUniqueId());
+        final UUID targetId = target.getUniqueId();
+        TeleportRequest request = this.incoming.get(targetId);
         if (args.length == 1) {
             final Player requester = Bukkit.getPlayerExact(args[0]);
             if (requester == null || request == null || !request.requester().equals(requester.getUniqueId())) {
@@ -339,14 +948,17 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             }
         }
 
-        if (request == null || request.isExpired()) {
-            this.incoming.remove(target.getUniqueId());
+        if (request == null) {
+            target.sendMessage(this.text("你没有待处理的传送请求。", "You do not have a pending teleport request."));
+            return true;
+        }
+        if (request.isExpired()) {
+            this.clearTeleportRequest(request);
             target.sendMessage(this.text("你没有待处理的传送请求。", "You do not have a pending teleport request."));
             return true;
         }
 
-        this.incoming.remove(target.getUniqueId());
-        this.outgoing.remove(request.requester());
+        this.clearTeleportRequest(request);
 
         final Player requester = Bukkit.getPlayer(request.requester());
         if (requester == null || !requester.isOnline()) {
@@ -372,12 +984,22 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
     }
 
     private boolean cancelRequest(final Player requester) {
-        final UUID targetId = this.outgoing.remove(requester.getUniqueId());
+        final UUID requesterId = requester.getUniqueId();
+        final UUID targetId = this.outgoing.get(requesterId);
         if (targetId == null) {
             requester.sendMessage(this.text("你没有发出的传送请求。", "You do not have an outgoing teleport request."));
             return true;
         }
-        this.incoming.remove(targetId);
+        final TeleportRequest request = this.incoming.get(targetId);
+        if (request == null || !request.requester().equals(requesterId) || request.isExpired()) {
+            this.outgoing.remove(requesterId, targetId);
+            if (request != null && request.requester().equals(requesterId) && request.isExpired()) {
+                this.incoming.remove(targetId, request);
+            }
+            requester.sendMessage(this.text("你没有发出的传送请求。", "You do not have an outgoing teleport request."));
+            return true;
+        }
+        this.clearTeleportRequest(request);
         final Player target = Bukkit.getPlayer(targetId);
         requester.sendMessage(this.text("传送请求已取消。", "Teleport request cancelled."));
         if (target != null) {
@@ -460,7 +1082,7 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         this.removeOutgoing(uuid);
         final TeleportRequest incomingRequest = this.incoming.remove(uuid);
         if (incomingRequest != null) {
-            this.outgoing.remove(incomingRequest.requester());
+            this.outgoing.remove(incomingRequest.requester(), uuid);
         }
     }
 
@@ -469,136 +1091,132 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         if (!(event.getWhoClicked() instanceof final Player player)) {
             return;
         }
-        final String title = event.getView().getTitle();
-        if (!title.equals(TELEPORT_GUI_TITLE) && !title.equals(HOMES_GUI_TITLE) && !title.equals(DELETE_HOME_GUI_TITLE) && !title.equals(REQUESTS_GUI_TITLE)) {
+        final Inventory topInventory = event.getView().getTopInventory();
+        if (!(topInventory.getHolder() instanceof TpaGuiHolder holder)) {
             return;
         }
         event.setCancelled(true);
-        final ItemStack clicked = event.getCurrentItem();
-        if (clicked == null || clicked.getType().isAir() || !clicked.hasItemMeta()) {
+        if (event.getClickedInventory() != topInventory) {
             return;
         }
-        final String name = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
-        if (title.equals(TELEPORT_GUI_TITLE)) {
-            this.handleTeleportGuiClick(player, clicked, name, event.getClick());
-        } else if (title.equals(DELETE_HOME_GUI_TITLE)) {
-            this.handleDeleteHomeGuiClick(player, clicked);
-        } else if (title.equals(REQUESTS_GUI_TITLE)) {
-            this.handleRequestsGuiClick(player, clicked);
-        } else {
-            this.handleHomesGuiClick(player, clicked, name, event.getClick());
+        final GuiAction action = holder.actionAt(event.getRawSlot());
+        if (action != null) {
+            this.handleGuiAction(player, action, event.getClick());
         }
     }
 
-    private void handleTeleportGuiClick(final Player player, final ItemStack clicked, final String name, final ClickType click) {
-        switch (clicked.getType()) {
-            case RED_BED -> this.openHomesGui(player);
-            case COMPASS -> player.performCommand("spawn");
-            case CLOCK -> player.performCommand("back");
-            case BOOK, ENCHANTED_BOOK -> this.openRequestsGui(player);
-            case REDSTONE_BLOCK, EMERALD_BLOCK -> {
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryDrag(final InventoryDragEvent event) {
+        if (event.getView().getTopInventory().getHolder() instanceof TpaGuiHolder) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClose(final InventoryCloseEvent event) {
+        if (event.getPlayer() instanceof final Player player
+            && event.getInventory().getHolder() instanceof final TpaGuiHolder holder
+            && holder.screen() == GuiScreen.DELETE_HOME) {
+            this.pendingHomeDeletes.remove(player.getUniqueId());
+        }
+    }
+
+    private void handleGuiAction(final Player player, final GuiAction action, final ClickType click) {
+        switch (action.type()) {
+            case OPEN_HOMES -> this.openHomesGui(player);
+            case OPEN_TELEPORT -> this.openTeleportGui(player);
+            case OPEN_REQUESTS, REFRESH_REQUESTS -> this.openRequestsGui(player);
+            case RUN_SPAWN -> player.performCommand("spawn");
+            case RUN_BACK -> player.performCommand("back");
+            case TOGGLE_REQUESTS -> {
                 this.toggleRequests(player);
                 this.openTeleportGui(player);
             }
-            case GRAY_DYE -> this.openRequestsGui(player);
-            case GRASS_BLOCK -> this.randomTeleport(player);
-            case BARRIER -> {
+            case RANDOM_TELEPORT -> this.randomTeleport(player);
+            case CLOSE -> {
                 this.playGuiSound(player, Sound.UI_BUTTON_CLICK);
                 player.closeInventory();
             }
-            case PLAYER_HEAD -> {
-                if (click.isRightClick()) {
-                    this.requestTeleport(player, new String[] {name}, TeleportType.TARGET_TO_REQUESTER);
-                } else {
-                    this.requestTeleport(player, new String[] {name}, TeleportType.TO_TARGET);
-                }
-                player.closeInventory();
-            }
-            default -> {
-            }
-        }
-    }
-
-    private void handleRequestsGuiClick(final Player player, final ItemStack clicked) {
-        switch (clicked.getType()) {
-            case LIME_WOOL -> {
-                this.answerRequest(player, new String[0], true);
-                this.openRequestsGui(player);
-            }
-            case RED_WOOL -> {
-                this.answerRequest(player, new String[0], false);
-                this.openRequestsGui(player);
-            }
-            case CLOCK -> {
-                this.cancelRequest(player);
-                this.openRequestsGui(player);
-            }
-            case COMPASS, GRAY_DYE -> this.openRequestsGui(player);
-            case ARROW -> this.openTeleportGui(player);
-            default -> {
-            }
-        }
-    }
-
-    private void handleHomesGuiClick(final Player player, final ItemStack clicked, final String name, final ClickType click) {
-        switch (clicked.getType()) {
-            case ENDER_PEARL -> this.openTeleportGui(player);
-            case NAME_TAG -> {
-                if (name.equals(this.text("刷新", "Refresh"))) {
-                    this.openHomesGui(player);
-                    return;
-                }
-                this.setHome(player, new String[] {homeNameFromSetButton(name)});
-                this.openHomesGui(player);
-            }
-            case LIME_BED -> {
+            case REQUEST_PLAYER -> this.requestTeleportFromGui(player, action.payload(), click);
+            case CREATE_HOME -> {
                 this.setHome(player, new String[] {this.nextHomeName(player)});
                 this.openHomesGui(player);
             }
-            case BARRIER -> {
-                if (name.equals(this.text("关闭", "Close"))) {
-                    player.closeInventory();
+            case SET_HOME -> {
+                if (action.payload() == null) {
                     return;
                 }
-                player.sendMessage(this.text("这个家不可用。", "That home is not available."));
-            }
-            default -> {
-                if (click.isShiftClick() && click.isRightClick()) {
-                    this.openDeleteHomeGui(player, name);
-                    return;
-                }
-                if (click.isRightClick()) {
-                    player.sendMessage(this.text("重命名 Home 请使用：/sethome <新名字> 后删除旧 Home。", "Rename homes by using /sethome <newName> and deleting the old home."));
-                    this.playGuiSound(player, Sound.UI_BUTTON_CLICK);
-                    return;
-                }
-                this.home(player, new String[] {name});
-                player.closeInventory();
-            }
-        }
-    }
-
-    private void handleDeleteHomeGuiClick(final Player player, final ItemStack clicked) {
-        final String home = this.pendingHomeDeletes.get(player.getUniqueId());
-        if (home == null) {
-            this.openHomesGui(player);
-            return;
-        }
-        switch (clicked.getType()) {
-            case LIME_WOOL -> {
-                this.deleteHome(player, new String[] {home});
-                this.pendingHomeDeletes.remove(player.getUniqueId());
-                this.playGuiSound(player, Sound.ENTITY_EXPERIENCE_ORB_PICKUP);
+                this.setHome(player, new String[] {action.payload()});
                 this.openHomesGui(player);
             }
-            case RED_WOOL, BARRIER -> {
+            case REFRESH_HOMES -> this.openHomesGui(player);
+            case UNAVAILABLE_HOME -> player.sendMessage(this.text("这个家不可用。", "That home is not available."));
+            case HOME -> this.handleHomeAction(player, action.payload(), click);
+            case ACCEPT_REQUEST -> {
+                this.answerRequest(player, new String[0], true);
+                this.openRequestsGui(player);
+            }
+            case DENY_REQUEST -> {
+                this.answerRequest(player, new String[0], false);
+                this.openRequestsGui(player);
+            }
+            case CANCEL_OUTGOING -> {
+                this.cancelRequest(player);
+                this.openRequestsGui(player);
+            }
+            case CONFIRM_HOME_DELETE -> this.confirmHomeDelete(player);
+            case CANCEL_HOME_DELETE -> {
                 this.pendingHomeDeletes.remove(player.getUniqueId());
                 this.playGuiSound(player, Sound.UI_BUTTON_CLICK);
                 this.openHomesGui(player);
             }
-            default -> {
-            }
         }
+    }
+
+    private void requestTeleportFromGui(final Player player, final @Nullable String targetIdText, final ClickType click) {
+        if (targetIdText == null) {
+            return;
+        }
+        final UUID targetId;
+        try {
+            targetId = UUID.fromString(targetIdText);
+        } catch (final IllegalArgumentException ignored) {
+            return;
+        }
+        this.requestTeleport(player, Bukkit.getPlayer(targetId), click.isRightClick() ? TeleportType.TARGET_TO_REQUESTER : TeleportType.TO_TARGET);
+        player.closeInventory();
+    }
+
+    private void handleHomeAction(final Player player, final @Nullable String home, final ClickType click) {
+        if (home == null) {
+            return;
+        }
+        if (click.isShiftClick() && click.isRightClick()) {
+            this.openDeleteHomeGui(player, home);
+            return;
+        }
+        if (click.isRightClick()) {
+            player.sendMessage(this.text("重命名 Home 请使用：/sethome <新名字> 后删除旧 Home。", "Rename homes by using /sethome <newName> and deleting the old home."));
+            this.playGuiSound(player, Sound.UI_BUTTON_CLICK);
+            return;
+        }
+        this.home(player, new String[] {home});
+        player.closeInventory();
+    }
+
+    private void confirmHomeDelete(final Player player) {
+        final PendingHomeDelete pending = this.pendingHomeDeletes.remove(player.getUniqueId());
+        if (pending == null || pending.isExpired(System.currentTimeMillis()) || !this.homeExists(player, pending.home())) {
+            player.sendMessage(this.text(
+                "删除确认已过期，或 Home 状态已变化。",
+                "The delete confirmation expired or the home changed."
+            ));
+            this.openHomesGui(player);
+            return;
+        }
+        this.deleteHome(player, new String[] {pending.home()});
+        this.playGuiSound(player, Sound.ENTITY_EXPERIENCE_ORB_PICKUP);
+        this.openHomesGui(player);
     }
 
     private boolean deleteHome(final Player player, final String[] args) {
@@ -695,16 +1313,6 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             }
         }
         return "home" + (names.size() + 1);
-    }
-
-    private static String homeNameFromSetButton(final String displayName) {
-        final String lower = displayName.toLowerCase(Locale.ROOT);
-        for (final String candidate : List.of("home1", "home2", "home3", "home4")) {
-            if (lower.contains(candidate)) {
-                return candidate;
-            }
-        }
-        return DEFAULT_HOME;
     }
 
     private ItemStack item(final Material material, final String name, final List<String> lore) {
@@ -874,8 +1482,16 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
     private void removeOutgoing(final UUID requesterId) {
         final UUID oldTarget = this.outgoing.remove(requesterId);
         if (oldTarget != null) {
-            this.incoming.remove(oldTarget);
+            final TeleportRequest request = this.incoming.get(oldTarget);
+            if (request != null && request.requester().equals(requesterId)) {
+                this.incoming.remove(oldTarget, request);
+            }
         }
+    }
+
+    private void clearTeleportRequest(final TeleportRequest request) {
+        this.incoming.remove(request.target(), request);
+        this.outgoing.remove(request.requester(), request.target());
     }
 
     private void expireRequests() {
@@ -884,13 +1500,15 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
             .filter(request -> request.expiresAt() <= now)
             .toList();
         for (final TeleportRequest request : expired) {
-            this.incoming.remove(request.target());
-            this.outgoing.remove(request.requester());
-            final Player requester = Bukkit.getPlayer(request.requester());
-            if (requester != null) {
-                requester.sendMessage(this.text("你的传送请求已过期。", "Your teleport request expired."));
+            if (this.incoming.remove(request.target(), request)) {
+                this.outgoing.remove(request.requester(), request.target());
+                final Player requester = Bukkit.getPlayer(request.requester());
+                if (requester != null) {
+                    requester.sendMessage(this.text("你的传送请求已过期。", "Your teleport request expired."));
+                }
             }
         }
+        this.pendingHomeDeletes.entrySet().removeIf(entry -> entry.getValue().isExpired(now));
     }
 
     @Override
@@ -914,6 +1532,44 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         return HunterLanguage.choose(HunterCoreProvider.get().language(), zhCn, enUs);
     }
 
+    private boolean usesChinese(final HunterGuiRenderContext context) {
+        return "zh".equalsIgnoreCase(context.presentation().locale().getLanguage());
+    }
+
+    private String sharedText(final boolean chinese, final String zhCn, final String enUs) {
+        return chinese ? zhCn : enUs;
+    }
+
+    private @Nullable String sharedRouteHome(final HunterGuiRoute route) {
+        if (route.arguments().size() != 1) {
+            return null;
+        }
+        return route.argument(SHARED_HOME_ARGUMENT).filter(HunterTpaPlugin::isCanonicalHomeName).orElse(null);
+    }
+
+    private int sharedRoutePage(final HunterGuiRoute route) {
+        final String page = route.argument(SHARED_PAGE_ARGUMENT).orElse("0");
+        if (page.isEmpty() || !page.chars().allMatch(character -> character >= '0' && character <= '9')) {
+            return 0;
+        }
+        try {
+            return Math.max(0, Integer.parseInt(page));
+        } catch (final NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private String sharedDeleteHomeConfirmationId(final String home) {
+        if (!isCanonicalHomeName(home)) {
+            throw new IllegalArgumentException("Home confirmation requires a canonical home name.");
+        }
+        return SHARED_DELETE_HOME_CONFIRMATION_PREFIX + home;
+    }
+
+    private boolean homeExists(final Player player, final String home) {
+        return isCanonicalHomeName(home) && this.homes.contains(homePath(player, home));
+    }
+
     private static List<String> matching(final String prefix, final List<String> values) {
         final String lower = prefix.toLowerCase(Locale.ROOT);
         final List<String> matches = new ArrayList<>();
@@ -930,6 +1586,10 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         return normalized.isBlank() ? DEFAULT_HOME : normalized;
     }
 
+    private static boolean isCanonicalHomeName(final @Nullable String input) {
+        return input != null && !input.isBlank() && input.equals(homeName(input));
+    }
+
     private static String homePath(final Player player, final String name) {
         return "homes." + player.getUniqueId() + "." + homeName(name);
     }
@@ -938,9 +1598,129 @@ public final class HunterTpaPlugin extends JavaPlugin implements CommandExecutor
         return "settings." + player.getUniqueId() + ".requests-disabled";
     }
 
+    private final class SharedTeleportGuiScreen implements HunterGuiScreen {
+        @Override
+        public @NotNull String id() {
+            return SHARED_TELEPORT_SCREEN;
+        }
+
+        @Override
+        public @NotNull HunterGuiView render(@NotNull final HunterGuiRenderContext context) {
+            return HunterTpaPlugin.this.renderSharedTeleportGui(context);
+        }
+    }
+
+    private final class SharedHomesGuiScreen implements HunterGuiScreen {
+        @Override
+        public @NotNull String id() {
+            return SHARED_HOMES_SCREEN;
+        }
+
+        @Override
+        public @NotNull HunterGuiView render(@NotNull final HunterGuiRenderContext context) {
+            return HunterTpaPlugin.this.renderSharedHomesGui(context);
+        }
+    }
+
+    private final class SharedRequestsGuiScreen implements HunterGuiScreen {
+        @Override
+        public @NotNull String id() {
+            return SHARED_REQUESTS_SCREEN;
+        }
+
+        @Override
+        public @NotNull HunterGuiView render(@NotNull final HunterGuiRenderContext context) {
+            return HunterTpaPlugin.this.renderSharedRequestsGui(context);
+        }
+    }
+
+    private final class SharedDeleteHomeGuiScreen implements HunterGuiScreen {
+        @Override
+        public @NotNull String id() {
+            return SHARED_DELETE_HOME_SCREEN;
+        }
+
+        @Override
+        public @NotNull HunterGuiView render(@NotNull final HunterGuiRenderContext context) {
+            return HunterTpaPlugin.this.renderSharedDeleteHomeGui(context);
+        }
+    }
+
+    private enum GuiScreen {
+        TELEPORT,
+        HOMES,
+        DELETE_HOME,
+        REQUESTS
+    }
+
+    private enum GuiActionType {
+        OPEN_HOMES,
+        OPEN_TELEPORT,
+        OPEN_REQUESTS,
+        RUN_SPAWN,
+        RUN_BACK,
+        TOGGLE_REQUESTS,
+        RANDOM_TELEPORT,
+        CLOSE,
+        REQUEST_PLAYER,
+        CREATE_HOME,
+        SET_HOME,
+        REFRESH_HOMES,
+        UNAVAILABLE_HOME,
+        HOME,
+        ACCEPT_REQUEST,
+        DENY_REQUEST,
+        CANCEL_OUTGOING,
+        REFRESH_REQUESTS,
+        CONFIRM_HOME_DELETE,
+        CANCEL_HOME_DELETE
+    }
+
+    private record GuiAction(GuiActionType type, @Nullable String payload) {
+        private static GuiAction of(final GuiActionType type) {
+            return new GuiAction(type, null);
+        }
+
+        private static GuiAction withPayload(final GuiActionType type, final String payload) {
+            return new GuiAction(type, payload);
+        }
+    }
+
+    private static final class TpaGuiHolder implements InventoryHolder {
+        private final GuiScreen screen;
+        private final Map<Integer, GuiAction> actions = new HashMap<>();
+
+        private TpaGuiHolder(final GuiScreen screen) {
+            this.screen = screen;
+        }
+
+        private GuiScreen screen() {
+            return this.screen;
+        }
+
+        private void bind(final int slot, final GuiAction action) {
+            this.actions.put(slot, action);
+        }
+
+        private @Nullable GuiAction actionAt(final int slot) {
+            return this.actions.get(slot);
+        }
+
+        @Override
+        public Inventory getInventory() {
+            return null;
+        }
+    }
+
     private enum TeleportType {
         TO_TARGET,
         TARGET_TO_REQUESTER
+    }
+
+    private record PendingHomeDelete(String home, long expiresAt) {
+        private boolean isExpired(final long now) {
+            return now >= this.expiresAt;
+        }
     }
 
     private record TeleportRequest(UUID requester, UUID target, TeleportType type, long expiresAt) {

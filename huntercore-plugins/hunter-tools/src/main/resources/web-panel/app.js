@@ -77,16 +77,28 @@ const state = {
   selectedWebUser: '',
   page: 'map',
   mode: panelMode(),
+  connection: {
+    status: 'idle',
+    detail: '',
+    lastSuccessAt: 0
+  },
+  modal: {
+    kind: '',
+    opener: null
+  },
+  activeForm: null,
   aiChatProfiles: [],
   aiBotAliases: [],
   aiFakePersonas: [],
   storyPhases: [],
-  chatLines: []
+  chatLines: [],
+  huntEngineOperations: []
 };
 
 const $ = (id) => document.getElementById(id);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
-const ADMIN_PAGES = ['assets', 'titles', 'settings', 'access', 'ai', 'admin'];
+const ADMIN_PAGES = ['titles', 'settings', 'access', 'ai', 'admin'];
+const HUNT_ENGINE_PAGES = ['hunt-engine'];
 
 const FIELD_HELP = {
   webServerName: 'Shown as the panel title and %server% display name.',
@@ -160,9 +172,9 @@ const GUI_PERMISSION_FIELDS = [
   ['teleport', 'TPA / teleport GUI'],
   ['homes', 'Homes GUI'],
   ['random-teleport', 'Random teleport'],
-  ['assets', 'Assets GUI'],
-  ['assets-give', 'Assets give'],
-  ['assets-admin', 'Assets admin'],
+  ['hunt-engine', 'HuntEngine catalogue'],
+  ['hunt-engine-give', 'HuntEngine content give'],
+  ['hunt-engine-admin', 'HuntEngine administration'],
   ['auth', 'Auth GUI'],
   ['tps', 'TPS'],
   ['heal', 'Heal'],
@@ -185,7 +197,7 @@ const GUI_PERMISSION_FIELDS = [
   ['profile', 'Profile GUI'],
   ['settings', 'Settings GUI']
 ];
-const PAGES = ['map', 'overview', 'runtime', 'plugins', 'tools', ...ADMIN_PAGES];
+const PAGES = ['map', 'overview', 'runtime', 'plugins', 'tools', ...HUNT_ENGINE_PAGES, ...ADMIN_PAGES];
 
 const translations = {
   zh: {
@@ -195,18 +207,20 @@ const translations = {
     'nav.runtime': '运行时',
     'nav.plugins': '插件',
     'nav.tools': '工具',
-    'nav.assets': '资源',
+    'nav.huntEngine': 'HuntEngine',
     'nav.titles': '称号',
     'nav.settings': '设置',
     'nav.access': '权限',
     'nav.ai': 'AI',
     'nav.admin': '管理',
+    'nav.more': '更多',
     'language.switch': '切换到 English',
     'session.eyebrow': '网页控制台',
     'session.guest': '访客视图',
     'login.username': '玩家名 / 面板管理员',
     'login.password': '游戏密码 / 面板密码',
     'login.action': '登录',
+    'identity.claimRequired': '此网页账号尚未绑定游戏 UUID。请进入服务器使用 /login <网页密码> 认领；online-mode 服务器也可使用 /register <新密码> <新密码> 认领。认领完成前，聊天与命令已禁用。',
     'register.description': '首次进服前先在这里注册；这个密码就是游戏 /login 密码，也可用于网页登录（需开启）。',
     'register.username': '玩家名称（3-16 位）',
     'register.password': '密码',
@@ -225,6 +239,20 @@ const translations = {
     'remote.local': '当前使用同源面板。',
     'remote.saved': '后端连接已保存。',
     'remote.title': '远程前端 / API',
+    'connection.action': '连接',
+    'connection.eyebrow': '连接状态',
+    'connection.title': '后端连接',
+    'connection.backendUrl': '后端地址',
+    'connection.apiKey': 'API 密钥',
+    'connection.local': '同源面板',
+    'connection.connecting': '正在连接',
+    'connection.online': '已连接',
+    'connection.offline': '后端不可用',
+    'connection.stale': '数据已过期',
+    'connection.required': '需要后端地址',
+    'connection.updated': '最近更新：{time}',
+    'form.unsaved': '有未保存的更改。自动刷新不会覆盖此表单。',
+    'form.saving': '正在保存…',
     'remote.corsEnabled': '允许独立前端跨域',
     'remote.corsAllowOrigin': '允许来源，例如 * 或 https://panel.example.com',
     'remote.apiKeyEnabled': '允许 API key 管理',
@@ -232,6 +260,14 @@ const translations = {
     'metric.online': '在线',
     'metric.memory': '内存',
     'map.open': '在新标签打开地图',
+    'map.stateEyebrow': '地图状态',
+    'map.loadingTitle': '正在准备地图',
+    'map.loadingDescription': '正在检查地图服务…',
+    'map.emptyTitle': '尚未连接地图',
+    'map.emptyDescription': '连接后端后即可加载地图，或请管理员检查地图地址设置。',
+    'map.errorTitle': '地图暂时不可用',
+    'map.errorDescription': '无法读取地图地址。请检查后端连接或稍后重试。',
+    'map.retry': '重新检查',
     'overview.eyebrow': '实时服务器',
     'overview.title': '总览',
     'worlds.title': '世界',
@@ -272,61 +308,59 @@ const translations = {
     'players.none': '当前没有玩家在线。',
     'tools.eyebrow': 'Minecraft 操作',
     'tools.title': '工具',
-    'assets.eyebrow': '自定义内容工作台',
-    'assets.title': '资源',
-    'assets.upload': '上传资源',
-    'assets.uploadAction': '上传文件',
-    'assets.itemWizard': '物品向导',
-    'assets.saveItem': '保存物品',
-    'assets.promptBuilder': 'AI 提示词生成',
-    'assets.generatePrompt': '生成提示词',
-    'assets.validate': '部署检查',
-    'assets.publish': '发布资源包',
-    'assets.packs': '资源包',
-    'assets.images': '图片',
-    'assets.presets': '预设',
-    'assets.items': '物品',
-    'assets.emptyPacks': '还没有上传资源包。',
-    'assets.emptyImages': '还没有上传图片。',
-    'assets.emptyPresets': '还没有上传预设。',
-    'assets.emptyItems': '还没有自定义物品。',
-    'assets.itemId': '物品 ID',
-    'assets.itemIdPlaceholder': '唯一 ID，例如 frost_sword',
-    'assets.itemNameZh': '中文显示名',
-    'assets.itemNameZhPlaceholder': '玩家看到的中文名',
-    'assets.itemNameEn': '英文显示名',
-    'assets.itemNameEnPlaceholder': '玩家看到的英文名',
-    'assets.material': '基础材质',
-    'assets.materialPlaceholder': 'Minecraft 材质，例如 PAPER',
-    'assets.customModelData': 'CustomModelData',
-    'assets.customModelDataPlaceholder': '模型编号，例如 1001',
-    'assets.amount': '数量',
-    'assets.amountPlaceholder': '默认 1',
-    'assets.category': '分类',
-    'assets.categoryPlaceholder': 'weapons / tools / ui',
-    'assets.packFile': '资源包文件',
-    'assets.packFilePlaceholder': '已上传的 zip 文件名',
-    'assets.packFileHint': '选择这个物品依赖的已上传资源包。',
-    'assets.permission': '权限节点',
-    'assets.permissionPlaceholder': '留空或 hunterassets.item.example',
-    'assets.iconPath': '图标路径',
-    'assets.iconPathPlaceholder': '资源包内路径，例如 icons/example.png',
-    'assets.iconPathHint': '填写资源包内路径，或选择已上传的图片文件名。',
-    'assets.description': '说明',
-    'assets.descriptionPlaceholder': '这个物品的用途',
-    'assets.loreZh': '中文 Lore',
-    'assets.loreZhPlaceholder': '每行一条中文 Lore',
-    'assets.loreEn': '英文 Lore',
-    'assets.loreEnPlaceholder': '每行一条英文 Lore',
-    'assets.promptUseCase': '用途，例如 weapon / badge / menu icon',
-    'assets.promptTheme': '主题，例如 ice dragon / sci-fi / fantasy',
-    'assets.promptCategory': '资源分类，例如 items',
-    'assets.promptStyle': '风格，例如 Minecraft pixel art',
-    'assets.promptPalette': '色板，例如 blue silver high contrast',
-    'assets.promptMaterialFeel': '材质感，例如 metal / cloth / crystal',
-    'assets.promptResolution': '分辨率，例如 16x16 / 32x32',
-    'assets.publishFile': '要发布的资源包 zip 文件名',
-    'assets.publishBaseUrl': '资源包公开访问根地址',
+    'huntEngine.eyebrow': '自定义内容运营',
+    'huntEngine.title': 'HuntEngine',
+    'huntEngine.catalogue': '内容目录',
+    'huntEngine.catalogueHint': '所有内容定义由引擎管理；面板不会直接写入引擎 YAML。',
+    'huntEngine.packages': '原生内容包',
+    'huntEngine.packagesHint': '上传原生 ZIP 内容包到 HuntEngine 暂存区。',
+    'huntEngine.simpleItem': '安全简单物品向导',
+    'huntEngine.simpleItemHint': '创建一个固定 huntercraft 命名空间中的原版物品。模型、方块、家具、配方、字体、图片和声音仍须通过已审核的原生 ZIP 内容包导入。',
+    'huntEngine.simpleItemId': '物品 ID',
+    'huntEngine.simpleItemIdPlaceholder': 'starter_token',
+    'huntEngine.simpleItemIdHint': '固定内容 ID：huntercraft:<id>。仅可使用小写字母、数字、_ 或 -。',
+    'huntEngine.simpleItemMaterial': '原版材料',
+    'huntEngine.simpleItemMaterialHint': '向导只提供安全的 Bukkit 材料白名单。',
+    'huntEngine.simpleItemName': '显示名称',
+    'huntEngine.simpleItemNamePlaceholder': '新手代币',
+    'huntEngine.simpleItemDescription': '描述',
+    'huntEngine.simpleItemDescriptionPlaceholder': '一份小小的欢迎礼物。',
+    'huntEngine.simpleItemTextHint': '仅允许纯文本；不接受格式化、模板或点击操作。',
+    'huntEngine.createSimpleItem': '创建并暂存物品',
+    'huntEngine.simpleItemStaged': '简单物品 {id} 已创建并暂存。请校验、构建并发布后再使用。',
+    'huntEngine.upload': '暂存内容包',
+    'huntEngine.operations': '构建与发布',
+    'huntEngine.operationsHint': '构建、发布与重载均异步执行；失败时当前资源包不会被替换。',
+    'huntEngine.validate': '校验',
+    'huntEngine.build': '构建',
+    'huntEngine.publish': '发布',
+    'huntEngine.reload': '重载',
+    'huntEngine.sendPackPlayer': '在线玩家',
+    'huntEngine.sendPack': '发送当前资源包',
+    'huntEngine.migration': '迁移诊断',
+    'huntEngine.settingsManaged': '资源包生命周期由 HuntEngine 工作台管理。',
+    'huntEngine.contents': '内容',
+    'huntEngine.staged': '暂存包',
+    'huntEngine.resourcePack': '资源包',
+    'huntEngine.migrationSummary': '迁移',
+    'huntEngine.available': '引擎可用',
+    'huntEngine.unavailable': '引擎不可用',
+    'huntEngine.packPublished': '当前资源包已发布',
+    'huntEngine.packConfigured': '资源包已配置，等待发布',
+    'huntEngine.packMissing': '尚无可用资源包',
+    'huntEngine.noContents': '目录中暂无内容。',
+    'huntEngine.noPackages': '暂存区为空。',
+    'huntEngine.removePackage': '移除',
+    'huntEngine.noOperations': '尚未开始操作。',
+    'huntEngine.noMigration': '暂无迁移记录。',
+    'huntEngine.operationStarted': 'HuntEngine 操作已开始。',
+    'huntEngine.packageStaged': '内容包已暂存。',
+    'huntEngine.packageRemoved': '内容包已移除。',
+    'huntEngine.packSent': '已发送当前资源包。',
+    'huntEngine.choosePackage': '请先选择 ZIP 内容包。',
+    'huntEngine.uploadTooLarge': '内容包不得超过 8 MiB。',
+    'huntEngine.confirmOperation': '确认执行 {operation}？若操作失败，当前生效资源包不会被替换。',
+    'huntEngine.confirmRemovePackage': '确认从暂存区移除此内容包？',
     'titles.eyebrow': '原生称号系统',
     'titles.title': '称号',
     'titles.manage': '称号定义',
@@ -360,6 +394,7 @@ const translations = {
     'console.placeholder': 'list',
     'console.run': '运行',
     'action.run': '运行',
+    'action.close': '关闭',
     'commandCenter.heal': '治疗',
     'commandCenter.fly': '飞行',
     'commandCenter.gamemode': '游戏模式',
@@ -418,7 +453,7 @@ const translations = {
     'settings.tab.web': '网页面板',
     'settings.tab.webHint': '名称、F3 和面板地址',
     'settings.tab.bundles': '内置插件',
-    'settings.tab.bundlesHint': 'Geyser、资源和兼容项',
+    'settings.tab.bundlesHint': 'Geyser、HuntEngine 和兼容项',
     'settings.tab.geyser': 'Geyser',
     'settings.tab.geyserHint': '基岩版端口和登录模式',
     'settings.tab.display': '游戏显示',
@@ -457,9 +492,9 @@ const translations = {
     'guiPermission.teleport': '传送 / TPA GUI',
     'guiPermission.homes': '家园 GUI',
     'guiPermission.random-teleport': '随机传送',
-    'guiPermission.assets': '资源物品 GUI',
-    'guiPermission.assets-give': '发放资源物品',
-    'guiPermission.assets-admin': '资源管理',
+    'guiPermission.hunt-engine': 'HuntEngine 内容目录',
+    'guiPermission.hunt-engine-give': 'HuntEngine 内容发放',
+    'guiPermission.hunt-engine-admin': 'HuntEngine 管理',
     'guiPermission.auth': '登录认证 GUI',
     'guiPermission.tps': 'TPS 显示',
     'guiPermission.heal': '治疗',
@@ -664,15 +699,15 @@ const translations = {
     'ai.testDone': 'AI 测试完成。',
     'webUsers.title': '网页身份',
     'webUsers.username': '用户名',
-    'webUsers.password': '可选网页密码',
+    'webUsers.identityRequired': '该玩家须先在游戏内完成一次 HunterAuth 登录，网页和游戏使用同一密码。',
     'webUsers.commands': '允许命令',
     'webUsers.allowedCommands': 'list spawn 或 *',
     'webUsers.save': '保存身份',
     'webUsers.saved': '网页身份已保存。',
     'webUsers.removed': '网页身份已移除。',
     'webUsers.none': '暂无网页身份配置。',
-    'webUsers.webPasswordSet': '已设置网页密码',
-    'webUsers.hunterAuthOnly': '仅 HunterAuth',
+    'webUsers.identityBound': 'HunterAuth 已绑定',
+    'webUsers.identityMissing': '等待 HunterAuth 绑定',
     'webUsers.commandsOn': '命令开',
     'webUsers.commandsOff': '命令关',
     'admin.tab.modules': '模块',
@@ -695,6 +730,8 @@ const translations = {
     'health.noAlerts': '无活跃告警',
     'role.guest': '访客',
     'role.player': '玩家',
+    'role.content-editor': '内容编辑者',
+    'role.content-publisher': '内容发布者',
     'role.admin': '管理员',
     'status.ok': '正常',
     'status.warning': '警告',
@@ -752,18 +789,20 @@ const translations = {
     'nav.runtime': 'Runtime',
     'nav.plugins': 'Plugins',
     'nav.tools': 'Tools',
-    'nav.assets': 'Assets',
+    'nav.huntEngine': 'HuntEngine',
     'nav.titles': 'Titles',
     'nav.settings': 'Settings',
     'nav.access': 'Access',
     'nav.ai': 'AI',
     'nav.admin': 'Admin',
+    'nav.more': 'More',
     'language.switch': 'Switch to Chinese',
     'session.eyebrow': 'Web console',
     'session.guest': 'Guest view',
     'login.username': 'Player name / panel admin',
     'login.password': 'Game password / panel password',
     'login.action': 'Login',
+    'identity.claimRequired': 'This web account is not yet bound to a game UUID. Join the server and claim it with /login <web password>; on an online-mode server you can also claim it with /register <new password> <new password>. Chat and commands stay disabled until then.',
     'register.description': 'Register before joining; this password is the in-game /login password and can also sign in here when enabled.',
     'register.username': 'Player name (3-16 chars)',
     'register.password': 'Password',
@@ -782,6 +821,20 @@ const translations = {
     'remote.local': 'Using the same-origin panel.',
     'remote.saved': 'Backend connection saved.',
     'remote.title': 'Remote frontend/API',
+    'connection.action': 'Connection',
+    'connection.eyebrow': 'Connection status',
+    'connection.title': 'Backend connection',
+    'connection.backendUrl': 'Backend URL',
+    'connection.apiKey': 'API key',
+    'connection.local': 'Local panel',
+    'connection.connecting': 'Connecting',
+    'connection.online': 'Connected',
+    'connection.offline': 'Backend unavailable',
+    'connection.stale': 'Data is stale',
+    'connection.required': 'Backend URL required',
+    'connection.updated': 'Updated {time}',
+    'form.unsaved': 'You have unsaved changes. Background refresh will not overwrite this form.',
+    'form.saving': 'Saving…',
     'remote.corsEnabled': 'CORS for standalone frontend',
     'remote.corsAllowOrigin': 'Allowed origin, e.g. * or https://panel.example.com',
     'remote.apiKeyEnabled': 'API key management',
@@ -789,6 +842,14 @@ const translations = {
     'metric.online': 'Online',
     'metric.memory': 'Memory',
     'map.open': 'Open map in new tab',
+    'map.stateEyebrow': 'Map status',
+    'map.loadingTitle': 'Preparing map',
+    'map.loadingDescription': 'Checking the map service…',
+    'map.emptyTitle': 'Map is not connected',
+    'map.emptyDescription': 'Connect a backend to load the map, or ask an administrator to check the map URL.',
+    'map.errorTitle': 'Map is temporarily unavailable',
+    'map.errorDescription': 'The map URL could not be read. Check the backend connection and try again.',
+    'map.retry': 'Try again',
     'chat.eyebrow': 'Live chat',
     'chat.title': 'Server chat',
     'chat.placeholder': 'Message players...',
@@ -835,69 +896,59 @@ const translations = {
     'players.none': 'No players online.',
     'tools.eyebrow': 'Minecraft actions',
     'tools.title': 'Tools',
-    'assets.eyebrow': 'Custom content workbench',
-    'assets.title': 'Assets',
-    'assets.upload': 'Upload',
-    'assets.uploadAction': 'Upload file',
-    'assets.itemWizard': 'Item Wizard',
-    'assets.saveItem': 'Save item',
-    'assets.promptBuilder': 'AI Prompt Builder',
-    'assets.generatePrompt': 'Generate prompts',
-    'assets.validate': 'Validate',
-    'assets.publish': 'Publish pack',
-    'assets.packs': 'Resource packs',
-    'assets.images': 'Images',
-    'assets.presets': 'Presets',
-    'assets.items': 'Items',
-    'assets.emptyPacks': 'No resource packs uploaded yet.',
-    'assets.emptyImages': 'No images uploaded yet.',
-    'assets.emptyPresets': 'No presets uploaded yet.',
-    'assets.emptyItems': 'No custom items yet.',
-    'assets.itemId': 'Item ID',
-    'assets.itemIdPlaceholder': 'Unique ID, e.g. frost_sword',
-    'assets.itemNameZh': 'Chinese display name',
-    'assets.itemNameZhPlaceholder': 'Chinese name shown to players',
-    'assets.itemNameEn': 'English display name',
-    'assets.itemNameEnPlaceholder': 'English name shown to players',
-    'assets.material': 'Base material',
-    'assets.materialPlaceholder': 'Minecraft material, e.g. PAPER',
-    'assets.customModelData': 'CustomModelData',
-    'assets.customModelDataPlaceholder': 'Model number, e.g. 1001',
-    'assets.amount': 'Amount',
-    'assets.amountPlaceholder': 'Default 1',
-    'assets.category': 'Category',
-    'assets.categoryPlaceholder': 'weapons / tools / ui',
-    'assets.packFile': 'Resource pack file',
-    'assets.packFilePlaceholder': 'Uploaded zip file name',
-    'assets.packFileHint': 'Choose the uploaded resource pack this item depends on.',
-    'assets.permission': 'Permission node',
-    'assets.permissionPlaceholder': 'Blank or hunterassets.item.example',
-    'assets.iconPath': 'Icon path',
-    'assets.iconPathPlaceholder': 'Path inside the pack, e.g. icons/example.png',
-    'assets.iconPathHint': 'Path inside the resource pack, or an uploaded image file name.',
-    'assets.description': 'Description',
-    'assets.descriptionPlaceholder': 'What this item is for',
-    'assets.loreZh': 'Chinese lore',
-    'assets.loreZhPlaceholder': 'One Chinese lore line per row',
-    'assets.loreEn': 'English lore',
-    'assets.loreEnPlaceholder': 'One English lore line per row',
-    'assets.promptUseCase': 'Use case, e.g. weapon / badge / menu icon',
-    'assets.promptTheme': 'Theme, e.g. ice dragon / sci-fi / fantasy',
-    'assets.promptCategory': 'Asset category, e.g. items',
-    'assets.promptStyle': 'Style, e.g. Minecraft pixel art',
-    'assets.promptPalette': 'Palette, e.g. blue silver high contrast',
-    'assets.promptMaterialFeel': 'Material feel, e.g. metal / cloth / crystal',
-    'assets.promptResolution': 'Resolution, e.g. 16x16 / 32x32',
-    'assets.publishFile': 'Resource pack zip file to publish',
-    'assets.publishBaseUrl': 'Public base URL for the pack',
-    'assets.publishFileLabel': 'Pack file',
-    'assets.publishFileHint': 'Choose a zip from the Resource packs list.',
-    'assets.publishBaseUrlLabel': 'Public base URL',
-    'assets.publishBaseUrlHint': 'Usually the current web panel address.',
-    'assets.publishDefault': 'Use default pack',
-    'assets.packReady': 'Default pack ready',
-    'assets.packPublished': 'Pack published',
-    'assets.packMissing': 'No pack available',
+    'huntEngine.eyebrow': 'Custom content operations',
+    'huntEngine.title': 'HuntEngine',
+    'huntEngine.catalogue': 'Content catalogue',
+    'huntEngine.catalogueHint': 'The engine owns every content definition; the panel never writes engine YAML.',
+    'huntEngine.packages': 'Native content packages',
+    'huntEngine.packagesHint': 'Upload a native ZIP content package to HuntEngine staging.',
+    'huntEngine.simpleItem': 'Safe simple-item wizard',
+    'huntEngine.simpleItemHint': 'Creates one vanilla-backed item in the fixed huntercraft namespace. Models, blocks, furniture, recipes, fonts, images, and sounds still use reviewed native ZIP packages.',
+    'huntEngine.simpleItemId': 'Item ID',
+    'huntEngine.simpleItemIdPlaceholder': 'starter_token',
+    'huntEngine.simpleItemIdHint': 'Fixed content ID: huntercraft:<id>. Use lowercase letters, digits, _ or -.',
+    'huntEngine.simpleItemMaterial': 'Vanilla material',
+    'huntEngine.simpleItemMaterialHint': 'Only the wizard\'s safe Bukkit-material allowlist is available.',
+    'huntEngine.simpleItemName': 'Display name',
+    'huntEngine.simpleItemNamePlaceholder': 'Starter Token',
+    'huntEngine.simpleItemDescription': 'Description',
+    'huntEngine.simpleItemDescriptionPlaceholder': 'A small welcome gift.',
+    'huntEngine.simpleItemTextHint': 'Plain text only; formatting, templates, and click actions are not accepted.',
+    'huntEngine.createSimpleItem': 'Create and stage item',
+    'huntEngine.simpleItemStaged': 'Simple item {id} was created and staged. Validate, build, and publish it before use.',
+    'huntEngine.upload': 'Stage package',
+    'huntEngine.operations': 'Build and publish',
+    'huntEngine.operationsHint': 'Build, publish, and reload run asynchronously. A failed operation never replaces the active pack.',
+    'huntEngine.validate': 'Validate',
+    'huntEngine.build': 'Build',
+    'huntEngine.publish': 'Publish',
+    'huntEngine.reload': 'Reload',
+    'huntEngine.sendPackPlayer': 'Online player',
+    'huntEngine.sendPack': 'Send active pack',
+    'huntEngine.migration': 'Migration diagnostics',
+    'huntEngine.settingsManaged': 'The HuntEngine workspace owns resource-pack lifecycle.',
+    'huntEngine.contents': 'Content',
+    'huntEngine.staged': 'Staged packages',
+    'huntEngine.resourcePack': 'Resource pack',
+    'huntEngine.migrationSummary': 'Migration',
+    'huntEngine.available': 'Engine available',
+    'huntEngine.unavailable': 'Engine unavailable',
+    'huntEngine.packPublished': 'Active resource pack published',
+    'huntEngine.packConfigured': 'Resource pack configured; publish pending',
+    'huntEngine.packMissing': 'No active resource pack',
+    'huntEngine.noContents': 'No content in the catalogue yet.',
+    'huntEngine.noPackages': 'The staging area is empty.',
+    'huntEngine.removePackage': 'Remove',
+    'huntEngine.noOperations': 'No operations have started yet.',
+    'huntEngine.noMigration': 'No migration records yet.',
+    'huntEngine.operationStarted': 'HuntEngine operation started.',
+    'huntEngine.packageStaged': 'Content package staged.',
+    'huntEngine.packageRemoved': 'Content package removed.',
+    'huntEngine.packSent': 'Active resource pack sent.',
+    'huntEngine.choosePackage': 'Choose a ZIP content package first.',
+    'huntEngine.uploadTooLarge': 'Content packages must not exceed 8 MiB.',
+    'huntEngine.confirmOperation': 'Run {operation}? A failed operation will not replace the active resource pack.',
+    'huntEngine.confirmRemovePackage': 'Remove this content package from staging?',
     'titles.eyebrow': 'Native title system',
     'titles.title': 'Titles',
     'titles.manage': 'Title Definitions',
@@ -931,6 +982,7 @@ const translations = {
     'console.placeholder': 'list',
     'console.run': 'Run',
     'action.run': 'Run',
+    'action.close': 'Close',
     'commandCenter.heal': 'Heal',
     'commandCenter.fly': 'Fly',
     'commandCenter.gamemode': 'Gamemode',
@@ -989,7 +1041,7 @@ const translations = {
     'settings.tab.web': 'Web panel',
     'settings.tab.webHint': 'Name, F3 and panel address',
     'settings.tab.bundles': 'Bundled plugins',
-    'settings.tab.bundlesHint': 'Geyser, assets and compatibility',
+    'settings.tab.bundlesHint': 'Geyser, HuntEngine and compatibility',
     'settings.tab.geyser': 'Geyser',
     'settings.tab.geyserHint': 'Bedrock port and login mode',
     'settings.tab.display': 'Game display',
@@ -1028,9 +1080,9 @@ const translations = {
     'guiPermission.teleport': 'TPA / teleport GUI',
     'guiPermission.homes': 'Homes GUI',
     'guiPermission.random-teleport': 'Random teleport',
-    'guiPermission.assets': 'Assets GUI',
-    'guiPermission.assets-give': 'Assets give',
-    'guiPermission.assets-admin': 'Assets admin',
+    'guiPermission.hunt-engine': 'HuntEngine catalogue',
+    'guiPermission.hunt-engine-give': 'HuntEngine content give',
+    'guiPermission.hunt-engine-admin': 'HuntEngine administration',
     'guiPermission.auth': 'Auth GUI',
     'guiPermission.tps': 'TPS display',
     'guiPermission.heal': 'Heal',
@@ -1247,15 +1299,15 @@ const translations = {
     'ai.testDone': 'AI test completed.',
     'webUsers.title': 'Web roles',
     'webUsers.username': 'Username',
-    'webUsers.password': 'Optional web password',
+    'webUsers.identityRequired': 'The player must complete one in-game HunterAuth login; web and game use the same password.',
     'webUsers.commands': 'commands',
     'webUsers.allowedCommands': 'list spawn or *',
     'webUsers.save': 'Save role',
     'webUsers.saved': 'Web role saved.',
     'webUsers.removed': 'Web role removed.',
     'webUsers.none': 'No web roles configured.',
-    'webUsers.webPasswordSet': 'web password set',
-    'webUsers.hunterAuthOnly': 'HunterAuth only',
+    'webUsers.identityBound': 'HunterAuth bound',
+    'webUsers.identityMissing': 'HunterAuth binding required',
     'webUsers.commandsOn': 'commands on',
     'webUsers.commandsOff': 'commands off',
     'admin.tab.modules': 'Modules',
@@ -1278,6 +1330,8 @@ const translations = {
     'health.noAlerts': 'No active alerts',
     'role.guest': 'Guest',
     'role.player': 'Player',
+    'role.content-editor': 'Content editor',
+    'role.content-publisher': 'Content publisher',
     'role.admin': 'Admin',
     'status.ok': 'ok',
     'status.warning': 'warning',
@@ -1338,7 +1392,8 @@ function t(key, values = {}) {
 }
 
 function roleLabel(role) {
-  return t(`role.${role === 'admin' ? 'admin' : role === 'player' ? 'player' : 'guest'}`);
+  const normalized = String(role || '').toLowerCase();
+  return t(`role.${['admin', 'player', 'content-editor', 'content-publisher'].includes(normalized) ? normalized : 'guest'}`);
 }
 
 function statusLabel(status) {
@@ -1471,25 +1526,104 @@ function assetUrl(path) {
   return state.backendUrl ? apiUrl(cleanPath) : cleanPath.replace(/^\/+/, '');
 }
 
+function formForControl(control) {
+  if (!(control instanceof Element)) return null;
+  if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement || control instanceof HTMLButtonElement) {
+    if (control.form) return control.form;
+  }
+  return control.closest('form');
+}
+
+function formIsDirty(formOrId) {
+  const form = typeof formOrId === 'string' ? $(formOrId) : formOrId;
+  return form instanceof HTMLFormElement && form.dataset.dirty === 'true';
+}
+
+function anyFormDirty(formIds) {
+  return formIds.some((id) => formIsDirty(id));
+}
+
+function statusHostForForm(form, source) {
+  if (!(form instanceof HTMLFormElement)) return null;
+  const origin = source instanceof Element ? source : null;
+  return origin?.closest('.panel, .connectionPanel, .authDialog') || form.closest('.panel, .connectionPanel, .authDialog') || form;
+}
+
+function setFormState(form, message, tone = '', source = null) {
+  const host = statusHostForForm(form, source);
+  if (!host || !form?.id) return;
+  let line = host.querySelector(`.formState[data-form-state-for="${form.id}"]`);
+  if (!line) {
+    line = document.createElement('p');
+    line.className = 'formState';
+    line.dataset.formStateFor = form.id;
+    line.setAttribute('role', 'status');
+    line.setAttribute('aria-live', 'polite');
+    host.append(line);
+  }
+  line.textContent = message || '';
+  if (tone) line.dataset.tone = tone;
+  else delete line.dataset.tone;
+}
+
+function markFormDirty(form, source = null) {
+  if (!(form instanceof HTMLFormElement) || form.dataset.transient === 'true') return;
+  form.dataset.dirty = 'true';
+  setFormState(form, t('form.unsaved'), 'saving', source);
+}
+
+function markFormClean(form, message = '', tone = 'success', source = null) {
+  if (!(form instanceof HTMLFormElement)) return;
+  delete form.dataset.dirty;
+  delete form.dataset.submitting;
+  form.removeAttribute('aria-busy');
+  if (message) setFormState(form, message, tone, source);
+}
+
+function setConnectionPanel(open, focus = false) {
+  const panel = $('connectionPanel');
+  const toggle = $('connectionToggle');
+  if (!panel || !toggle) return;
+  panel.hidden = !open;
+  toggle.setAttribute('aria-expanded', String(open));
+  if (focus && open) window.setTimeout(() => $('backendUrl')?.focus(), 0);
+}
+
+function setConnectionStatus(status, detail = '') {
+  const safeStatus = ['idle', 'connecting', 'online', 'offline', 'stale'].includes(status) ? status : 'idle';
+  state.connection.status = safeStatus;
+  state.connection.detail = detail || '';
+  const toggle = $('connectionToggle');
+  const line = $('connectionFormState');
+  const key = safeStatus === 'idle'
+    ? (standaloneFrontend() && !state.backendUrl ? 'connection.required' : 'connection.local')
+    : `connection.${safeStatus}`;
+  const label = t(key);
+  const detailLine = detail ? `${label} · ${detail}` : label;
+  if (toggle) {
+    toggle.dataset.state = safeStatus;
+    toggle.setAttribute('aria-label', detailLine);
+  }
+  if (line) {
+    line.textContent = detailLine;
+    line.dataset.tone = safeStatus === 'offline' ? 'error' : safeStatus === 'online' ? 'success' : safeStatus === 'connecting' || safeStatus === 'stale' ? 'saving' : '';
+  }
+}
+
 function renderBackendConnection() {
   const line = $('backendLine');
   if (!line) return;
   const form = $('connectionForm');
   const clearButton = $('clearConnectionButton');
-  if (standaloneFrontend()) {
-    if (form) form.hidden = false;
-    if (clearButton) clearButton.hidden = true;
-    line.textContent = state.backendUrl
-      ? t('remote.connected', { url: state.backendUrl })
-      : t('remote.required');
-  } else {
-    if (form) form.hidden = true;
-    line.textContent = state.backendUrl
-      ? t('remote.connected', { url: state.backendUrl })
-      : t('remote.local');
+  if (form) form.hidden = false;
+  if (clearButton) clearButton.hidden = !state.backendUrl;
+  line.textContent = state.backendUrl
+    ? t('remote.connected', { url: state.backendUrl })
+    : standaloneFrontend() ? t('remote.required') : t('remote.local');
+  if (!formIsDirty(form)) {
+    if ($('backendUrl')) $('backendUrl').value = state.backendUrl;
+    if ($('backendApiKey')) $('backendApiKey').value = state.apiKey;
   }
-  if ($('backendUrl')) $('backendUrl').value = state.backendUrl;
-  if ($('backendApiKey')) $('backendApiKey').value = state.apiKey;
 }
 
 const severityClass = (value) => ['ok', 'warning', 'critical', 'disabled'].includes(value) ? value : 'ok';
@@ -1530,6 +1664,12 @@ function setOutput(message, output = '', editorUrl = '') {
   $('commandResult').innerHTML = esc(text) + (editorUrl
     ? `\n\n<a class="editorLink" href="${esc(editorUrl)}" target="_blank" rel="noreferrer">Open LuckPerms WebEditor</a>`
     : '');
+  const activeForm = state.activeForm;
+  if (activeForm instanceof HTMLFormElement && activeForm.isConnected) {
+    const failed = /(?:error|failed|错误|失败)/i.test(String(message));
+    markFormClean(activeForm, message, failed ? 'error' : 'success');
+    state.activeForm = null;
+  }
   showToast(message);
 }
 
@@ -1579,6 +1719,15 @@ function applyFieldHelp() {
   });
 }
 
+function ensureAccessibleLabels(root = document) {
+  const controls = root.querySelectorAll?.('input, select, textarea') || [];
+  controls.forEach((control) => {
+    if (control.type === 'hidden' || control.hasAttribute('aria-label') || control.hasAttribute('aria-labelledby') || control.labels?.length) return;
+    const label = control.placeholder || control.name || control.id || 'Input';
+    control.setAttribute('aria-label', label);
+  });
+}
+
 function applyTranslations() {
   document.documentElement.lang = state.lang === 'zh' ? 'zh-CN' : 'en';
   document.title = state.lang === 'zh' ? 'HunterCore 面板' : 'HunterCore Panel';
@@ -1596,18 +1745,25 @@ function applyTranslations() {
   if (languageToggle) languageToggle.textContent = state.lang === 'zh' ? 'EN' : '中文';
   const webSettingsButton = $('webSettingsForm')?.querySelector('button[type="submit"]');
   if (webSettingsButton) webSettingsButton.textContent = t('webSettings.save');
-  translateOptions('webUserRole', { player: roleLabel('player'), admin: roleLabel('admin') });
+  translateOptions('webUserRole', {
+    player: roleLabel('player'),
+    'content-editor': roleLabel('content-editor'),
+    'content-publisher': roleLabel('content-publisher'),
+    admin: roleLabel('admin')
+  });
   translateOptions('webUserAllowedMode', {
     inherit: t('allowed.inherit'),
     custom: t('allowed.custom'),
     none: t('allowed.none')
   });
   applyFieldHelp();
+  ensureAccessibleLabels();
   translateOptions('actorModule', { npcs: t('actors.npc'), 'fake-players': t('actors.fakePlayer'), 'real-fake-players': t('actors.realFakePlayer') });
   translateOptions('actorKind', { villager: t('actors.villager'), mannequin: t('actors.mannequin') });
   const commandResult = $('commandResult');
   if (commandResult?.dataset.placeholder !== 'false') setCommandPlaceholder();
   renderBackendConnection();
+  setConnectionStatus(state.connection.status, state.connection.detail);
   if (state.lastData?.auth) renderAuthPublic(state.lastData.auth);
 }
 
@@ -1617,7 +1773,7 @@ function rerenderCachedStatus() {
   const data = state.lastData;
   renderHealth(data.health);
   renderOverview(data);
-  renderAssets(data.assets);
+  renderHuntEngine(data.huntEngine);
   renderTitles(data.titles);
   renderActorWorlds(data.worlds);
   renderActors(data.actorDetails);
@@ -1647,19 +1803,28 @@ function pageFromLocation() {
 }
 
 function showPage(page, push = true) {
-  const targetPage = ADMIN_PAGES.includes(page) && !state.session?.admin ? 'overview' : page;
+  const playerOnly = page === 'tools';
+  const huntEngineOnly = HUNT_ENGINE_PAGES.includes(page);
+  const targetPage = ADMIN_PAGES.includes(page) && !state.session?.admin
+    ? 'overview'
+    : playerOnly && !state.session
+      ? 'overview'
+      : huntEngineOnly && !hasHuntEngineCapability('read')
+        ? 'overview'
+      : page;
   state.page = targetPage;
   $$('.pageView').forEach((view) => {
     const active = view.id === targetPage;
     view.hidden = !active;
     view.classList.toggle('isActive', active);
   });
-  $$('.navButton[data-page-target]').forEach((button) => {
+  $$('[data-page-target]').forEach((button) => {
     button.classList.toggle('isActive', button.dataset.pageTarget === targetPage);
   });
   if (push && window.location.hash !== `#${targetPage}`) {
     history.pushState(null, '', `#${targetPage}`);
   }
+  closeNavigationMenu();
   window.scrollTo(0, 0);
 }
 
@@ -1712,7 +1877,7 @@ function allowedLine(user) {
 
 function webUserLine(user) {
   return `<article class="dataItem accessCard ${state.selectedWebUser === user.id ? 'isSelected' : ''}" data-user-select="${esc(user.id)}">
-    <span>${esc(user.displayName)}<small>${esc(roleLabel(user.role))} · ${user.passwordConfigured ? t('webUsers.webPasswordSet') : t('webUsers.hunterAuthOnly')} · ${user.commandExecution ? t('webUsers.commandsOn') : t('webUsers.commandsOff')} · ${esc(allowedLine(user))}</small></span>
+    <span>${esc(user.displayName)}<small>${esc(roleLabel(user.role))} · ${user.identityBound ? t('webUsers.identityBound') : t('webUsers.identityMissing')} · ${user.commandExecution ? t('webUsers.commandsOn') : t('webUsers.commandsOff')} · ${esc(allowedLine(user))}</small></span>
     <span class="userActions">
       <button type="button" data-user-edit="${esc(user.id)}">${esc(t('action.edit'))}</button>
       <button type="button" data-user-remove="${esc(user.id)}">${esc(t('action.remove'))}</button>
@@ -1819,20 +1984,60 @@ function renderAuthPublic(auth) {
   }
 }
 
-function closeAuthModals() {
+function setModalBackgroundInert(active) {
+  const app = document.querySelector('.app');
+  if (!app) return;
+  Array.from(app.children).forEach((node) => {
+    if (node.matches('#authBackdrop, .authModal, #actionToast')) return;
+    if (active) {
+      if (!node.dataset.modalAriaHidden) {
+        node.dataset.modalAriaHidden = node.getAttribute('aria-hidden') ?? '__none__';
+      }
+      node.inert = true;
+      node.setAttribute('aria-hidden', 'true');
+    } else if (node.dataset.modalAriaHidden) {
+      node.inert = false;
+      const previous = node.dataset.modalAriaHidden;
+      if (previous === '__none__') node.removeAttribute('aria-hidden');
+      else node.setAttribute('aria-hidden', previous);
+      delete node.dataset.modalAriaHidden;
+    }
+  });
+  document.body.classList.toggle('modalOpen', active);
+}
+
+function modalFocusableElements(modal) {
+  if (!(modal instanceof Element)) return [];
+  return Array.from(modal.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+    .filter((element) => element.getClientRects().length > 0);
+}
+
+function closeAuthModals({ restoreFocus = true } = {}) {
+  const opener = state.modal.opener;
   $('authBackdrop').hidden = true;
   $('loginModal').hidden = true;
   $('registerModal').hidden = true;
+  setModalBackgroundInert(false);
+  state.modal.kind = '';
+  state.modal.opener = null;
+  if (restoreFocus && opener instanceof HTMLElement && opener.isConnected) {
+    window.setTimeout(() => opener.focus(), 0);
+  }
 }
 
-function openAuthModal(kind) {
+function openAuthModal(kind, opener = document.activeElement) {
   if (state.session) {
     closeAuthModals();
     return;
   }
+  setConnectionPanel(false);
+  closeNavigationMenu();
+  state.modal.kind = kind;
+  state.modal.opener = opener instanceof HTMLElement ? opener : null;
   $('authBackdrop').hidden = false;
   $('loginModal').hidden = kind !== 'login';
   $('registerModal').hidden = kind !== 'register';
+  setModalBackgroundInert(true);
   if (kind === 'register' && $('registerButton').disabled) {
     setOutput(t('register.closed'));
   }
@@ -1847,13 +2052,88 @@ function setAdminVisibility(admin) {
     }
     element.hidden = !admin;
   });
+  const adminGroup = document.querySelector('[data-nav-group="admin"]');
+  if (adminGroup) adminGroup.hidden = !admin;
+}
+
+function huntEngineCapabilities(session = state.session) {
+  return session?.huntEngineCapabilities || {};
+}
+
+function hasHuntEngineCapability(capability, session = state.session) {
+  return Boolean(huntEngineCapabilities(session)[capability]);
+}
+
+function setHuntEngineVisibility(access) {
+  $$('.huntEngineOnly').forEach((element) => {
+    if (element.classList.contains('pageView')) {
+      if (!access) element.hidden = true;
+      return;
+    }
+    element.hidden = !access;
+  });
+  const group = document.querySelector('[data-nav-group="hunt-engine"]');
+  if (group) group.hidden = !access;
+}
+
+function setRoleNavigation(session) {
+  const signedIn = Boolean(session);
+  const playerGroup = document.querySelector('[data-nav-group="player"]');
+  if (playerGroup) playerGroup.hidden = !signedIn;
+  $$('[data-nav-role="player"]').forEach((element) => {
+    element.hidden = !signedIn;
+  });
+}
+
+function identityClaimRequired() {
+  return state.session?.identityBound === false;
+}
+
+function setIdentityClaimNotice(id, required) {
+  const notice = $(id);
+  if (!notice) return;
+  notice.hidden = !required;
+  if (required) notice.textContent = t('identity.claimRequired');
+}
+
+function updateChatAccess() {
+  const signedIn = Boolean(state.session);
+  const claimRequired = identityClaimRequired();
+  const form = $('homeChatForm');
+  const input = $('homeChatInput');
+  form.hidden = !signedIn;
+  form.querySelectorAll('input, button').forEach((control) => {
+    control.disabled = !signedIn || claimRequired;
+  });
+  input.placeholder = !signedIn
+    ? t('chat.login')
+    : claimRequired
+      ? t('identity.claimRequired')
+      : t('chat.placeholder');
+  setIdentityClaimNotice('chatIdentityClaimNotice', claimRequired);
+}
+
+function updateCommandAccess() {
+  const claimRequired = identityClaimRequired();
+  [
+    ...$$('#commandForm input, #commandForm button'),
+    ...$$('#tools .quickRow [data-command]'),
+    ...$$('#tools .commandAction input, #tools .commandAction select, #tools .commandAction textarea, #tools .commandAction button')
+  ].forEach((control) => {
+    control.disabled = claimRequired;
+  });
+  setIdentityClaimNotice('commandIdentityClaimNotice', claimRequired);
 }
 
 function updateSessionChrome() {
   const session = state.session;
   const admin = Boolean(session?.admin);
   setAdminVisibility(admin);
+  setHuntEngineVisibility(hasHuntEngineCapability('read', session));
+  setRoleNavigation(session);
   if (!admin && ADMIN_PAGES.includes(state.page)) showPage('overview');
+  if (!hasHuntEngineCapability('read', session) && HUNT_ENGINE_PAGES.includes(state.page)) showPage('overview');
+  if (!session && state.page === 'tools') showPage('overview');
   $('sessionToggle').hidden = Boolean(session);
   $('sessionToggle').textContent = t('login.action');
   $('registerToggle').hidden = Boolean(session) || $('registerButton')?.disabled;
@@ -1864,6 +2144,8 @@ function updateSessionChrome() {
     : t('session.guest');
   $('sessionBadge').textContent = session ? roleLabel(session.role) : roleLabel('guest');
   $('sessionBadge').className = `roleBadge ${admin ? 'ok' : ''}`;
+  updateChatAccess();
+  updateCommandAccess();
 }
 
 function renderHealth(health) {
@@ -1890,9 +2172,7 @@ function chatSourceLabel(source) {
 function renderHomeChat(lines = state.chatLines) {
   state.chatLines = Array.isArray(lines) ? lines : [];
   $('chatStatus').textContent = String(state.chatLines.length);
-  $('homeChatForm').hidden = !state.session;
-  $('homeChatInput').disabled = !state.session;
-  $('homeChatInput').placeholder = state.session ? t('chat.placeholder') : t('chat.login');
+  updateChatAccess();
   $('homeChatList').innerHTML = state.chatLines.length
     ? state.chatLines.slice(-80).map((line) => `
       <div class="chatLine" data-source="${esc(line.source || 'game')}">
@@ -2026,88 +2306,153 @@ function renderPluginPager(total, page, pageCount, visible) {
   `;
 }
 
-function defaultAssetPack(assets) {
-  const packs = assets?.packs || [];
-  return packs.find((file) => file.name === 'HunterCore-default-ui.zip')
-    || packs.find((file) => /\.zip$/i.test(file.name || ''))
-    || packs[0]
-    || null;
+function huntEngineStatusTone(status) {
+  if (!status?.available) return 'bad';
+  const lifecycle = String(status.lifecycle || '').toLowerCase();
+  return ['ready', 'running', 'published'].includes(lifecycle) ? 'good' : 'warn';
 }
 
-function currentPanelBaseUrl() {
-  return window.location?.origin && window.location.origin !== 'null' ? window.location.origin : '';
+function safeHuntEngineUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw, window.location.origin);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
 }
 
-function renderAssets(assets) {
-  if (!state.session?.admin || !assets) return;
-  const validation = assets.validation || {};
-  const pack = defaultAssetPack(assets);
-  const resourcePack = assets.resourcePack || {};
-  const packUrl = resourcePack.url || '';
-  $('assetsHero').innerHTML = [
-    summaryCard('Items', (assets.items || []).length, `${(assets.packs || []).length} packs`),
-    summaryCard('Images', (assets.images || []).length, `${(assets.presets || []).length} presets`),
-    summaryCard('Validation', (validation.errors || []).length, `${(validation.warnings || []).length} warnings`, (validation.errors || []).length ? 'bad' : (validation.warnings || []).length ? 'warn' : 'good'),
-    summaryCard('Pack URL', packUrl || '--', resourcePack.enabled ? 'enabled' : 'disabled')
+function huntEngineOperationTime(value) {
+  const time = Number(value);
+  return Number.isFinite(time) && time > 0 ? new Date(time).toLocaleTimeString() : '--';
+}
+
+function rememberHuntEngineOperation(operation) {
+  if (!operation?.id) return;
+  state.huntEngineOperations = [operation, ...state.huntEngineOperations.filter((entry) => entry?.id !== operation.id)].slice(0, 8);
+}
+
+function renderHuntEngineOperations() {
+  const target = $('huntEngineOperationList');
+  if (!target) return;
+  const rows = state.huntEngineOperations.map((operation) => dataItem(
+    `${String(operation.type || 'operation').toUpperCase()} · ${String(operation.state || 'queued').toUpperCase()}`,
+    operation.message || '--',
+    `rev ${operation.contentRevision ?? '--'} · ${huntEngineOperationTime(operation.startedAt)}`
+  ));
+  target.innerHTML = rows.join('') || `<p class="mutedState">${esc(t('huntEngine.noOperations'))}</p>`;
+}
+
+function renderHuntEngineMigration(migration, includeEntries = false) {
+  const target = $('huntEngineMigrationList');
+  if (!target) return;
+  const summary = migration || {};
+  const rows = [
+    dataItem('State', summary.state || '--', summary.message || ''),
+    dataItem('Entries', summary.entryCount ?? 0, summary.journalLocation || '')
+  ];
+  if (includeEntries && Array.isArray(summary.entries)) {
+    rows.push(...summary.entries.map((entry) => dataItem(
+      entry.source || '--',
+      entry.state || '--',
+      [entry.target, entry.message].filter(Boolean).join(' · ')
+    )));
+  }
+  target.innerHTML = rows.join('') || `<p class="mutedState">${esc(t('huntEngine.noMigration'))}</p>`;
+}
+
+function applyHuntEngineCapabilityControls(available) {
+  $$('[data-hunt-engine-capability]').forEach((control) => {
+    const allowed = hasHuntEngineCapability(control.dataset.huntEngineCapability);
+    control.disabled = !allowed || !available;
+    control.setAttribute('aria-disabled', String(!allowed || !available));
+  });
+}
+
+function renderHuntEngine(huntEngine) {
+  if (!hasHuntEngineCapability('read') || !huntEngine) return;
+  if (anyFormDirty(['huntEngineSimpleItemForm', 'huntEngineUploadForm', 'huntEngineSendPackForm'])) return;
+  const status = huntEngine.status || {};
+  const catalogue = huntEngine.catalogue || {};
+  const contents = catalogue.contents || [];
+  const packages = huntEngine.packages || [];
+  const resourcePack = huntEngine.resourcePack || {};
+  const migration = huntEngine.migration || {};
+  const packUrl = safeHuntEngineUrl(resourcePack.url);
+  const available = Boolean(status.available);
+  // Some HuntEngine hosts intentionally keep the delivery URL private or mint a
+  // one-time URL per player. Publication state is authoritative even when there
+  // is no safe static download link for the panel to expose.
+  const published = Boolean(resourcePack.published);
+  const configured = Boolean(resourcePack.configured);
+  const packTitle = published
+    ? t('huntEngine.packPublished')
+    : configured ? t('huntEngine.packConfigured') : t('huntEngine.packMissing');
+  $('huntEngineHero').innerHTML = [
+    summaryCard(t('huntEngine.contents'), contents.length, `rev ${catalogue.revision ?? status.contentRevision ?? '--'}`, available ? 'good' : 'bad'),
+    summaryCard(t('huntEngine.staged'), packages.length, status.lifecycle || '--', huntEngineStatusTone(status)),
+    summaryCard(t('huntEngine.resourcePack'), published ? t('huntEngine.packPublished') : configured ? t('huntEngine.packConfigured') : '--', resourcePack.revision || '--', published ? 'good' : configured ? 'warn' : 'bad'),
+    summaryCard(t('huntEngine.migrationSummary'), migration.state || '--', `${migration.entryCount ?? 0} entries`, migration.state === 'failed' ? 'bad' : 'neutral')
   ].join('');
-  $('assetsPackStatus').innerHTML = `
-    <article class="resourcePackStatus ${resourcePack.enabled && packUrl ? 'good' : pack ? 'warn' : 'bad'}">
+  $('huntEnginePackStatus').innerHTML = `
+    <article class="resourcePackStatus ${published ? 'good' : configured ? 'warn' : 'bad'}">
       <div>
-        <strong>${esc(resourcePack.enabled && packUrl ? t('assets.packPublished') : pack ? t('assets.packReady') : t('assets.packMissing'))}</strong>
-        <span>${esc(pack ? pack.name : t('assets.emptyPacks'))}</span>
-        <small>${esc(packUrl || currentPanelBaseUrl() || '--')}</small>
+        <strong>${esc(packTitle)}</strong>
+        <span>${esc(resourcePack.message || status.message || (available ? t('huntEngine.available') : t('huntEngine.unavailable')))}</span>
+        <small>${esc(packUrl || '--')}</small>
       </div>
-      <div class="assetFileActions">
-        ${pack ? `<button type="button" class="smallButton" data-asset-publish-pack="${esc(pack.name)}">${esc(t('assets.publishDefault'))}</button>` : ''}
+      <div class="contentPackageActions">
         ${packUrl ? `<a class="smallButton" href="${esc(packUrl)}" target="_blank" rel="noreferrer">Download</a>` : ''}
       </div>
-    </article>
-  `;
-  $('assetPackOptions').innerHTML = (assets.packs || []).map((file) => `<option value="${esc(file.name)}"></option>`).join('');
-  $('assetImageOptions').innerHTML = (assets.images || []).map((file) => `<option value="${esc(file.name)}"></option>`).join('');
-  if (pack && !$('assetsPublishFile').value) $('assetsPublishFile').value = pack.name;
-  if (!$('assetsPublishBaseUrl').value) $('assetsPublishBaseUrl').value = currentPanelBaseUrl();
-  if (pack && !packUrl && !$('assetsPublishSendOnJoin').checked) $('assetsPublishSendOnJoin').checked = true;
-  $('assetsPackList').innerHTML = assetFileBlock(t('assets.packs'), assets.packs || [], t('assets.emptyPacks'), 'pack');
-  $('assetsImageList').innerHTML = assetFileBlock(t('assets.images'), assets.images || [], t('assets.emptyImages'), 'image');
-  $('assetsPresetList').innerHTML = assetFileBlock(t('assets.presets'), assets.presets || [], t('assets.emptyPresets'), 'preset');
-  $('assetsItemList').innerHTML = (assets.items || []).map((item) => `
-    <article class="pluginItem">
-      <div class="pluginTop"><span>${esc(item.name || item.id)}<small>${esc(item.id)} · ${esc(item.material)} · CMD ${esc(item.customModelData)}</small></span></div>
-      <div class="pluginMeta">${esc(item.category || 'items')} · ${esc(item.pack || '--')} · ${item.enabled ? 'enabled' : 'disabled'}</div>
-      <div class="pluginActions">
-        <button type="button" data-asset-edit="${esc(item.id)}">Edit</button>
-        <button type="button" data-asset-remove="${esc(item.id)}">Remove</button>
-      </div>
-    </article>
-  `).join('') || `<p class="mutedState">${esc(t('assets.emptyItems'))}</p>`;
-  $('assetsValidationList').innerHTML = [
-    ...(validation.errors || []).map((line) => dataItem('Error', line)),
-    ...(validation.warnings || []).map((line) => dataItem('Warning', line))
-  ].join('') || `<p class="mutedState">No validation issues.</p>`;
+    </article>`;
+  $('huntEngineCatalogueList').innerHTML = contents.map((content) => {
+    const meta = [content.kind, ...(content.categories || []), content.permission || 'no permission'].filter(Boolean).join(' · ');
+    return `<article class="pluginItem">
+      <div class="pluginTop"><span>${esc(content.displayName || content.id)}<small>${esc(content.id)} · ${esc(meta)}</small></span></div>
+      <div class="pluginMeta">${esc(content.description || '--')} · ${content.enabled === false ? 'disabled' : 'enabled'}</div>
+    </article>`;
+  }).join('') || `<p class="mutedState">${esc(t('huntEngine.noContents'))}</p>`;
+  $('huntEnginePackageList').innerHTML = packages.map((contentPackage) => `
+    <article class="dataItem contentPackageCard">
+      <span>${esc(contentPackage.fileName || contentPackage.id)}<small>${esc(contentPackage.id || '--')} · ${esc(formatBytes(contentPackage.size || 0))} · ${esc(contentPackage.state || '--')}</small></span>
+      <span class="contentPackageActions">
+        ${hasHuntEngineCapability('stage') ? `<button type="button" class="smallButton" data-hunt-engine-package-remove="${esc(contentPackage.id)}" ${available ? '' : 'disabled'}>${esc(t('huntEngine.removePackage'))}</button>` : ''}
+      </span>
+    </article>`).join('') || `<p class="mutedState">${esc(t('huntEngine.noPackages'))}</p>`;
+  renderHuntEngineOperations();
+  renderHuntEngineMigration(migration);
+  applyHuntEngineCapabilityControls(available);
 }
 
-function assetFileBlock(title, files, emptyText, type) {
-  const rows = files.map((file) => {
-    const actions = type === 'pack'
-      ? `<button type="button" class="smallButton" data-asset-use-pack="${esc(file.name)}">Use for item</button>
-         <button type="button" class="smallButton" data-asset-publish-pack="${esc(file.name)}">Publish</button>`
-      : type === 'image'
-        ? `<button type="button" class="smallButton" data-asset-use-icon="${esc(file.name)}">Use as icon</button>`
-        : '';
-    return `<article class="dataItem assetFileCard">
-      <span>${esc(file.name)}<small>${esc(formatBytes(file.size || 0))}</small></span>
-      ${actions ? `<span class="assetFileActions">${actions}</span>` : ''}
-    </article>`;
-  }).join('');
-  return `<div class="assetListBlock">
-    <div class="listHeader"><h4>${esc(title)}</h4><span>${files.length}</span></div>
-    ${rows || `<p class="mutedState">${esc(emptyText)}</p>`}
-  </div>`;
+function updateHuntEngineSummary(huntEngine) {
+  if (!huntEngine) return;
+  state.lastData = { ...(state.lastData || {}), huntEngine };
+  renderHuntEngine(huntEngine);
+}
+
+async function pollHuntEngineOperation(operationId, attempt = 0) {
+  if (!operationId || attempt >= 20) return;
+  await new Promise((resolve) => window.setTimeout(resolve, 900));
+  try {
+    const result = await json(`/api/admin/hunt-engine/operation/${encodeURIComponent(operationId)}`);
+    if (!result.operation) return;
+    rememberHuntEngineOperation(result.operation);
+    renderHuntEngineOperations();
+    const running = ['queued', 'running', 'pending'].includes(String(result.operation.state || '').toLowerCase());
+    if (running) {
+      await pollHuntEngineOperation(operationId, attempt + 1);
+      return;
+    }
+    await refresh();
+  } catch (error) {
+    if (attempt === 0) setOutput(t('command.error', { message: error.message }));
+  }
 }
 
 function renderTitles(titles) {
   if (!state.session?.admin || !titles) return;
+  if (anyFormDirty(['titleForm', 'titleAssignForm'])) return;
   $('titlesModuleEnabled').checked = Boolean(titles.enabled);
   $('titlesHero').innerHTML = [
     summaryCard('Module', titles.enabled ? 'Enabled' : 'Disabled', `chat ${titles.displayChat} · tag ${titles.displayNametag} · tab ${titles.displayTab}`),
@@ -2132,6 +2477,7 @@ function renderTitles(titles) {
 }
 
 function renderActorWorlds(worlds) {
+  if (formIsDirty('actorForm')) return;
   const selected = $('actorWorld').value;
   const names = (worlds || []).map((world) => world.name);
   $('actorWorld').innerHTML = `<option value="">${esc(t('actors.spawnPoint'))}</option>` + names.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
@@ -2169,6 +2515,7 @@ function pluginWorkbenchCards(plugins, thirdParty) {
   const bundled = thirdParty?.bundled || {};
   const geyser = thirdParty?.geyser || {};
   const ncr = thirdParty?.noChatReports || {};
+  const huntEngine = thirdParty?.huntEngine || {};
   return [
     summaryCard('Cross-Platform', [
       `Geyser ${status(['geyser-spigot', 'geyser'])}`,
@@ -2179,7 +2526,7 @@ function pluginWorkbenchCards(plugins, thirdParty) {
       `Via Legacy ${status(['viarewind-legacy-support'])}`
     ].join(' · '), geyser.configPresent ? `${geyser.bedrockAddress || '0.0.0.0'}:${geyser.bedrockPort || 19132} · ${geyser.javaAuthType || 'floodgate'}` : 'Geyser config pending'),
     summaryCard('Chat & Privacy', `Built-in NCR ${ncr.builtinEnabled ? 'enabled' : 'disabled'}`, 'HunterCore core protection'),
-    summaryCard('Custom Content', `HunterAssets ${status(['hunterassets', 'hunter-assets'])} · ImageFrame ${status(['imageframe'])}`, `${bundled.hunterAssets ? 'HunterAssets on' : 'HunterAssets off'} · ${bundled.imageFrame ? 'ImageFrame on' : 'ImageFrame off'}`)
+    summaryCard('Custom Content', `HuntEngine ${status(['huntengine', 'hunt-engine'])} · ImageFrame ${status(['imageframe'])}`, `${bundled.huntEngine ? 'HuntEngine on' : 'HuntEngine off'} · ${huntEngine.lifecycle || 'not loaded'}`)
   ].join('');
 }
 
@@ -2228,13 +2575,14 @@ function renderWebUserInspector(users) {
     <p class="subtleLine">${esc(roleLabel(selected.role))}</p>
     <div class="compactList">
       ${dataItem('Commands', selected.commandExecution ? t('webUsers.commandsOn') : t('webUsers.commandsOff'))}
-      ${dataItem('Password', selected.passwordConfigured ? t('webUsers.webPasswordSet') : t('webUsers.hunterAuthOnly'))}
+      ${dataItem('Identity', selected.identityBound ? t('webUsers.identityBound') : t('webUsers.identityMissing'))}
       ${dataItem('Allowed', allowedLine(selected), selected.allowedCommandsConfigured ? 'custom' : 'inherit')}
     </div>`;
 }
 
 function renderActors(actors) {
   if (!state.session?.admin) return;
+  if (formIsDirty('actorForm')) return;
   $('actorList').classList.remove('mutedState');
   $('actorList').innerHTML = actors?.length ? actors.map(actorLine).join('') : `<p class="mutedState">${esc(t('actors.none'))}</p>`;
   renderActorInspector(actors);
@@ -2263,7 +2611,7 @@ function renderWebUsers(users) {
 
 function renderWebSettings(settings) {
   if (!state.session?.admin || !settings) return;
-  if (document.activeElement && document.activeElement.closest('[data-settings-scope="web"]')) return;
+  if (formIsDirty('webSettingsForm')) return;
   $('webServerName').value = settings.serverName || '';
   $('webCpuMode').value = settings.cpuMode || 'single-thread';
   $('webF3ServerName').value = settings.f3ServerName || '';
@@ -2311,15 +2659,13 @@ function renderWebSettings(settings) {
   const geyser = thirdParty.geyser || {};
   $('bundleGeyser').checked = Boolean(bundled.geyser);
   $('bundleFloodgate').checked = Boolean(bundled.floodgate);
-  $('bundleHunterAssets').checked = Boolean(bundled.hunterAssets);
+  $('bundleHuntEngine').checked = Boolean(bundled.huntEngine);
   $('bundleImageFrame').checked = Boolean(bundled.imageFrame);
   $('bundleViaLegacy').checked = Boolean(bundled.viaLegacy);
-  const hunterAssets = thirdParty.hunterAssets || {};
-  $('assetsResourcePackEnabled').checked = Boolean(hunterAssets.enabled);
-  $('assetsResourcePackRequired').checked = Boolean(hunterAssets.required);
-  $('assetsSendOnJoin').checked = Boolean(hunterAssets.sendOnJoin);
-  $('assetsResourcePackUrl').value = hunterAssets.url || '';
-  $('assetsResourcePackSha1').value = hunterAssets.sha1 || '';
+  const huntEngine = thirdParty.huntEngine || {};
+  if ($('huntEngineSettingsLine')) {
+    $('huntEngineSettingsLine').textContent = `${huntEngine.available ? t('huntEngine.available') : t('huntEngine.unavailable')} · ${huntEngine.lifecycle || '--'} · rev ${huntEngine.contentRevision ?? '--'}`;
+  }
   const ncr = thirdParty.noChatReports || {};
   $('noChatReportsEnabled').checked = Boolean(ncr.builtinEnabled);
   $('noChatReportsAddQueryData').checked = ncr.addQueryData !== false;
@@ -2470,7 +2816,7 @@ function renderStoryPhaseList() {
 
 function renderCommandMessages(messages) {
   if (!state.session?.admin || !messages) return;
-  if (document.activeElement && $('commandMessagesForm').contains(document.activeElement)) return;
+  if (formIsDirty('commandMessagesForm')) return;
   $('commandMessageAbout').value = (messages.about || []).join('\n');
   $('commandMessagePlugins').value = (messages.plugins || []).join('\n');
   $('commandMessageVersion').value = (messages.version || []).join('\n');
@@ -2488,7 +2834,7 @@ function renderCommandMessages(messages) {
 
 function renderAiSettings(settings) {
   if (!state.session?.admin || !settings) return;
-  if (document.activeElement && document.activeElement.closest('[data-settings-scope="ai"]')) return;
+  if (formIsDirty('aiSettingsForm')) return;
   $('aiEnabled').checked = Boolean(settings.enabled);
   $('aiBaseUrl').value = settings.baseUrl || '';
   $('aiModel').value = settings.model || '';
@@ -2548,7 +2894,7 @@ function renderAiSettings(settings) {
 
 function renderPermissionSettings(settings) {
   if (!state.session?.admin || !settings) return;
-  if (document.activeElement && document.activeElement.closest('[data-settings-scope="permissions"]')) return;
+  if (formIsDirty('permissionSettingsForm')) return;
   $('permissionFakePlayersChatControlEnabled').checked = Boolean(settings.fakePlayersChatControlEnabled);
   $('permissionFakePlayersChatControlAmbientEnabled').checked = Boolean(settings.fakePlayersChatControlAmbientEnabled);
   $('permissionFakePlayersChatControlRequirePermission').checked = Boolean(settings.fakePlayersChatControlRequirePermission);
@@ -2570,61 +2916,113 @@ function renderPermissionSettings(settings) {
   `;
 }
 
+function setMapState(tone, titleKey, detailKey) {
+  const panel = $('mapState');
+  if (!panel) return;
+  const ready = tone === 'ready';
+  panel.hidden = ready;
+  if (ready) return;
+  panel.dataset.tone = tone;
+  $('mapStateTitle').textContent = t(titleKey);
+  $('mapStateLine').textContent = t(detailKey);
+  $('mapRetryButton').hidden = tone === 'loading';
+}
+
+function setRefreshInterval(millis) {
+  const next = Math.max(1500, Math.min(15000, Number(millis) || 5000));
+  if (state.refreshTimer && state.pollMillis === next) return;
+  if (state.refreshTimer) clearInterval(state.refreshTimer);
+  state.refreshTimer = setInterval(() => {
+    refresh().catch(() => {});
+  }, next);
+  state.pollMillis = next;
+}
+
 async function refresh() {
   if (standaloneFrontend() && !state.backendUrl) {
     renderBackendConnection();
+    setConnectionStatus('idle');
     $('serverLine').textContent = t('remote.required');
+    $('mapFrame').removeAttribute('src');
+    setMapState('empty', 'map.emptyTitle', 'map.emptyDescription');
     return;
   }
-  const data = await json('/api/status');
-  state.lastData = data;
-  state.session = data.session;
-  state.csrf = data.session?.csrf || state.csrf;
-  state.sessionToken = data.session?.token || state.sessionToken;
-  if (state.backendUrl && state.sessionToken) storeValue(SESSION_TOKEN_KEY, state.sessionToken);
-  $('serverNameTitle').textContent = data.server.name || 'HunterCore';
-  $('serverLine').textContent = `${data.server.software || 'Minecraft'} · ${data.server.version}`;
-  $('tps').textContent = Number(data.server.tps1).toFixed(2);
-  $('mspt').textContent = Number(data.server.mspt).toFixed(1);
-  $('players').textContent = `${data.server.online}/${data.server.maxPlayers}`;
-  $('memory').textContent = data.server.memory;
-  renderAuthPublic(data.auth);
-  updateSessionChrome();
-  renderHealth(data.health);
-  renderBackendConnection();
-  renderOverview(data);
-  renderAssets(data.assets);
-  renderTitles(data.titles);
-  renderActorWorlds(data.worlds);
-  renderActors(data.actorDetails);
-  renderOperations(data.modules);
-  renderWebUsers(data.webUsers);
-  renderWebSettings(data.webSettings);
-  renderCommandMessages(data.commandMessages);
-  renderAiApprovals(data.aiApprovals);
-  renderAiSettings(data.aiSettings);
-  renderPermissionSettings(data.permissionSettings);
-  refreshChat().catch(() => {});
-  const targetInterval = Math.max(1500, Math.min(15000, Number(data.optimization?.guestStatusCacheMillis || 5000) * 2));
-  if (state.refreshTimer && state.pollMillis !== targetInterval) {
-    clearInterval(state.refreshTimer);
-    state.refreshTimer = setInterval(() => {
-      refresh().catch(() => {});
-    }, targetInterval);
+  if (!state.connection.lastSuccessAt) setConnectionStatus('connecting');
+  try {
+    const data = await json('/api/status');
+    state.lastData = data;
+    state.session = data.session;
+    state.csrf = data.session?.csrf || state.csrf;
+    state.sessionToken = data.session?.token || state.sessionToken;
+    state.connection.lastSuccessAt = Date.now();
+    if (state.backendUrl && state.sessionToken) storeValue(SESSION_TOKEN_KEY, state.sessionToken);
+    $('serverNameTitle').textContent = data.server.name || 'HunterCore';
+    $('topServerName').textContent = data.server.name || 'HunterCore';
+    $('serverLine').textContent = `${data.server.software || 'Minecraft'} · ${data.server.version}`;
+    $('tps').textContent = Number(data.server.tps1).toFixed(2);
+    $('mspt').textContent = Number(data.server.mspt).toFixed(1);
+    $('players').textContent = `${data.server.online}/${data.server.maxPlayers}`;
+    $('memory').textContent = data.server.memory;
+    renderAuthPublic(data.auth);
+    updateSessionChrome();
+    renderHealth(data.health);
+    renderBackendConnection();
+    setConnectionStatus('online', state.backendUrl || t('connection.local'));
+    renderOverview(data);
+    renderHuntEngine(data.huntEngine);
+    renderTitles(data.titles);
+    renderActorWorlds(data.worlds);
+    renderActors(data.actorDetails);
+    renderOperations(data.modules);
+    renderWebUsers(data.webUsers);
+    renderWebSettings(data.webSettings);
+    renderCommandMessages(data.commandMessages);
+    renderAiApprovals(data.aiApprovals);
+    renderAiSettings(data.aiSettings);
+    renderPermissionSettings(data.permissionSettings);
+    ensureAccessibleLabels();
+    refreshChat().catch(() => {});
+    refreshMap().catch(() => {});
+    setRefreshInterval(Number(data.optimization?.guestStatusCacheMillis || 5000) * 2);
+  } catch (error) {
+    const stale = Boolean(state.lastData);
+    setConnectionStatus(stale ? 'stale' : 'offline', error.message || '');
+    $('serverLine').textContent = error.message || t('connection.offline');
+    throw error;
   }
-  state.pollMillis = targetInterval;
 }
 
 async function refreshMap() {
-  if (standaloneFrontend() && !state.backendUrl) return;
-  const map = await json('/api/map');
-  if (!map.ok || !map.url || map.url === state.mapUrl) return;
-  state.mapUrl = map.url;
-  $('mapLink').href = map.url;
-  $('mapFrame').src = map.url;
+  if (standaloneFrontend() && !state.backendUrl) {
+    $('mapFrame').removeAttribute('src');
+    setMapState('empty', 'map.emptyTitle', 'map.emptyDescription');
+    return;
+  }
+  if (!state.mapUrl) setMapState('loading', 'map.loadingTitle', 'map.loadingDescription');
+  try {
+    const map = await json('/api/map');
+    if (!map.ok || !map.url) {
+      state.mapUrl = '';
+      $('mapFrame').removeAttribute('src');
+      setMapState('empty', 'map.emptyTitle', 'map.emptyDescription');
+      return;
+    }
+    $('mapLink').href = map.url;
+    if (map.url !== state.mapUrl) {
+      state.mapUrl = map.url;
+      $('mapFrame').src = map.url;
+    }
+    setMapState('ready');
+  } catch {
+    setMapState('error', 'map.errorTitle', 'map.errorDescription');
+  }
 }
 
 async function runCommand(command) {
+  if (identityClaimRequired()) {
+    setOutput(t('identity.claimRequired'));
+    return;
+  }
   const payload = JSON.stringify({ command });
   const result = await json('/api/command', { method: 'POST', body: payload });
   setOutput(result.message || t('command.dispatched'), result.output || '');
@@ -2648,7 +3046,6 @@ function editWebUser(id) {
   if (!user) return;
   $('webUserName').value = user.displayName;
   $('webUserRole').value = user.role;
-  $('webUserPassword').value = '';
   $('webUserCommandExecution').checked = Boolean(user.commandExecution);
   $('webUserAllowedMode').value = user.allowedCommandsConfigured
     ? (user.allowedCommands?.length ? 'custom' : 'none')
@@ -2760,23 +3157,107 @@ function bindLiquidGlass() {
   }, { passive: true });
 }
 
-function bindServerIcon() {
+async function bindServerIcon() {
   const mark = $('productMark');
   const image = $('serverIcon');
   if (!mark || !(image instanceof HTMLImageElement)) return;
-  image.addEventListener('load', () => {
-    mark.classList.add('hasIcon');
-    image.hidden = false;
-  });
-  image.addEventListener('error', () => {
-    mark.classList.remove('hasIcon');
-    image.hidden = true;
-  });
-  image.src = `${assetUrl('/assets/server-icon.png')}?${Date.now()}`;
+  if (!image.dataset.iconBound) {
+    image.dataset.iconBound = 'true';
+    image.addEventListener('load', () => {
+      mark.classList.add('hasIcon');
+      image.hidden = false;
+    });
+    image.addEventListener('error', () => {
+      mark.classList.remove('hasIcon');
+      image.hidden = true;
+    });
+  }
+  mark.classList.remove('hasIcon');
+  image.hidden = true;
+  image.removeAttribute('src');
+  const url = `${assetUrl('/assets/server-icon.png')}?${Date.now()}`;
+  try {
+    const response = await fetch(url, {
+      credentials: state.backendUrl ? 'omit' : 'same-origin',
+      cache: 'no-store'
+    });
+    if (!response.ok || !response.headers.get('content-type')?.startsWith('image/')) return;
+    image.src = url;
+  } catch {
+    // A missing optional server icon should keep the HC fallback without a console network error.
+  }
+}
+
+function closeNavigationMenu() {
+  const nav = $('primaryNavigation');
+  const toggle = $('moreToggle');
+  nav?.classList.remove('isMenuOpen');
+  toggle?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleNavigationMenu() {
+  const nav = $('primaryNavigation');
+  const toggle = $('moreToggle');
+  if (!nav || !toggle) return;
+  const open = !nav.classList.contains('isMenuOpen');
+  nav.classList.toggle('isMenuOpen', open);
+  toggle.setAttribute('aria-expanded', String(open));
+  if (open) setConnectionPanel(false);
+}
+
+function tracksDirtyState(form) {
+  if (!(form instanceof HTMLFormElement) || form.dataset.transient === 'true') return false;
+  if (form.matches('[data-command-template]')) return false;
+  return !['loginForm', 'registerForm', 'connectionForm', 'homeChatForm', 'commandForm', 'aiTestForm', 'luckForm'].includes(form.id);
+}
+
+function bindFormStateTracking() {
+  const mark = (event) => {
+    const form = formForControl(event.target);
+    if (tracksDirtyState(form)) markFormDirty(form, event.target);
+  };
+  document.addEventListener('input', mark, true);
+  document.addEventListener('change', mark, true);
+  document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (!tracksDirtyState(form) && form.id !== 'connectionForm') return;
+    state.activeForm = form;
+    form.dataset.submitting = 'true';
+    form.setAttribute('aria-busy', 'true');
+    setFormState(form, t('form.saving'), 'saving', event.submitter);
+  }, true);
+}
+
+function trapModalFocus(event) {
+  if (!state.modal.kind) return false;
+  const modal = state.modal.kind === 'register' ? $('registerModal') : $('loginModal');
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeAuthModals();
+    return true;
+  }
+  if (event.key !== 'Tab') return false;
+  const focusable = modalFocusableElements(modal);
+  if (!focusable.length) {
+    event.preventDefault();
+    return true;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+  return true;
 }
 
 function bindEvents() {
-  $$('.navButton[data-page-target]').forEach((button) => {
+  bindFormStateTracking();
+  $$('[data-page-target]').forEach((button) => {
     button.addEventListener('click', () => {
       showPage(button.dataset.pageTarget);
     });
@@ -2788,16 +3269,38 @@ function bindEvents() {
     setLanguage(state.lang === 'zh' ? 'en' : 'zh');
   });
 
-  $('sessionToggle').addEventListener('click', () => {
-    openAuthModal('login');
+  $('sessionToggle').addEventListener('click', (event) => {
+    openAuthModal('login', event.currentTarget);
   });
 
-  $('registerToggle').addEventListener('click', () => openAuthModal('register'));
+  $('registerToggle').addEventListener('click', (event) => openAuthModal('register', event.currentTarget));
   $('authBackdrop').addEventListener('click', closeAuthModals);
   $$('[data-close-auth]').forEach((button) => button.addEventListener('click', closeAuthModals));
-  window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeAuthModals();
+  $('connectionToggle').addEventListener('click', () => {
+    const panel = $('connectionPanel');
+    setConnectionPanel(Boolean(panel?.hidden), true);
+    closeNavigationMenu();
   });
+  $$('[data-close-connection]').forEach((button) => button.addEventListener('click', () => setConnectionPanel(false)));
+  $('moreToggle').addEventListener('click', toggleNavigationMenu);
+  document.addEventListener('click', (event) => {
+    const shell = document.querySelector('.topShell');
+    if (shell && !shell.contains(event.target)) closeNavigationMenu();
+  });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 1180) closeNavigationMenu();
+  });
+  window.addEventListener('keydown', (event) => {
+    if (trapModalFocus(event)) return;
+    if (event.key !== 'Escape') return;
+    if (!$('connectionPanel').hidden) {
+      setConnectionPanel(false);
+      return;
+    }
+    closeNavigationMenu();
+  });
+  $('mapRetryButton').addEventListener('click', () => refreshMap());
+  $('mapFrame').addEventListener('error', () => setMapState('error', 'map.errorTitle', 'map.errorDescription'));
 
   $('loginForm').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -2859,6 +3362,10 @@ function bindEvents() {
 
   $('homeChatForm').addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (identityClaimRequired()) {
+      setOutput(t('identity.claimRequired'));
+      return;
+    }
     const message = $('homeChatInput').value.trim();
     if (!message) return;
     try {
@@ -2873,18 +3380,41 @@ function bindEvents() {
 
   $('connectionForm').addEventListener('submit', async (event) => {
     event.preventDefault();
-    state.backendUrl = normalizeBackendUrl($('backendUrl').value);
+    const nextBackendUrl = normalizeBackendUrl($('backendUrl').value);
+    const backendChanged = nextBackendUrl !== state.backendUrl;
+    state.backendUrl = nextBackendUrl;
     state.apiKey = $('backendApiKey').value.trim();
     state.csrf = '';
-    state.sessionToken = state.backendUrl ? state.sessionToken : '';
+    if (backendChanged || !state.backendUrl) {
+      state.sessionToken = '';
+      state.session = null;
+      state.lastData = null;
+      state.mapUrl = '';
+      $('mapFrame').removeAttribute('src');
+      $('mapLink').href = '#';
+      setMapState('loading', 'map.loadingTitle', 'map.loadingDescription');
+      updateSessionChrome();
+    }
     storeValue(BACKEND_URL_KEY, state.backendUrl);
     storeValue(BACKEND_API_KEY_KEY, state.apiKey);
     storeValue(SESSION_TOKEN_KEY, state.sessionToken);
     renderBackendConnection();
-    bindServerIcon();
-    setOutput(t('remote.saved'));
-    await refresh();
-    await refreshMap();
+    if (!state.backendUrl && standaloneFrontend()) {
+      setConnectionStatus('idle');
+      state.activeForm = null;
+      markFormClean($('connectionForm'), t('remote.required'), 'error', event.submitter);
+      return;
+    }
+    setConnectionStatus('connecting');
+    try {
+      await refresh();
+      await refreshMap();
+      bindServerIcon();
+      setOutput(t('remote.saved'));
+      setConnectionPanel(false);
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
   });
 
   $('clearConnectionButton').addEventListener('click', async () => {
@@ -2898,9 +3428,14 @@ function bindEvents() {
     $('backendApiKey').value = '';
     renderBackendConnection();
     bindServerIcon();
-    setOutput(t('remote.local'));
-    await refresh();
-    await refreshMap();
+    try {
+      await refresh();
+      await refreshMap();
+      setOutput(standaloneFrontend() ? t('remote.required') : t('remote.local'));
+      if (!standaloneFrontend()) setConnectionPanel(false);
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
   });
 
   $('commandForm').addEventListener('submit', async (event) => {
@@ -3079,7 +3614,7 @@ function bindEvents() {
       clearApiKey: String($('webClearApiKey').checked),
       bundleGeyser: String($('bundleGeyser').checked),
       bundleFloodgate: String($('bundleFloodgate').checked),
-      bundleHunterAssets: String($('bundleHunterAssets').checked),
+      bundleHuntEngine: String($('bundleHuntEngine').checked),
       bundleImageFrame: String($('bundleImageFrame').checked),
       bundleViaLegacy: String($('bundleViaLegacy').checked),
       noChatReportsEnabled: String($('noChatReportsEnabled').checked),
@@ -3088,11 +3623,6 @@ function bindEvents() {
       noChatReportsDemandOnClient: String($('noChatReportsDemandOnClient').checked),
       noChatReportsDebugLog: String($('noChatReportsDebugLog').checked),
       noChatReportsDisconnectMessage: $('noChatReportsDisconnectMessage').value,
-      assetsResourcePackEnabled: String($('assetsResourcePackEnabled').checked),
-      assetsResourcePackRequired: String($('assetsResourcePackRequired').checked),
-      assetsSendOnJoin: String($('assetsSendOnJoin').checked),
-      assetsResourcePackUrl: $('assetsResourcePackUrl').value,
-      assetsResourcePackSha1: $('assetsResourcePackSha1').value,
       geyserBedrockAddress: $('geyserBedrockAddress').value,
       geyserBedrockPort: $('geyserBedrockPort').value,
       geyserJavaAuthType: $('geyserJavaAuthType').value,
@@ -3304,14 +3834,12 @@ function bindEvents() {
     const payload = {
       username: $('webUserName').value,
       role: $('webUserRole').value,
-      password: $('webUserPassword').value,
       commandExecution: String($('webUserCommandExecution').checked),
       allowedCommandsMode: $('webUserAllowedMode').value,
       allowedCommands: $('webUserAllowedCommands').value
     };
     try {
       await json('/api/admin/web-user/save', { method: 'POST', body: JSON.stringify(payload) });
-      $('webUserPassword').value = '';
       setOutput(t('webUsers.saved'));
       await refresh();
     } catch (error) {
@@ -3342,184 +3870,110 @@ function bindEvents() {
     }
   });
 
-  $('assetsUploadForm')?.addEventListener('submit', async (event) => {
+  $('huntEngineSimpleItemForm')?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const file = $('assetsUploadFile').files?.[0];
-    if (!file) {
-      setOutput('Choose a file first.');
-      return;
-    }
+    if (!hasHuntEngineCapability('stage')) return;
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement) || !form.reportValidity()) return;
     try {
-      const contentBase64 = await fileToBase64(file);
-      const result = await json('/api/admin/assets/upload', {
+      const result = await json('/api/admin/hunt-engine/item/create', {
         method: 'POST',
         body: JSON.stringify({
-          scope: $('assetsUploadScope').value,
-          fileName: file.name,
-          contentBase64
+          id: $('huntEngineSimpleItemId').value,
+          material: $('huntEngineSimpleItemMaterial').value,
+          displayName: $('huntEngineSimpleItemName').value,
+          description: $('huntEngineSimpleItemDescription').value
         })
       });
-      setOutput('Asset uploaded.');
-      if (result.assets) renderAssets(result.assets);
+      form.reset();
+      updateHuntEngineSummary(result.huntEngine);
+      setOutput(t('huntEngine.simpleItemStaged', { id: result.contentId || 'huntercraft:item' }), result.message || '');
       await refresh();
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));
     }
   });
 
-  $('assetsItemForm')?.addEventListener('submit', async (event) => {
+  $('huntEngineUploadForm')?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    try {
-      const payload = {
-        id: $('assetItemId').value,
-        enabled: String($('assetItemEnabled').checked),
-        category: $('assetItemCategory').value,
-        material: $('assetItemMaterial').value,
-        amount: $('assetItemAmount').value,
-        customModelData: $('assetItemCmd').value,
-        permission: $('assetItemPermission').value,
-        pack: $('assetItemPack').value,
-        icon: $('assetItemIcon').value,
-        description: $('assetItemDescription').value,
-        nameZhCn: $('assetItemNameZh').value,
-        nameEnUs: $('assetItemNameEn').value,
-        loreZhCn: $('assetItemLoreZh').value,
-        loreEnUs: $('assetItemLoreEn').value
-      };
-      const result = await json('/api/admin/assets/item/save', { method: 'POST', body: JSON.stringify(payload) });
-      setOutput('Asset item saved.');
-      if (result.assets) renderAssets(result.assets);
-      await refresh();
-    } catch (error) {
-      setOutput(t('command.error', { message: error.message }));
-    }
-  });
-
-  $('assetsItemList')?.addEventListener('click', async (event) => {
-    const button = event.target.closest('[data-asset-edit], [data-asset-remove]');
-    if (!button) return;
-    const item = (state.lastData?.assets?.items || []).find((entry) => entry.id === (button.dataset.assetEdit || button.dataset.assetRemove));
-    if (button.dataset.assetEdit && item) {
-      $('assetItemId').value = item.id || '';
-      $('assetItemNameZh').value = item.nameZhCn || item.name || '';
-      $('assetItemNameEn').value = item.nameEnUs || item.name || '';
-      $('assetItemMaterial').value = item.material || 'PAPER';
-      $('assetItemCmd').value = item.customModelData || 0;
-      $('assetItemAmount').value = item.amount || 1;
-      $('assetItemCategory').value = item.category || '';
-      $('assetItemPack').value = item.pack || '';
-      $('assetItemPermission').value = item.permission || '';
-      $('assetItemIcon').value = item.icon || '';
-      $('assetItemDescription').value = item.description || '';
-      $('assetItemLoreZh').value = (item.loreZhCn || []).join('\n');
-      $('assetItemLoreEn').value = (item.loreEnUs || []).join('\n');
-      $('assetItemEnabled').checked = item.enabled !== false;
+    if (!hasHuntEngineCapability('stage')) return;
+    const file = $('huntEngineUploadFile').files?.[0];
+    if (!file) {
+      setOutput(t('huntEngine.choosePackage'));
       return;
     }
-    if (button.dataset.assetRemove) {
+    if (file.size > 8 * 1024 * 1024) {
+      setOutput(t('huntEngine.uploadTooLarge'));
+      return;
+    }
+    try {
+      const result = await json('/api/admin/hunt-engine/upload', {
+        method: 'POST',
+        body: JSON.stringify({ fileName: file.name, contentBase64: await fileToBase64(file) })
+      });
+      updateHuntEngineSummary(result.huntEngine);
+      setOutput(result.message || t('huntEngine.packageStaged'));
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $('huntEnginePackageList')?.addEventListener('click', async (event) => {
+    const target = event.target instanceof Element ? event.target.closest('[data-hunt-engine-package-remove]') : null;
+    if (!(target instanceof HTMLButtonElement) || !hasHuntEngineCapability('stage')) return;
+    if (!window.confirm(t('huntEngine.confirmRemovePackage'))) return;
+    try {
+      const result = await json('/api/admin/hunt-engine/package/remove', {
+        method: 'POST',
+        body: JSON.stringify({ id: target.dataset.huntEnginePackageRemove || '' })
+      });
+      updateHuntEngineSummary(result.huntEngine);
+      setOutput(result.message || t('huntEngine.packageRemoved'));
+      await refresh();
+    } catch (error) {
+      setOutput(t('command.error', { message: error.message }));
+    }
+  });
+
+  $$('[data-hunt-engine-operation]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const operation = button.dataset.huntEngineOperation || '';
+      const capability = operation === 'validate' ? 'read' : 'publish';
+      if (!hasHuntEngineCapability(capability)) return;
+      if (['build', 'publish', 'reload'].includes(operation)
+        && !window.confirm(t('huntEngine.confirmOperation', { operation: button.textContent.trim() || operation }))) return;
       try {
-        const result = await json('/api/admin/assets/item/remove', { method: 'POST', body: JSON.stringify({ id: button.dataset.assetRemove }) });
-        setOutput('Asset item removed.');
-        if (result.assets) renderAssets(result.assets);
-        await refresh();
+        const result = await json(`/api/admin/hunt-engine/${encodeURIComponent(operation)}`, { method: 'POST', body: '{}' });
+        rememberHuntEngineOperation(result.operation);
+        renderHuntEngineOperations();
+        setOutput(result.operation?.message || t('huntEngine.operationStarted'));
+        pollHuntEngineOperation(result.operation?.id).catch(() => {});
       } catch (error) {
         setOutput(t('command.error', { message: error.message }));
       }
-    }
+    });
   });
 
-  const handleAssetPackClick = (event) => {
-    const use = event.target.closest('[data-asset-use-pack]');
-    const publish = event.target.closest('[data-asset-publish-pack]');
-    if (use) {
-      $('assetItemPack').value = use.dataset.assetUsePack || '';
-      $('assetItemPack').focus();
-    }
-    if (publish) {
-      $('assetsPublishFile').value = publish.dataset.assetPublishPack || '';
-      if (!$('assetsPublishBaseUrl').value) $('assetsPublishBaseUrl').value = currentPanelBaseUrl();
-      $('assetsPublishFile').focus();
-    }
-  };
-  $('assetsPackList')?.addEventListener('click', handleAssetPackClick);
-  $('assetsPackStatus')?.addEventListener('click', handleAssetPackClick);
-  $('assetsPublishDefaultButton')?.addEventListener('click', () => {
-    const pack = defaultAssetPack(state.lastData?.assets);
-    if (!pack) return;
-    $('assetsPublishFile').value = pack.name || '';
-    if (!$('assetsPublishBaseUrl').value) $('assetsPublishBaseUrl').value = currentPanelBaseUrl();
-    $('assetsPublishSendOnJoin').checked = true;
-    $('assetsPublishFile').focus();
-  });
-
-  $('assetsImageList')?.addEventListener('click', (event) => {
-    const use = event.target.closest('[data-asset-use-icon]');
-    if (!use) return;
-    $('assetItemIcon').value = use.dataset.assetUseIcon || '';
-    $('assetItemIcon').focus();
-  });
-
-  $('assetsPromptForm')?.addEventListener('submit', async (event) => {
+  $('huntEngineSendPackForm')?.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (!hasHuntEngineCapability('publish')) return;
     try {
-      const result = await json('/api/admin/assets/prompt', {
+      const result = await json('/api/admin/hunt-engine/send-pack', {
         method: 'POST',
-        body: JSON.stringify({
-          useCase: $('assetsPromptUseCase').value,
-          theme: $('assetsPromptTheme').value,
-          category: $('assetsPromptCategory').value,
-          style: $('assetsPromptStyle').value,
-          colorPalette: $('assetsPromptPalette').value,
-          materialFeel: $('assetsPromptMaterialFeel').value,
-          resolution: $('assetsPromptResolution').value,
-          transparentBackground: String($('assetsPromptTransparent').checked)
-        })
+        body: JSON.stringify({ player: $('huntEngineSendPackPlayer').value })
       });
-      const prompt = result.prompt || {};
-      $('assetsPromptCards').innerHTML = [
-        dataItem('Model Prompt', prompt.modelPrompt || ''),
-        dataItem('UI Prompt', prompt.uiPrompt || ''),
-        dataItem('Item Definition Hint', prompt.itemDefinitionHint || ''),
-        ...(prompt.steps || []).map((line) => dataItem('Step', line))
-      ].join('');
-      setOutput('Prompts generated.');
+      setOutput(result.message || t('huntEngine.packSent'));
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));
     }
   });
 
-  $('assetsValidateButton')?.addEventListener('click', async () => {
+  $('huntEngineMigrationButton')?.addEventListener('click', async () => {
+    if (!hasHuntEngineCapability('admin')) return;
     try {
-      const result = await json('/api/admin/assets/validate', { method: 'POST', body: '{}' });
-      if (result.assets) renderAssets(result.assets);
-      setOutput('Validation finished.');
-      await refresh();
-    } catch (error) {
-      setOutput(t('command.error', { message: error.message }));
-    }
-  });
-
-  $('assetsPublishForm')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      const result = await json('/api/admin/assets/publish', {
-        method: 'POST',
-        body: JSON.stringify({
-          fileName: $('assetsPublishFile').value,
-          externalBaseUrl: $('assetsPublishBaseUrl').value,
-          required: String($('assetsPublishRequired').checked),
-          sendOnJoin: String($('assetsPublishSendOnJoin').checked)
-        })
-      });
-      const published = result.published || {};
-      $('assetsPublishResult').innerHTML = [
-        dataItem('URL', published.url || '--'),
-        dataItem('SHA1', published.sha1 || '--'),
-        dataItem('File', published.fileName || '--')
-      ].join('');
-      if (result.assets) renderAssets(result.assets);
-      setOutput('Pack published.');
-      await refresh();
+      const result = await json('/api/admin/hunt-engine/migration');
+      renderHuntEngineMigration(result.migration, true);
     } catch (error) {
       setOutput(t('command.error', { message: error.message }));
     }
@@ -3700,6 +4154,7 @@ bindEvents();
 showPage(pageFromLocation(), false);
 updateActorKind();
 renderBackendConnection();
+if (standaloneFrontend() && !state.backendUrl) setConnectionPanel(true);
 refresh()
   .then(() => {
     if (window.location.hash === '#register') openAuthModal('register');
@@ -3709,7 +4164,4 @@ refresh()
     $('serverLine').textContent = error.message;
   });
 refreshMap().catch(() => {});
-state.refreshTimer = setInterval(() => {
-  refresh().catch(() => {});
-}, standaloneFrontend() && !state.backendUrl ? 15000 : 5000);
-state.pollMillis = 5000;
+setRefreshInterval(standaloneFrontend() && !state.backendUrl ? 15000 : 5000);

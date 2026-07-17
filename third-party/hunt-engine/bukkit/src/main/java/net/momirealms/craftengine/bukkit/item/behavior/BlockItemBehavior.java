@@ -1,0 +1,308 @@
+package net.momirealms.craftengine.bukkit.item.behavior;
+
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks;
+import net.momirealms.craftengine.bukkit.api.event.CustomBlockAttemptPlaceEvent;
+import net.momirealms.craftengine.bukkit.api.event.CustomBlockPlaceEvent;
+import net.momirealms.craftengine.bukkit.block.BukkitBlockManager;
+import net.momirealms.craftengine.bukkit.util.*;
+import net.momirealms.craftengine.bukkit.world.BukkitExistingBlock;
+import net.momirealms.craftengine.core.block.BlockDefinition;
+import net.momirealms.craftengine.core.block.ImmutableBlockState;
+import net.momirealms.craftengine.core.block.UpdateFlags;
+import net.momirealms.craftengine.core.block.entity.BlockEntity;
+import net.momirealms.craftengine.core.block.property.Property;
+import net.momirealms.craftengine.core.entity.player.InteractionHand;
+import net.momirealms.craftengine.core.entity.player.InteractionResult;
+import net.momirealms.craftengine.core.entity.player.Player;
+import net.momirealms.craftengine.core.item.Item;
+import net.momirealms.craftengine.core.item.behavior.BlockItem;
+import net.momirealms.craftengine.core.item.behavior.ItemBehavior;
+import net.momirealms.craftengine.core.item.behavior.ItemBehaviorFactory;
+import net.momirealms.craftengine.core.pack.Pack;
+import net.momirealms.craftengine.core.pack.PendingConfigSection;
+import net.momirealms.craftengine.core.plugin.CraftEngine;
+import net.momirealms.craftengine.core.plugin.config.Config;
+import net.momirealms.craftengine.core.plugin.config.ConfigConstants;
+import net.momirealms.craftengine.core.plugin.config.ConfigSection;
+import net.momirealms.craftengine.core.plugin.config.ConfigValue;
+import net.momirealms.craftengine.core.plugin.context.ContextHolder;
+import net.momirealms.craftengine.core.plugin.context.EventTrigger;
+import net.momirealms.craftengine.core.plugin.context.PlayerOptionalContext;
+import net.momirealms.craftengine.core.plugin.context.parameter.DirectContextParameters;
+import net.momirealms.craftengine.core.util.Cancellable;
+import net.momirealms.craftengine.core.util.Direction;
+import net.momirealms.craftengine.core.util.Key;
+import net.momirealms.craftengine.core.util.VersionHelper;
+import net.momirealms.craftengine.core.world.BlockPos;
+import net.momirealms.craftengine.core.world.WorldPosition;
+import net.momirealms.craftengine.core.world.context.BlockPlaceContext;
+import net.momirealms.craftengine.core.world.context.UseOnContext;
+import net.momirealms.craftengine.proxy.bukkit.craftbukkit.CraftWorldProxy;
+import net.momirealms.craftengine.proxy.bukkit.craftbukkit.block.CraftBlockProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.CollisionGetterProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.LevelProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.level.block.state.BlockBehaviourProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.phys.shapes.CollisionContextProxy;
+import org.bukkit.Bukkit;
+import org.bukkit.GameEvent;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.event.block.BlockCanBuildEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.util.Vector;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+public class BlockItemBehavior extends ItemBehavior implements BlockItem {
+    public static final ItemBehaviorFactory<BlockItemBehavior> FACTORY = new Factory();
+    private final Key blockId;
+
+    public BlockItemBehavior(Key blockId) {
+        this.blockId = blockId;
+    }
+
+    @Override
+    public InteractionResult useOnBlock(UseOnContext context) {
+        return this.place(new BlockPlaceContext(context));
+    }
+
+    @SuppressWarnings("UnstableApiUsage")
+    public InteractionResult place(BlockPlaceContext context) {
+        Optional<BlockDefinition> optionalBlock = BukkitBlockManager.instance().blockById(this.blockId);
+        if (optionalBlock.isEmpty()) {
+            CraftEngine.instance().logger().warn("Failed to place unknown block " + this.blockId);
+            return InteractionResult.FAIL;
+        }
+        if (!context.canPlace()) {
+            return InteractionResult.PASS;
+        }
+
+        Player player = context.getPlayer();
+        BlockDefinition block = optionalBlock.get();
+        BlockPos pos = context.getClickedPos();
+        int maxY = context.getLevel().worldHeight().getMaxBuildHeight() - 1;
+        if (context.getClickedFace() == Direction.UP && pos.y() > maxY) {
+            if (player != null) {
+                player.sendActionBar(Component.translatable("build.tooHigh").arguments(Component.text(maxY)).color(NamedTextColor.RED));
+            }
+            return InteractionResult.FAIL;
+        }
+
+        ImmutableBlockState blockStateToPlace = getPlacementState(context, block);
+        if (blockStateToPlace == null) {
+            return InteractionResult.PASS;
+        }
+
+        Item item = context.getItem();
+        blockStateToPlace = updateBlockStateProperties(blockStateToPlace, item);
+
+        BlockPos againstPos = context.getAgainstPos();
+        World world = (World) context.getLevel().platformWorld();
+        Location placeLocation = new Location(world, pos.x(), pos.y(), pos.z());
+        Block bukkitBlock = world.getBlockAt(placeLocation);
+        Block againstBlock = world.getBlockAt(againstPos.x(), againstPos.y(), againstPos.z());
+        org.bukkit.entity.Player bukkitPlayer = player != null ? (org.bukkit.entity.Player) player.platformPlayer() : null;
+
+        // TODO 检测多方块行为??? 或许应该在 canPlace里实现？
+//        BlockBehavior behavior = blockStateToPlace.behavior();
+//        if (behavior.hasMultiState(blockStateToPlace) && !behavior.canPlaceMultiState(context.getLevel(), pos, blockStateToPlace)) {
+//            return InteractionResult.FAIL;
+//        }
+
+        ContextHolder.Builder contextBuilder = ContextHolder.builder();
+
+        if (player != null) {
+
+            if (player.isAdventureMode()) {
+                Object againstBlockState = BlockStateUtils.blockDataToBlockState(againstBlock.getBlockData());
+                Optional<ImmutableBlockState> optionalCustomState = BlockStateUtils.getOptionalCustomBlockState(againstBlockState);
+                if (optionalCustomState.isEmpty()) {
+                    if (!AdventureModeUtils.canPlace(context.getItem(), context.getLevel(), againstPos, againstBlockState)) {
+                        return InteractionResult.FAIL;
+                    }
+                } else {
+                    ImmutableBlockState customState = optionalCustomState.get();
+                    // custom block
+                    if (!AdventureModeUtils.canPlace(context.getItem(), context.getLevel(), againstPos, Config.simplifyAdventurePlaceCheck() ? customState.visualBlockState().minecraftState() : againstBlockState)) {
+                        return InteractionResult.FAIL;
+                    }
+                }
+            }
+
+            // trigger event
+            CustomBlockAttemptPlaceEvent attemptPlaceEvent = new CustomBlockAttemptPlaceEvent(bukkitPlayer, placeLocation.clone(), blockStateToPlace,
+                    DirectionUtils.toBlockFace(context.getClickedFace()), bukkitBlock, context.getHand(), contextBuilder);
+            if (EventUtils.fireAndCheckCancel(attemptPlaceEvent)) {
+                return InteractionResult.FAIL;
+            }
+        }
+
+        // it's just world + pos
+        BlockState previousState = bukkitBlock.getState();
+        List<BlockState> revertStates = new ArrayList<>(2);
+        revertStates.add(previousState);
+        // place custom block
+        placeBlock(placeLocation, blockStateToPlace, revertStates);
+
+        if (player != null) {
+            // call bukkit event
+            BlockPlaceEvent bukkitPlaceEvent = new BlockPlaceEvent(bukkitBlock, previousState, againstBlock, ItemStackUtils.getBukkitStack(context.getItem()), bukkitPlayer, true, context.getHand() == InteractionHand.MAIN_HAND ? EquipmentSlot.HAND : EquipmentSlot.OFF_HAND);
+            if (EventUtils.fireAndCheckCancel(bukkitPlaceEvent)) {
+                // revert changes
+                for (BlockState state : revertStates) {
+                    state.update(true, false);
+                }
+                return InteractionResult.FAIL;
+            }
+
+            // call custom event
+            CustomBlockPlaceEvent customPlaceEvent = new CustomBlockPlaceEvent(bukkitPlayer, placeLocation.clone(), blockStateToPlace, world.getBlockAt(placeLocation), context.getHand(), contextBuilder);
+            if (EventUtils.fireAndCheckCancel(customPlaceEvent)) {
+                // revert changes
+                for (BlockState state : revertStates) {
+                    state.update(true, false);
+                }
+                return InteractionResult.FAIL;
+            }
+        }
+
+        WorldPosition position = new WorldPosition(context.getLevel(), pos.x() + 0.5, pos.y() + 0.5, pos.z() + 0.5);
+        Cancellable dummy = Cancellable.dummy();
+        PlayerOptionalContext functionContext = PlayerOptionalContext.of(player,
+                contextBuilder
+                .withParameter(DirectContextParameters.BLOCK, new BukkitExistingBlock(bukkitBlock))
+                .withParameter(DirectContextParameters.POSITION, position)
+                .withParameter(DirectContextParameters.EVENT, dummy)
+                .withParameter(DirectContextParameters.HAND, context.getHand())
+                .withParameter(DirectContextParameters.ITEM_IN_HAND, context.getItem())
+        );
+        block.execute(functionContext, EventTrigger.PLACE);
+        if (dummy.isCancelled()) {
+            for (BlockState state : revertStates) {
+                state.update(true, false);
+            }
+            return InteractionResult.FAIL;
+        }
+
+        // 放置多元素
+        blockStateToPlace.behavior().placeMultiState(BlockStateUtils.getBlockOwner(blockStateToPlace.customBlockState().minecraftState()), new Object[]{
+                context.getLevel().minecraftWorld(),
+                LocationUtils.toBlockPos(context.getClickedPos()),
+                blockStateToPlace.customBlockState().minecraftState(),
+                Optional.ofNullable(context.getPlayer()).map(Player::serverPlayer).orElse(null),
+                context.getItem().minecraftItem()
+        });
+
+        if (blockStateToPlace.hasBlockEntity()) {
+            BlockEntity blockEntity = context.getLevel().storageWorld().getBlockEntityAtIfLoaded(pos, true);
+            if (blockEntity != null) {
+                blockEntity.controller.loadCustomDataFromItem(item);
+            }
+        }
+
+        if (player != null) {
+            if (!player.isCreativeMode()) {
+                item.count(item.count() - 1);
+            }
+            player.swingHand(context.getHand());
+        }
+
+        context.getLevel().playBlockSound(position, blockStateToPlace.settings().sounds().placeSound());
+        LevelUtils.sendGameEvent(world, bukkitPlayer, GameEvent.BLOCK_PLACE, new Vector(pos.x(), pos.y(), pos.z()));
+        return InteractionResult.SUCCESS;
+    }
+
+    protected ImmutableBlockState updateBlockStateProperties(ImmutableBlockState state, Item item) {
+        Optional<Map<String, String>> optionalBlockProperties = item.blockState();
+        if (optionalBlockProperties.isEmpty()) {
+            return state;
+        }
+        for (Map.Entry<String, String> entry : optionalBlockProperties.get().entrySet()) {
+            Property<?> property = state.getProperty(entry.getKey());
+            if (property != null) {
+                Comparable<?> value = property.valueByName(entry.getValue());
+                if (value != null) {
+                    state = ImmutableBlockState.with(state, property, value);
+                }
+            }
+        }
+        return state;
+    }
+
+    protected ImmutableBlockState getPlacementState(BlockPlaceContext context, BlockDefinition block) {
+        ImmutableBlockState state = block.getStateForPlacement(context);
+        return state != null && this.canPlace(context, state) ? state : null;
+    }
+
+    protected boolean checkStatePlacement() {
+        return true;
+    }
+
+    @SuppressWarnings({"UnstableApiUsage", "removal"})
+    protected boolean canPlace(BlockPlaceContext context, ImmutableBlockState state) {
+        Player cePlayer = context.getPlayer();
+        Object player = cePlayer != null ? cePlayer.serverPlayer() : null;
+        Object blockState = state.customBlockState().minecraftState();
+        Object blockPos = LocationUtils.toBlockPos(context.getClickedPos());
+        Object voxelShape;
+        if (VersionHelper.isOrAbove1_21_6) {
+            voxelShape = CollisionContextProxy.INSTANCE.placementContext(player);
+        } else if (player != null) {
+            voxelShape = CollisionContextProxy.INSTANCE.of(player);
+        } else {
+            voxelShape = CollisionContextProxy.INSTANCE.empty();
+        }
+        Object world = CraftWorldProxy.INSTANCE.getWorld((World) context.getLevel().platformWorld());
+        boolean defaultReturn = ((!this.checkStatePlacement() || BlockBehaviourProxy.BlockStateBaseProxy.INSTANCE.canSurvive(blockState, world, blockPos)) &&
+                (VersionHelper.hasPaperPatch ?
+                        LevelProxy.INSTANCE.checkEntityCollision(world, blockState, player, voxelShape, blockPos, true) : // paper
+                        CollisionGetterProxy.INSTANCE.isUnobstructed(world, blockState, blockPos, CollisionContextProxy.INSTANCE.placementContext(player)))); // spigot
+        Block block = CraftBlockProxy.INSTANCE.at(world, blockPos);
+        BlockData blockData = BlockStateUtils.fromBlockData(blockState);
+        BlockCanBuildEvent canBuildEvent;
+        if (VersionHelper.hasPaperPatch) {
+            canBuildEvent = new BlockCanBuildEvent(
+                    block, cePlayer != null ? (org.bukkit.entity.Player) cePlayer.platformPlayer() : null, blockData, defaultReturn,
+                    context.getHand() == InteractionHand.MAIN_HAND ? EquipmentSlot.HAND : EquipmentSlot.OFF_HAND
+            );
+        } else {
+            canBuildEvent = new BlockCanBuildEvent(
+                    block, cePlayer != null ? (org.bukkit.entity.Player) cePlayer.platformPlayer() : null, blockData, defaultReturn
+            );
+        }
+        Bukkit.getPluginManager().callEvent(canBuildEvent);
+        return canBuildEvent.isBuildable();
+    }
+
+    protected boolean placeBlock(Location location, ImmutableBlockState blockState, List<BlockState> revertStates) {
+        return CraftEngineBlocks.place(location, blockState, UpdateFlags.UPDATE_ALL_IMMEDIATE, false);
+    }
+
+    @Override
+    public Key block() {
+        return this.blockId;
+    }
+
+    private static class Factory implements ItemBehaviorFactory<BlockItemBehavior> {
+        @Override
+        public BlockItemBehavior create(Pack pack, Path path, Key key, ConfigSection section) {
+            ConfigValue blockValue = section.getNonNullValue("block", ConfigConstants.ARGUMENT_SECTION);
+            if (blockValue.is(Map.class)) {
+                BukkitBlockManager.instance().blockParser().addPendingConfigSection(new PendingConfigSection(pack, path, key, blockValue.getAsSection()));
+                return new BlockItemBehavior(key);
+            } else {
+                return new BlockItemBehavior(blockValue.getAsIdentifier());
+            }
+        }
+    }
+}

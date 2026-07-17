@@ -1,0 +1,36 @@
+config_factory:
+  instances:
+    - stage: 0
+    - stage: 1
+    - stage: 2
+    - stage: 3
+    - stage: 4
+    - stage: 5
+    - stage: 6
+    - stage: 7
+    - stage: 8
+    - stage: 9
+  blueprint:
+    items:
+      ${namespace:-"minecraft"}:destroy_stage_${stage}:
+        data::item_name: destroy stage ${stage}
+        model:
+          path: item/custom/destroy_stage_${stage}
+          generation:
+            parent: block/cube_all
+            textures:
+              all: block/destroy_stage_${stage}
+templates:
+  internal:destroy_stages:
+    scale: 1.01
+    items:
+      - minecraft:destroy_stage_0
+      - minecraft:destroy_stage_1
+      - minecraft:destroy_stage_2
+      - minecraft:destroy_stage_3
+      - minecraft:destroy_stage_4
+      - minecraft:destroy_stage_5
+      - minecraft:destroy_stage_6
+      - minecraft:destroy_stage_7
+      - minecraft:destroy_stage_8
+      - minecraft:destroy_stage_9

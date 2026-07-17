@@ -1,0 +1,381 @@
+# Do not modify this value
+config-version: "${config_version}"
+
+#
+# For safety reasons, editing this file requires a restart to apply
+#
+
+# https://github.com/Aoody743/HunterCore/tree/main/third-party/hunt-engine
+legacy_hunterassets:
+  # Compatibility roots are a notice-and-browser forwarder only. They do not expose old
+  # administrative subcommands or a second resource-pack lifecycle.
+  enable: true
+  permission: ''
+  usage:
+    - /hunterassets
+    - /ha
+    - /hassets
+
+reload:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine reload
+    - /he reload
+
+upload:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine upload
+    - /he upload
+
+send_resource_pack:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine feature send-pack
+    - /he feature send-pack
+
+get_item:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine item get
+    - /he item get
+
+give_item:
+  enable: true
+  permission: huntengine.items.give
+  usage:
+    - /huntengine item give
+    - /he item give
+
+clear_item:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine item clear
+    - /he item clear
+
+item_browser_player:
+  enable: true
+  permission: huntengine.use
+  usage:
+    - /huntengine
+    - /he
+
+item_browser_admin:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine item browser
+    - /he item browser
+
+search_usage_player:
+  enable: true
+  permission: huntengine.use
+  usage:
+    - /search-usage
+
+search_recipe_player:
+  enable: true
+  permission: huntengine.use
+  usage:
+    - /search-recipe
+
+search_usage_admin:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine item search-usage
+    - /he item search-usage
+
+search_recipe_admin:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine item search-recipe
+    - /he item search-recipe
+
+totem_animation:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine feature totem-animation
+    - /he feature totem-animation
+
+toast:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine feature toast
+    - /he feature toast
+
+enable_resource:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine resource enable
+    - /he resource enable
+
+disable_resource:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine resource disable
+    - /he resource disable
+
+list_resource:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine resource list
+    - /he resource list
+
+create_resource:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine resource create
+    - /he resource create
+
+save_default_resource:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine resource save-default
+    - /he resource save-default
+
+set_locale:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /he feature locale set
+
+unset_locale:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /he feature locale unset
+
+clean_cache:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine clean-cache
+    - /he clean-cache
+
+set_display_entity_view_distance_scale:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /he feature display-entity-view-distance-scale set
+
+set_entity_culling_distance_scale:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /he feature entity-culling-distance-scale set
+
+toggle_entity_culling:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /he feature toggle-entity-culling
+
+place_feature:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /he feature place-feature
+
+set_item_custom_model_data:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine item custom-model-data
+    - /he item custom-model-data
+
+set_item_item_model:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine item item-model
+    - /he item item-model
+
+remove_item_component:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine item remove-component
+    - /he item remove-component
+
+migrate_world_storage:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine feature migrate-world-storage
+    - /he feature migrate-world-storage
+
+world_settings:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine feature world-settings
+    - /he feature world-settings
+
+# Debug commands
+debug_set_block:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug setblock
+    - /he debug setblock
+
+debug_spawn_furniture:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug spawn-furniture
+    - /he debug spawn-furniture
+
+debug_get_block_state_registry_id:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug get-block-state-registry-id
+    - /he debug get-block-state-registry-id
+
+debug_get_block_internal_id:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug get-block-internal-id
+    - /he debug get-block-internal-id
+
+debug_visual_state_usage:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug visual-state-usage
+    - /huntengine debug appearance-state-usage
+    - /huntengine debug clientside-state-usage
+    - /he debug visual-state-usage
+    - /he debug appearance-state-usage
+    - /he debug clientside-state-usage
+
+debug_auto_state_usage:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug auto-state-usage
+    - /he debug auto-state-usage
+
+debug_real_state_usage:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug real-state-usage
+    - /huntengine debug serverside-state-usage
+    - /he debug real-state-usage
+    - /he debug serverside-state-usage
+
+debug_item_data:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug item-data
+    - /he debug item-data
+    - /he item debug
+
+debug_target_block:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug target-block
+    - /he debug target-block
+
+debug_is_section_injected:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug is-section-injected
+    - /he debug is-section-injected
+
+debug_clear_cooldown:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug clear-cooldown
+    - /he debug clear-cooldown
+
+debug_migrate_templates:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug migrate-templates
+    - /he debug migrate-templates
+
+debug_is_chunk_persistent_loaded:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug is-chunk-persistent-loaded
+    - /he debug is-chunk-persistent-loaded
+
+debug_entity_id:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug entity-id
+    - /he debug entity-id
+
+debug_custom_model_data:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug custom-model-data
+    - /he debug custom-model-data
+
+debug_item_model:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug item-model
+    - /he debug item-model
+
+debug_image:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug image
+    - /he debug image
+
+debug_generate_internal_assets:
+  enable: false
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug generate-internal-assets
+    - /he debug generate-internal-assets
+
+debug_furniture:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug furniture
+    - /he debug furniture
+
+debug_optimize_furniture_structure:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug optimize-furniture-structure
+    - /he debug optimize-furniture-structure
+
+debug_test:
+  enable: true
+  permission: huntengine.admin
+  usage:
+    - /huntengine debug test
+    - /he debug test

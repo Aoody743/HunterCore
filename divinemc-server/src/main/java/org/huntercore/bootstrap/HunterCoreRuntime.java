@@ -12,8 +12,12 @@ import org.huntercore.api.HunterCommandExtension;
 import org.huntercore.api.HunterCoreApi;
 import org.huntercore.api.HunterLanguage;
 import org.huntercore.api.fakeplayer.HunterFakePlayerService;
+import org.huntercore.api.gui.HunterGuiService;
+import org.huntercore.api.huntengine.HuntEngineService;
+import org.huntercore.api.huntengine.HuntEngineServices;
 import org.huntercore.config.HunterPreferences;
 import org.huntercore.fakeplayer.HunterFakePlayerManager;
+import org.huntercore.gui.HunterGuiManager;
 import org.huntercore.plugin.HunterBundledPluginInstaller;
 import org.jetbrains.annotations.NotNull;
 
@@ -26,6 +30,7 @@ public final class HunterCoreRuntime implements HunterCoreApi {
 
     private final Map<String, HunterCommandExtension> commandExtensions = new LinkedHashMap<>();
     private final HunterFakePlayerService fakePlayers = new HunterFakePlayerManager();
+    private final HunterGuiService gui = new HunterGuiManager();
     private volatile List<HunterBundledPlugin> bundledPlugins = List.of();
     private volatile HunterBundledPluginInstaller.InstallReport lastInstallReport = HunterBundledPluginInstaller.InstallReport.empty();
     private volatile HunterPreferences preferences;
@@ -61,6 +66,16 @@ public final class HunterCoreRuntime implements HunterCoreApi {
     @Override
     public @NotNull HunterFakePlayerService fakePlayers() {
         return this.fakePlayers;
+    }
+
+    @Override
+    public @NotNull HunterGuiService gui() {
+        return this.gui;
+    }
+
+    @Override
+    public @NotNull HuntEngineService huntEngine() {
+        return HuntEngineServices.get();
     }
 
     @Override

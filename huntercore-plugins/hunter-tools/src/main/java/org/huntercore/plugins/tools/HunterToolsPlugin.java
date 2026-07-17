@@ -1,27 +1,43 @@
 package org.huntercore.plugins.tools;
 
+import static org.huntercore.plugins.tools.HunterCommandSyntax.commandArguments;
+import static org.huntercore.plugins.tools.HunterCommandSyntax.commandRoot;
+import static org.huntercore.plugins.tools.HunterCommandSyntax.helpTopic;
+import static org.huntercore.plugins.tools.HunterCommandSyntax.isHelp;
+import static org.huntercore.plugins.tools.HunterCommandSyntax.matching;
+import static org.huntercore.plugins.tools.HunterCommandSyntax.normalizeCpuMode;
+import static org.huntercore.plugins.tools.HunterCommandSyntax.normalizeWebCommand;
+import static org.huntercore.plugins.tools.HunterCommandSyntax.parseToggle;
+import static org.huntercore.plugins.tools.HunterCommandSyntax.validCpuMode;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.jar.JarFile;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -71,6 +87,23 @@ import org.huntercore.api.HunterCommandExtension;
 import org.huntercore.api.HunterCoreProvider;
 import org.huntercore.api.HunterHelp;
 import org.huntercore.api.HunterLanguage;
+import org.huntercore.api.gui.HunterGuiConfirmationResult;
+import org.huntercore.api.gui.HunterGuiOpenResult;
+import org.huntercore.api.gui.HunterGuiPage;
+import org.huntercore.api.gui.HunterGuiPagination;
+import org.huntercore.api.gui.HunterGuiRegistration;
+import org.huntercore.api.gui.HunterGuiRenderContext;
+import org.huntercore.api.gui.HunterGuiRoute;
+import org.huntercore.api.gui.HunterGuiScreen;
+import org.huntercore.api.gui.HunterGuiView;
+import org.huntercore.api.huntengine.HuntEngineActionResult;
+import org.huntercore.api.huntengine.HuntEngineCatalogue;
+import org.huntercore.api.huntengine.HuntEngineContent;
+import org.huntercore.api.huntengine.HuntEngineContentKind;
+import org.huntercore.api.huntengine.HuntEngineOperationTicket;
+import org.huntercore.api.huntengine.HuntEngineService;
+import org.huntercore.api.huntengine.HuntEngineServices;
+import org.huntercore.api.huntengine.HuntEngineStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -108,7 +141,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     private final Map<UUID, SidebarBoard> sidebars = new HashMap<>();
     private final Map<UUID, Location> backLocations = new HashMap<>();
-    private final Map<UUID, GuiChatSession> guiChatSessions = new HashMap<>();
+    // AsyncPlayerChatEvent can consume this session off the main thread; the resulting GUI
+    // action is always dispatched back onto the server thread below.
+    private final Map<UUID, GuiChatSession> guiChatSessions = new ConcurrentHashMap<>();
     private final Map<UUID, GuiConfirmSession> guiConfirmSessions = new HashMap<>();
     private HunterToolsPreferences preferences;
     private HunterActorManager actorManager;
@@ -118,16 +153,36 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private HunterWebPanelManager webPanelManager;
     private HunterTitleManager titleManager;
     private HunterStoryModeManager storyModeManager;
+    private HunterGuiRegistration sharedGuiRegistration;
     private ExecutorService workerExecutor;
     private MetricsSnapshot snapshot = MetricsSnapshot.empty();
     private volatile List<String> cachedPlayerNames = List.of();
     private BukkitTask metricsTask;
     private BukkitTask actionbarTask;
     private BukkitTask sidebarTask;
+    private volatile AuthChatGuard authChatGuard;
     private static final String ACTOR_LIST_TITLE_PREFIX = "HC Actors ";
     private static final String ACTOR_DETAIL_TITLE_PREFIX = "HC Actor ";
     private static final String STORY_WORKBENCH_TITLE = "HC Story Workbench";
     private static final int ADMIN_PLUGIN_PAGE_SIZE = 36;
+    private static final String SHARED_MAIN_GUI_SCREEN = "hunter-tools:main";
+    private static final String SHARED_MAIN_GUI_ACTION_CLOSE = "close";
+    private static final String SHARED_MAIN_GUI_ACTION_TOOLS = "open:tools";
+    private static final String SHARED_MAIN_GUI_ACTION_PROFILE = "open:profile";
+    private static final String SHARED_MAIN_GUI_ACTION_SETTINGS = "open:settings";
+    private static final String SHARED_MAIN_GUI_ACTION_PLAYERBOTS = "open:playerbots";
+    private static final String SHARED_MAIN_GUI_ACTION_NPCS = "open:npcs";
+    private static final String SHARED_MAIN_GUI_ACTION_STORY = "open:story";
+    private static final String SHARED_MAIN_GUI_ACTION_COMMAND_CENTER = "open:command-center";
+    private static final String SHARED_MAIN_GUI_ACTION_ADMIN = "open:admin";
+    private static final String SHARED_MAIN_GUI_ACTION_SERVER_INFO = "show:server-info";
+    private static final String SHARED_MAIN_GUI_ACTION_WEB_PANEL = "show:web-panel";
+    private static final String SHARED_MAIN_GUI_ACTION_HUNT_ENGINE = "open:hunt-engine";
+    private static final String SHARED_HUNT_ENGINE_GUI_SCREEN = "hunter-tools:hunt-engine";
+    private static final String HUNT_ENGINE_GUI_VIEW_CATALOGUE = "catalogue";
+    private static final String HUNT_ENGINE_GUI_VIEW_ADMIN = "admin";
+    private static final String HUNT_ENGINE_GUI_VIEW_DETAIL = "detail";
+    private static final int HUNT_ENGINE_CATALOGUE_PAGE_SIZE = 36;
 
     @Override
     public void onEnable() {
@@ -142,10 +197,15 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.storyModeManager = new HunterStoryModeManager(this, this.preferences, this.realFakePlayerManager);
         this.webPanelManager = new HunterWebPanelManager(this, this.preferences);
         this.titleManager = new HunterTitleManager(this, this.preferences);
+        this.sharedGuiRegistration = HunterCoreProvider.get().gui().register(this, List.of(
+            new SharedMainGuiScreen(),
+            new HuntEngineGuiScreen()
+        ));
         this.registerCommands();
         this.registerHunterCoreCommands();
         this.getServer().getPluginManager().registerEvents(this, this);
         this.getServer().getPluginManager().registerEvents(this.gameplayRuleManager, this);
+        this.refreshAuthChatGuard();
         this.startTasks();
         this.actorManager.reload();
         this.webPanelManager.start();
@@ -169,6 +229,14 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     @Override
     public void onDisable() {
         this.cancelTasks();
+        if (this.sharedGuiRegistration != null) {
+            this.sharedGuiRegistration.close();
+            this.sharedGuiRegistration = null;
+        }
+        this.closeManagedGuis();
+        this.guiChatSessions.clear();
+        this.guiConfirmSessions.clear();
+        this.authChatGuard = null;
         if (this.actorManager != null) {
             this.actorManager.shutdown();
         }
@@ -267,6 +335,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
 
     @EventHandler
     public void onJoin(final PlayerJoinEvent event) {
+        this.refreshAuthChatGuard();
         if (this.titleManager != null) {
             this.titleManager.refreshPlayer(event.getPlayer());
         }
@@ -281,6 +350,45 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.backLocations.remove(event.getPlayer().getUniqueId());
         this.guiChatSessions.remove(event.getPlayer().getUniqueId());
         this.guiConfirmSessions.remove(event.getPlayer().getUniqueId());
+    }
+
+    private void refreshAuthChatGuard() {
+        final Plugin plugin = this.getServer().getPluginManager().getPlugin("HunterAuth");
+        if (plugin == null || !plugin.isEnabled()) {
+            this.authChatGuard = null;
+            return;
+        }
+        try {
+            this.authChatGuard = new AuthChatGuard(
+                plugin,
+                plugin.getClass().getMethod("shouldSuppressChatObservation", UUID.class)
+            );
+        } catch (final NoSuchMethodException | SecurityException ex) {
+            // HunterAuth is optional. Its LOWEST-priority cancellation remains the primary
+            // protection when an older standalone Auth jar is installed.
+            this.authChatGuard = null;
+        }
+    }
+
+    private boolean suppressesHunterAuthChatObservation(final UUID playerId) {
+        final AuthChatGuard guard = this.authChatGuard;
+        if (guard == null) {
+            return false;
+        }
+        try {
+            return Boolean.TRUE.equals(guard.method().invoke(guard.plugin(), playerId));
+        } catch (final ReflectiveOperationException | RuntimeException ex) {
+            // Never log chat payloads while deciding whether an observer may see one.
+            return false;
+        }
+    }
+
+    private void closeManagedGuis() {
+        for (final Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof GuiHolder) {
+                player.closeInventory();
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -424,6 +532,228 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         return this.openMainMenuWorkbench(sender);
     }
 
+    private HunterGuiView renderSharedMainMenu(final HunterGuiRenderContext context) {
+        final Player player = context.player();
+        final HunterGuiView.Builder view = HunterGuiView.builder(
+            Component.text(this.text("HunterCore · 服务器菜单", "HunterCore · Server Menu")),
+            6
+        );
+        if (!this.hasGuiFeaturePermission(player, "menu")) {
+            view.item(22, this.menuItem(
+                Material.BARRIER,
+                "没有打开服务器菜单的权限",
+                "You do not have permission to open the server menu",
+                List.of(),
+                List.of()
+            ));
+            view.button(49, this.menuItem(Material.BARRIER, "关闭", "Close", List.of(), List.of()), SHARED_MAIN_GUI_ACTION_CLOSE, action -> action.close());
+            return view.build();
+        }
+
+        this.addSharedMainCommand(view, player, 10, "tpgui", this.menuItem(
+            Material.ENDER_PEARL,
+            "传送中心",
+            "Teleport",
+            List.of("/tpgui", "在线玩家、TPA、TPHere"),
+            List.of("HunterTPA workbench", "Online players, TPA and TPHere")
+        ));
+        this.addSharedMainCommand(view, player, 11, "homes", this.menuItem(
+            Material.RED_BED,
+            "我的家",
+            "Homes",
+            List.of("/homes", "多个家、传送、删除"),
+            List.of("Home list, delete, and travel")
+        ));
+        this.addSharedMainCommand(view, player, 12, "spawn", this.menuItem(
+            Material.COMPASS,
+            "出生点",
+            "Spawn",
+            List.of("点击执行 /spawn"),
+            List.of("Teleport to spawn")
+        ));
+        this.addSharedMainCommand(view, player, 13, "back", this.menuItem(
+            Material.CLOCK,
+            "返回",
+            "Back",
+            List.of("/back", "回到上一个位置"),
+            List.of("Return to previous location")
+        ));
+        this.addSharedMainCommand(view, player, 14, "craft", this.menuItem(
+            Material.CRAFTING_TABLE,
+            "随身工作台",
+            "Crafting",
+            List.of("/craft"),
+            List.of("Portable crafting table")
+        ));
+        this.addSharedMainCommand(view, player, 15, "enderchest", this.menuItem(
+            Material.ENDER_CHEST,
+            "末影箱",
+            "Ender Chest",
+            List.of("/enderchest"),
+            List.of("Open your ender chest")
+        ));
+        this.addSharedMainCommand(view, player, 16, "trash", this.menuItem(
+            Material.CHEST,
+            "垃圾桶",
+            "Trash",
+            List.of("/trash"),
+            List.of("Disposable inventory")
+        ));
+
+        this.addSharedMainAction(
+            view,
+            player,
+            27,
+            null,
+            this.menuItem(Material.IRON_SWORD, "常用工具", "Tools", List.of("只显示你有权限使用的工具"), List.of("Only shows tools you can use")),
+            SHARED_MAIN_GUI_ACTION_TOOLS,
+            this::openToolsWorkbench
+        );
+        this.addSharedMainAction(
+            view,
+            player,
+            28,
+            "profile",
+            this.menuItem(Material.PLAYER_HEAD, "个人资料", "Profile", List.of("状态、背包预览、常用入口"), List.of("Stats, inventory preview, utility")),
+            SHARED_MAIN_GUI_ACTION_PROFILE,
+            target -> this.openProfileWorkbench(target)
+        );
+        this.addSharedMainAction(
+            view,
+            player,
+            29,
+            "settings",
+            this.menuItem(Material.LEVER, "玩家设置", "Settings", List.of("TPA、语言、面板入口"), List.of("TPA toggle, language, panel")),
+            SHARED_MAIN_GUI_ACTION_SETTINGS,
+            target -> this.openSettingsWorkbench(target)
+        );
+        this.addSharedMainAction(
+            view,
+            player,
+            30,
+            "fake-players",
+            this.menuItem(Material.ARMOR_STAND, "假人", "PlayerBots", List.of("查看并管理假人"), List.of("List and control fake players")),
+            SHARED_MAIN_GUI_ACTION_PLAYERBOTS,
+            target -> this.openActorListWorkbench(target, REAL_FAKE_PLAYERS)
+        );
+        this.addSharedMainAction(
+            view,
+            player,
+            31,
+            "npcs",
+            this.menuItem(Material.VILLAGER_SPAWN_EGG, "NPC", "NPCs", List.of("查看并管理 NPC"), List.of("List and control NPCs")),
+            SHARED_MAIN_GUI_ACTION_NPCS,
+            target -> this.openActorListWorkbench(target, NPCS)
+        );
+        this.addSharedMainAction(
+            view,
+            player,
+            32,
+            "story",
+            this.menuItem(Material.ENCHANTED_BOOK, "故事模式", "Story Mode", List.of("状态、启动、停止、实验能力"), List.of("Status, start, stop, experimental actions")),
+            SHARED_MAIN_GUI_ACTION_STORY,
+            this::openStoryWorkbench
+        );
+        this.addSharedMainAction(
+            view,
+            player,
+            33,
+            null,
+            this.menuItem(Material.BOOK, "服务器信息", "Server Info", List.of("/info"), List.of("/info")),
+            SHARED_MAIN_GUI_ACTION_SERVER_INFO,
+            target -> target.performCommand("info")
+        );
+        this.addSharedMainAction(
+            view,
+            player,
+            34,
+            null,
+            this.menuItem(
+                Material.FILLED_MAP,
+                "网页面板",
+                "Web Panel",
+                List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088")),
+                List.of(this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))
+            ),
+            SHARED_MAIN_GUI_ACTION_WEB_PANEL,
+            target -> target.sendMessage(ChatColor.AQUA + this.text("网页面板: ", "Web Panel: ")
+                + ChatColor.WHITE + this.preferences.stringValue("modules.web-panel.external-url", "http://127.0.0.1:8088"))
+        );
+        this.addSharedMainAction(
+            view,
+            player,
+            35,
+            null,
+            this.menuItem(Material.KNOWLEDGE_BOOK, "全部指令", "Command Center", List.of("所有指令都有 GUI 入口", "需要参数时会引导聊天输入"), List.of("GUI entry for every command", "Prompts in chat when arguments are needed")),
+            SHARED_MAIN_GUI_ACTION_COMMAND_CENTER,
+            target -> this.openCommandCenterWorkbench(target, "tools")
+        );
+        if (this.canOpenHuntEngineCatalogue(player)) {
+            view.button(
+                36,
+                this.menuItem(
+                    Material.CHEST,
+                    "HuntEngine 内容",
+                    "HuntEngine Content",
+                    List.of("自定义物品、方块与资源包内容", "只显示你可领取的内容"),
+                    List.of("Custom items, blocks, and resource-pack content", "Only content you may receive is shown")
+                ),
+                SHARED_MAIN_GUI_ACTION_HUNT_ENGINE,
+                action -> this.openHuntEngineGui(action.player(), HUNT_ENGINE_GUI_VIEW_CATALOGUE)
+            );
+        }
+        this.addSharedMainAction(
+            view,
+            player,
+            40,
+            "admin",
+            this.menuItem(Material.COMMAND_BLOCK, "管理中心", "Admin", List.of("状态、模块、广播"), List.of("Runtime, modules, broadcast")),
+            SHARED_MAIN_GUI_ACTION_ADMIN,
+            target -> this.openAdminWorkbench(target)
+        );
+        view.button(49, this.menuItem(Material.BARRIER, "关闭", "Close", List.of(), List.of()), SHARED_MAIN_GUI_ACTION_CLOSE, action -> action.close());
+        return view.build();
+    }
+
+    private void addSharedMainCommand(
+        final HunterGuiView.Builder view,
+        final Player player,
+        final int slot,
+        final String command,
+        final ItemStack item
+    ) {
+        if (!this.canUseGuiCommand(player, command)) {
+            return;
+        }
+        view.button(slot, item, "command:" + command, action -> {
+            final Player target = action.player();
+            this.runGuiAction(target, () -> this.performGuiCommand(target, command));
+        });
+    }
+
+    private void addSharedMainAction(
+        final HunterGuiView.Builder view,
+        final Player player,
+        final int slot,
+        final @Nullable String feature,
+        final ItemStack item,
+        final String actionId,
+        final Consumer<Player> operation
+    ) {
+        if (feature != null && !this.hasGuiFeaturePermission(player, feature)) {
+            return;
+        }
+        view.button(slot, item, actionId, action -> {
+            final Player target = action.player();
+            if (feature != null && !this.hasGuiFeaturePermission(target, feature)) {
+                target.sendMessage(Bukkit.permissionMessage());
+                action.refresh();
+                return;
+            }
+            this.runGuiAction(target, () -> operation.accept(target));
+        });
+    }
+
 
     private boolean openProfileMenu(final CommandSender sender) {
         return this.openProfileWorkbench(sender);
@@ -490,6 +820,14 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         }
         if (!this.requireGuiFeature(player, "menu")) {
             return true;
+        }
+        final HunterGuiRegistration registration = this.sharedGuiRegistration;
+        if (registration != null && registration.active()) {
+            final HunterGuiOpenResult result = registration.open(player, HunterGuiRoute.of(SHARED_MAIN_GUI_SCREEN));
+            if (result.opened()) {
+                return true;
+            }
+            this.getLogger().fine("HunterTools shared main GUI unavailable for " + player.getName() + ": " + result.name());
         }
         final Inventory inventory = this.createGui(new GuiHolder(GuiPage.MAIN, null, null, null), 54, this.guiTitle(GuiPage.MAIN, null, null));
         this.setCommandItem(inventory, 10, player, "tpgui", this.menuItem(Material.ENDER_PEARL, "传送中心", "Teleport", List.of("/tpgui", "在线玩家、TPA、TPHere"), List.of("HunterTPA workbench", "Online players, TPA and TPHere")));
@@ -767,7 +1105,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         inventory.setItem(3, this.commandCategoryItem("actors", normalized, Material.ARMOR_STAND, "假人与 NPC", "Actors", "/player /npc"));
         inventory.setItem(4, this.commandCategoryItem("story", normalized, Material.NETHER_STAR, "称号与故事", "Titles & Story", "/title /story"));
 
-        inventory.setItem(5, this.commandCategoryItem("assets", normalized, Material.FILLED_MAP, "资源", "Assets", "Resource pack / custom items"));
+        inventory.setItem(5, this.commandCategoryItem("hunt-engine", normalized, Material.CHEST, "HuntEngine", "HuntEngine", "Custom content / resource packs"));
         inventory.setItem(6, this.commandCategoryItem("account", normalized, Material.NAME_TAG, "账号", "Account", "HunterAuth"));
 
         final List<GuiCommand> commands = this.commandCenterCommands(normalized, player);
@@ -813,7 +1151,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 case 2 -> "admin";
                 case 3 -> "actors";
                 case 4 -> "story";
-                case 5 -> "assets";
+                case 5 -> "hunt-engine";
                 case 6 -> "account";
                 default -> commandCenterCategory(holder.action());
             };
@@ -867,11 +1205,461 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             case "gui:web" -> this.openAdminWebWorkbench(player);
             case "gui:ai" -> this.openAdminAiWorkbench(player);
             case "gui:preferences" -> this.openAdminPreferencesWorkbench(player);
+            case "gui:hunt-engine" -> this.openHuntEngineGui(player, HUNT_ENGINE_GUI_VIEW_CATALOGUE);
+            case "gui:hunt-engine-admin" -> this.openHuntEngineGui(player, HUNT_ENGINE_GUI_VIEW_ADMIN);
             case "gui:playerbots" -> this.openActorListWorkbench(player, REAL_FAKE_PLAYERS);
             case "gui:npcs" -> this.openActorListWorkbench(player, NPCS);
             case "gui:story" -> this.openStoryWorkbench(player);
             case "gui:title" -> this.openTitleWorkbench(player);
             default -> this.openCommandCenterWorkbench(player, "admin");
+        }
+    }
+
+    private void openHuntEngineGui(final Player player, final String requestedView) {
+        final String view = HUNT_ENGINE_GUI_VIEW_ADMIN.equals(requestedView) && this.hasHuntEngineGuiPermission(player, "admin")
+            ? HUNT_ENGINE_GUI_VIEW_ADMIN
+            : HUNT_ENGINE_GUI_VIEW_CATALOGUE;
+        if (!this.canOpenHuntEngineCatalogue(player)) {
+            player.sendMessage(Bukkit.permissionMessage());
+            return;
+        }
+        final HunterGuiRegistration registration = this.sharedGuiRegistration;
+        if (registration == null || !registration.active()) {
+            player.sendMessage(ChatColor.RED + this.text("共享 GUI 当前不可用。", "The shared GUI is currently unavailable."));
+            return;
+        }
+        registration.open(player, this.huntEngineRoute(view, 0, -1L));
+    }
+
+    private HunterGuiRoute huntEngineRoute(final String view, final int page, final long revision) {
+        return HunterGuiRoute.of(SHARED_HUNT_ENGINE_GUI_SCREEN, Map.of(
+            "view", view,
+            "page", String.valueOf(Math.max(0, page)),
+            "revision", String.valueOf(revision)
+        ));
+    }
+
+    private HunterGuiRoute huntEngineContentRoute(final String contentId, final long revision) {
+        return this.huntEngineRoute(HUNT_ENGINE_GUI_VIEW_DETAIL, 0, revision)
+            .withArgument("content", contentId);
+    }
+
+    private HunterGuiRoute huntEngineCatalogueRoute(final int page, final long revision, final String category) {
+        HunterGuiRoute route = this.huntEngineRoute(HUNT_ENGINE_GUI_VIEW_CATALOGUE, page, revision);
+        if (category != null && !category.isBlank() && !category.equals("all")) {
+            route = route.withArgument("category", category);
+        }
+        return route;
+    }
+
+    private boolean canOpenHuntEngineCatalogue(final CommandSender sender) {
+        return this.hasHuntEngineGuiPermission(sender, "use") || this.hasHuntEngineGuiPermission(sender, "admin");
+    }
+
+    private boolean hasHuntEngineGuiPermission(final CommandSender sender, final String capability) {
+        final String normalized = HunterToolsPreferences.normalize(capability).replace('_', '-');
+        final String currentFeature = switch (normalized) {
+            case "give" -> "hunt-engine-give";
+            case "admin" -> "hunt-engine-admin";
+            default -> "hunt-engine";
+        };
+        if (this.hasGuiFeaturePermission(sender, currentFeature)) {
+            return true;
+        }
+        final String legacyFeature = switch (normalized) {
+            case "give" -> "assets-give";
+            case "admin" -> "assets-admin";
+            default -> "assets";
+        };
+        final String legacyPermission = this.preferences.stringValue(
+            "modules.gui.permissions." + legacyFeature,
+            HunterToolsPreferences.guiPermissionDefault(legacyFeature)
+        ).trim();
+        return !legacyPermission.isBlank() && sender.hasPermission(legacyPermission);
+    }
+
+    private HuntEngineService huntEngine() {
+        return HuntEngineServices.get();
+    }
+
+    private HunterGuiView renderHuntEngineGui(final HunterGuiRenderContext context) {
+        final Player player = context.player();
+        final String requestedView = context.route().argument("view").orElse(HUNT_ENGINE_GUI_VIEW_CATALOGUE);
+        if (!this.canOpenHuntEngineCatalogue(player)) {
+            return this.huntEngineUnavailableView("没有打开 HuntEngine 内容目录的权限", "You do not have permission to open the HuntEngine catalogue");
+        }
+        final HuntEngineService service = this.huntEngine();
+        final HuntEngineStatus status = service.status();
+        if (HUNT_ENGINE_GUI_VIEW_ADMIN.equals(requestedView) && this.hasHuntEngineGuiPermission(player, "admin")) {
+            return this.renderHuntEngineAdminView(context, service, status);
+        }
+        if (HUNT_ENGINE_GUI_VIEW_DETAIL.equals(requestedView)) {
+            return this.renderHuntEngineDetailView(context, service, status);
+        }
+        return this.renderHuntEngineCatalogueView(context, service, status);
+    }
+
+    private HunterGuiView huntEngineUnavailableView(final String zh, final String en) {
+        final HunterGuiView.Builder view = HunterGuiView.builder(Component.text(this.text("HuntEngine", "HuntEngine")), 3);
+        view.item(13, this.menuItem(Material.BARRIER, zh, en, List.of(), List.of()));
+        view.button(22, this.menuItem(Material.BARRIER, "关闭", "Close", List.of(), List.of()), "close", action -> action.close());
+        return view.build();
+    }
+
+    private HunterGuiView renderHuntEngineCatalogueView(
+        final HunterGuiRenderContext context,
+        final HuntEngineService service,
+        final HuntEngineStatus status
+    ) {
+        final Player player = context.player();
+        final HuntEngineCatalogue catalogue = service.catalogue();
+        final String requestedCategory = context.route().argument("category").orElse("all");
+        final List<String> categories = catalogue.contents().stream()
+            .flatMap(content -> content.categories().stream())
+            .distinct()
+            .sorted()
+            .toList();
+        final List<HuntEngineContent> visible = catalogue.contents().stream()
+            .filter(HuntEngineContent::enabled)
+            .filter(content -> content.permission() == null || player.hasPermission(content.permission()))
+            .filter(content -> requestedCategory.equals("all") || content.categories().contains(requestedCategory))
+            .sorted(Comparator.comparing(HuntEngineContent::displayName, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(HuntEngineContent::id))
+            .toList();
+        final int requestedPage = this.huntEnginePage(context.route().argument("page").orElse("0"));
+        final HunterGuiPage<HuntEngineContent> page = HunterGuiPagination.page(visible, requestedPage, HUNT_ENGINE_CATALOGUE_PAGE_SIZE);
+        final HunterGuiView.Builder view = HunterGuiView.builder(Component.text(this.text("HuntEngine · 内容目录", "HuntEngine · Content Catalogue")), 6);
+        view.item(0, this.huntEngineStatusItem(status, catalogue.revision(), visible.size()));
+        view.button(
+            1,
+            this.menuItem(Material.BOOK, "全部内容", "All Content", List.of("筛选：全部"), List.of("Filter: all")),
+            "catalogue:all",
+            action -> action.navigate(this.huntEngineCatalogueRoute(0, catalogue.revision(), "all"))
+        );
+        for (int index = 0; index < Math.min(6, categories.size()); index++) {
+            final String category = categories.get(index);
+            final int slot = index + 2;
+            view.button(
+                slot,
+                this.menuItem(
+                    requestedCategory.equals(category) ? Material.LIME_DYE : Material.LIGHT_BLUE_DYE,
+                    category,
+                    category,
+                    List.of("筛选此分类"),
+                    List.of("Filter this category")
+                ),
+                "category:" + category,
+                action -> action.navigate(this.huntEngineCatalogueRoute(0, catalogue.revision(), category))
+            );
+        }
+        for (int index = 0; index < page.items().size(); index++) {
+            final HuntEngineContent content = page.items().get(index);
+            final int slot = 9 + index;
+            view.button(
+                slot,
+                this.huntEngineContentItem(content),
+                "content:" + content.id(),
+                action -> action.navigate(this.huntEngineContentRoute(content.id(), catalogue.revision()))
+            );
+        }
+        view.button(
+            45,
+            this.menuItem(Material.ARROW, "上一页", "Previous", List.of(), List.of()),
+            "catalogue:previous",
+            action -> action.navigate(this.huntEngineCatalogueRoute(page.pageIndex() - 1, catalogue.revision(), requestedCategory))
+        );
+        view.button(
+            47,
+            this.menuItem(Material.MAP, "请求资源包", "Request Resource Pack", List.of(status.message()), List.of(status.message())),
+            "pack:request",
+            action -> this.requestHuntEnginePack(action.player(), service)
+        );
+        if (this.hasHuntEngineGuiPermission(player, "admin")) {
+            view.button(
+                48,
+                this.menuItem(Material.COMMAND_BLOCK, "内容管理", "Content Administration", List.of("校验、构建、发布、重载"), List.of("Validate, build, publish, reload")),
+                "admin:open",
+                action -> action.navigate(this.huntEngineRoute(HUNT_ENGINE_GUI_VIEW_ADMIN, 0, catalogue.revision()))
+            );
+        }
+        view.button(49, this.menuItem(Material.BARRIER, "关闭", "Close", List.of(), List.of()), "close", action -> action.close());
+        view.button(
+            53,
+            this.menuItem(Material.ARROW, "下一页", "Next", List.of(), List.of()),
+            "catalogue:next",
+            action -> action.navigate(this.huntEngineCatalogueRoute(page.pageIndex() + 1, catalogue.revision(), requestedCategory))
+        );
+        return view.build();
+    }
+
+    private HunterGuiView renderHuntEngineDetailView(
+        final HunterGuiRenderContext context,
+        final HuntEngineService service,
+        final HuntEngineStatus status
+    ) {
+        final Player player = context.player();
+        final String contentId = context.route().argument("content").orElse("");
+        final long expectedRevision = this.huntEngineRevision(context.route().argument("revision").orElse("-1"));
+        final HuntEngineCatalogue catalogue = service.catalogue();
+        final Optional<HuntEngineContent> content = service.content(contentId);
+        if (content.isEmpty()) {
+            final HunterGuiView.Builder missing = HunterGuiView.builder(Component.text(this.text("HuntEngine · 内容详情", "HuntEngine · Content Detail")), 3);
+            missing.item(13, this.menuItem(Material.BARRIER, "内容已不存在或不可用", "Content is no longer available", List.of(), List.of()));
+            missing.button(22, this.menuItem(Material.ARROW, "返回目录", "Back to Catalogue", List.of(), List.of()), "catalogue:back", action -> action.back());
+            return missing.build();
+        }
+        final HuntEngineContent entry = content.get();
+        final HunterGuiView.Builder view = HunterGuiView.builder(Component.text(this.text("HuntEngine · 内容详情", "HuntEngine · Content Detail")), 4);
+        view.item(11, this.huntEngineContentItem(entry));
+        view.item(13, this.menuItem(
+            Material.BOOK,
+            "内容信息",
+            "Content Information",
+            List.of(
+                entry.description().isBlank() ? "暂无说明" : entry.description(),
+                "分类: " + String.join(", ", entry.categories()),
+                "版本: " + catalogue.revision()
+            ),
+            List.of(
+                entry.description().isBlank() ? "No description" : entry.description(),
+                "Categories: " + String.join(", ", entry.categories()),
+                "Revision: " + catalogue.revision()
+            )
+        ));
+        final boolean grantable = entry.kind() == HuntEngineContentKind.ITEM
+            || entry.kind() == HuntEngineContentKind.BLOCK
+            || entry.kind() == HuntEngineContentKind.FURNITURE;
+        final boolean allowed = grantable
+            && this.hasHuntEngineGuiPermission(player, "give")
+            && entry.enabled()
+            && (entry.permission() == null || player.hasPermission(entry.permission()));
+        if (grantable) {
+            view.button(
+                15,
+                this.menuItem(
+                    allowed ? Material.LIME_DYE : Material.BARRIER,
+                    "领取一个", "Receive One",
+                    List.of(allowed ? "再次校验版本、权限与背包空间" : "当前无权领取此内容"),
+                    List.of(allowed ? "Rechecks revision, permission, and inventory space" : "You cannot receive this content")
+                ),
+                "give:" + entry.id(),
+                action -> this.giveHuntEngineContent(action.player(), service, entry.id(), expectedRevision, action)
+            );
+        } else {
+            view.item(15, this.menuItem(
+                Material.PAPER,
+                "原生内容", "Native Content",
+                List.of("此类型由原生内容包、资源包或配方管理", "不会伪造物品发放操作"),
+                List.of("This type is managed by its native content package, resource pack, or recipe", "No item-grant action is fabricated")
+            ));
+        }
+        final long relatedCount = catalogue.contents().stream()
+            .filter(candidate -> !candidate.id().equals(entry.id()))
+            .filter(candidate -> candidate.categories().stream().anyMatch(entry.categories()::contains))
+            .count();
+        view.item(17, this.menuItem(
+            Material.COMPASS,
+            "关联目录", "Related Catalogue",
+            List.of("同类内容: " + relatedCount, "可返回目录继续筛选"),
+            List.of("Same-category entries: " + relatedCount, "Return to the catalogue to continue filtering")
+        ));
+        view.item(4, this.huntEngineStatusItem(status, catalogue.revision(), catalogue.contents().size()));
+        view.button(30, this.menuItem(Material.ARROW, "返回目录", "Back to Catalogue", List.of(), List.of()), "catalogue:back", action -> action.back());
+        view.button(31, this.menuItem(Material.BARRIER, "关闭", "Close", List.of(), List.of()), "close", action -> action.close());
+        return view.build();
+    }
+
+    private HunterGuiView renderHuntEngineAdminView(
+        final HunterGuiRenderContext context,
+        final HuntEngineService service,
+        final HuntEngineStatus status
+    ) {
+        final Player player = context.player();
+        final HuntEngineCatalogue catalogue = service.catalogue();
+        final String confirm = context.route().argument("confirm").orElse("");
+        final HunterGuiView.Builder view = HunterGuiView.builder(Component.text(this.text("HuntEngine · 管理", "HuntEngine · Administration")), 4);
+        view.item(4, this.huntEngineStatusItem(status, catalogue.revision(), catalogue.contents().size()));
+        if (!status.available()) {
+            view.item(13, this.menuItem(Material.BARRIER, "HuntEngine 未加载", "HuntEngine is unavailable", List.of(status.message()), List.of(status.message())));
+        } else if (!confirm.isBlank()) {
+            this.renderHuntEngineConfirmation(view, context, service, catalogue.revision(), confirm);
+        } else {
+            view.button(10, this.huntEngineAdminActionItem(Material.SPYGLASS, "校验内容", "Validate Content", "检查暂存内容和当前目录"), "admin:validate", action -> this.startHuntEngineOperation(action.player(), service, "validate", action));
+            view.button(12, this.huntEngineAdminActionItem(Material.ANVIL, "构建资源包", "Build Resource Pack", "需要确认；不会替换正在运行的版本"), "admin:build", action -> this.armHuntEngineConfirmation(action, catalogue.revision(), "build"));
+            view.button(14, this.huntEngineAdminActionItem(Material.ENDER_CHEST, "发布资源包", "Publish Resource Pack", "需要确认；使用不可变版本"), "admin:publish", action -> this.armHuntEngineConfirmation(action, catalogue.revision(), "publish"));
+            view.button(16, this.huntEngineAdminActionItem(Material.REPEATER, "重载引擎", "Reload Engine", "需要确认；当前玩家操作不会阻塞"), "admin:reload", action -> this.armHuntEngineConfirmation(action, catalogue.revision(), "reload"));
+        }
+        view.button(30, this.menuItem(Material.BOOK, "内容目录", "Content Catalogue", List.of(), List.of()), "catalogue:open", action -> action.navigate(this.huntEngineCatalogueRoute(0, catalogue.revision(), "all")));
+        view.button(31, this.menuItem(Material.BARRIER, "关闭", "Close", List.of(), List.of()), "close", action -> action.close());
+        return view.build();
+    }
+
+    private void renderHuntEngineConfirmation(
+        final HunterGuiView.Builder view,
+        final HunterGuiRenderContext context,
+        final HuntEngineService service,
+        final long revision,
+        final String operation
+    ) {
+        final String confirmationId = "huntengine:" + operation;
+        view.item(12, this.menuItem(Material.TNT, "确认操作", "Confirm Operation", List.of("操作: " + operation, "确认令牌将在 12 秒后过期"), List.of("Operation: " + operation, "The confirmation token expires after 12 seconds")));
+        view.button(
+            14,
+            this.menuItem(Material.LIME_DYE, "确认继续", "Confirm", List.of(), List.of()),
+            "confirm:" + operation,
+            action -> {
+                final HunterGuiConfirmationResult result = action.consumeConfirmation(confirmationId);
+                if (result != HunterGuiConfirmationResult.CONFIRMED) {
+                    action.player().sendMessage(ChatColor.RED + this.text("确认已失效，请重新操作。", "The confirmation expired. Start the operation again."));
+                    action.navigate(this.huntEngineRoute(HUNT_ENGINE_GUI_VIEW_ADMIN, 0, revision));
+                    return;
+                }
+                this.startHuntEngineOperation(action.player(), service, operation, action);
+            }
+        );
+        view.button(
+            16,
+            this.menuItem(Material.RED_DYE, "取消", "Cancel", List.of(), List.of()),
+            "confirm:cancel",
+            action -> {
+                action.clearConfirmation(confirmationId);
+                action.navigate(this.huntEngineRoute(HUNT_ENGINE_GUI_VIEW_ADMIN, 0, revision));
+            }
+        );
+    }
+
+    private void armHuntEngineConfirmation(final org.huntercore.api.gui.HunterGuiActionContext action, final long revision, final String operation) {
+        action.armConfirmation(
+            "huntengine:" + operation,
+            Duration.ofSeconds(12),
+            confirmation -> this.hasHuntEngineGuiPermission(confirmation.player(), "admin") && this.huntEngine().available()
+        );
+        action.navigate(this.huntEngineRoute(HUNT_ENGINE_GUI_VIEW_ADMIN, 0, revision).withArgument("confirm", operation));
+    }
+
+    private void startHuntEngineOperation(
+        final Player player,
+        final HuntEngineService service,
+        final String operation,
+        final org.huntercore.api.gui.HunterGuiActionContext action
+    ) {
+        if (!this.hasHuntEngineGuiPermission(player, "admin") || !service.available()) {
+            player.sendMessage(ChatColor.RED + this.text("HuntEngine 当前不可用或你没有管理权限。", "HuntEngine is unavailable or you lack administration permission."));
+            action.refresh();
+            return;
+        }
+        final HuntEngineOperationTicket ticket = switch (operation) {
+            case "validate" -> service.validate();
+            case "build" -> service.build();
+            case "publish" -> service.publish();
+            case "reload" -> service.reload();
+            default -> null;
+        };
+        if (ticket == null) {
+            player.sendMessage(ChatColor.RED + this.text("未知 HuntEngine 操作。", "Unknown HuntEngine operation."));
+            action.refresh();
+            return;
+        }
+        player.sendMessage(ChatColor.AQUA + this.text("HuntEngine 操作已开始: ", "HuntEngine operation started: ")
+            + ChatColor.WHITE + ticket.operation().message());
+        action.navigate(this.huntEngineRoute(HUNT_ENGINE_GUI_VIEW_ADMIN, 0, ticket.operation().contentRevision()));
+    }
+
+    private void requestHuntEnginePack(final Player player, final HuntEngineService service) {
+        final HuntEngineActionResult result = service.requestResourcePack(player);
+        final ChatColor color = result.success() ? ChatColor.GREEN : ChatColor.RED;
+        player.sendMessage(color + result.message());
+    }
+
+    private void giveHuntEngineContent(
+        final Player player,
+        final HuntEngineService service,
+        final String contentId,
+        final long expectedRevision,
+        final org.huntercore.api.gui.HunterGuiActionContext action
+    ) {
+        final HuntEngineCatalogue current = service.catalogue();
+        final Optional<HuntEngineContent> content = service.content(contentId);
+        if (!service.available() || current.revision() != expectedRevision || content.isEmpty()) {
+            player.sendMessage(ChatColor.RED + this.text("内容目录已更新，请重新选择。", "The content catalogue changed. Please select it again."));
+            action.navigate(this.huntEngineCatalogueRoute(0, current.revision(), "all"));
+            return;
+        }
+        final HuntEngineContent entry = content.get();
+        if (entry.kind() != HuntEngineContentKind.ITEM
+            && entry.kind() != HuntEngineContentKind.BLOCK
+            && entry.kind() != HuntEngineContentKind.FURNITURE) {
+            player.sendMessage(ChatColor.RED + this.text("此原生内容不是可领取物品。", "This native content is not a grantable item."));
+            action.refresh();
+            return;
+        }
+        if (!this.hasHuntEngineGuiPermission(player, "give")
+            || !entry.enabled()
+            || (entry.permission() != null && !player.hasPermission(entry.permission()))) {
+            player.sendMessage(Bukkit.permissionMessage());
+            action.refresh();
+            return;
+        }
+        if (player.getInventory().firstEmpty() < 0) {
+            player.sendMessage(ChatColor.RED + this.text("背包没有空位，无法领取内容。", "Your inventory has no free slot for this content."));
+            return;
+        }
+        final HuntEngineActionResult result = service.give(player, contentId, 1);
+        player.sendMessage((result.success() ? ChatColor.GREEN : ChatColor.RED) + result.message());
+        action.refresh();
+    }
+
+    private ItemStack huntEngineStatusItem(final HuntEngineStatus status, final long revision, final int contentCount) {
+        final Material material = status.available() ? Material.LIME_STAINED_GLASS_PANE : Material.RED_STAINED_GLASS_PANE;
+        return this.menuItem(
+            material,
+            status.available() ? "HuntEngine 已就绪" : "HuntEngine 不可用",
+            status.available() ? "HuntEngine Ready" : "HuntEngine Unavailable",
+            List.of(status.message(), "版本: " + status.version(), "内容版本: " + revision, "可见内容: " + contentCount),
+            List.of(status.message(), "Version: " + status.version(), "Content revision: " + revision, "Visible content: " + contentCount)
+        );
+    }
+
+    private ItemStack huntEngineContentItem(final HuntEngineContent content) {
+        return this.menuItem(
+            this.huntEngineContentMaterial(content),
+            content.displayName(),
+            content.displayName(),
+            List.of(content.id(), content.description(), "分类: " + String.join(", ", content.categories())),
+            List.of(content.id(), content.description(), "Categories: " + String.join(", ", content.categories()))
+        );
+    }
+
+    private ItemStack huntEngineAdminActionItem(final Material material, final String zh, final String en, final String detail) {
+        return this.menuItem(material, zh, en, List.of(detail), List.of(detail));
+    }
+
+    private Material huntEngineContentMaterial(final HuntEngineContent content) {
+        return switch (content.kind()) {
+            case ITEM -> Material.PAPER;
+            case BLOCK -> Material.GRASS_BLOCK;
+            case FURNITURE -> Material.ARMOR_STAND;
+            case RECIPE -> Material.KNOWLEDGE_BOOK;
+            case FONT -> Material.BOOK;
+            case IMAGE -> Material.PAINTING;
+            case SOUND -> Material.JUKEBOX;
+            case OTHER -> Material.CHEST;
+        };
+    }
+
+    private int huntEnginePage(final String value) {
+        try {
+            return Math.max(0, Integer.parseInt(value));
+        } catch (final NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private long huntEngineRevision(final String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (final NumberFormatException ignored) {
+            return -1L;
         }
     }
 
@@ -970,12 +1758,10 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                 prompted(Material.OAK_SIGN, "故事台词", "Story Line", "story line", "输入：auto 或具体台词内容。", "Type: auto or a line of text."),
                 prompted(Material.TNT, "故事实验", "Story Meltdown", "story meltdown", "危险操作；输入确认参数。", "Dangerous action; type confirmation arguments.")
             );
-            case "assets" -> List.of(
-                direct(Material.FILLED_MAP, "资源 GUI", "Assets GUI", "hunterassets gui"),
-                direct(Material.BOOK, "资源列表", "Assets List", "hunterassets list"),
-                prompted(Material.CHEST, "给予自定义物品", "Give Custom Item", "hunterassets give", "输入：玩家 物品ID [数量]。", "Type: player itemId [amount]."),
-                prompted(Material.MAP, "发送资源包", "Send Resource Pack", "hunterassets sendpack", "输入玩家名，或 - 发送给自己。", "Type a player name, or - for yourself."),
-                direct(Material.REPEATER, "重载资源配置", "Reload Assets", "hunterassets reload")
+            case "hunt-engine" -> List.of(
+                directGui(Material.CHEST, "内容目录", "Content Catalogue", "gui:hunt-engine"),
+                direct(Material.BOOK, "HuntEngine 命令", "HuntEngine Command", "huntengine"),
+                directGui(Material.COMMAND_BLOCK, "内容管理", "Content Administration", "gui:hunt-engine-admin")
             );
             case "account" -> List.of(
                 direct(Material.LIME_DYE, "注册/登录 GUI", "Register/Login GUI", "login"),
@@ -1025,7 +1811,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private static String commandCenterCategory(@Nullable final String category) {
         final String normalized = category == null ? "" : category.toLowerCase(Locale.ROOT);
         return switch (normalized) {
-            case "teleport", "admin", "actors", "story", "assets", "account" -> normalized;
+            case "teleport", "admin", "actors", "story", "hunt-engine", "account" -> normalized;
+            case "assets" -> "hunt-engine";
             default -> "tools";
         };
     }
@@ -1100,6 +1887,8 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return switch (normalized) {
                 case "gui:admin", "gui:modules", "gui:commands", "gui:optimize", "gui:ncr", "gui:motd", "gui:web", "gui:ai", "gui:preferences" ->
                     this.hasGuiFeaturePermission(player, "admin");
+                case "gui:hunt-engine" -> this.canOpenHuntEngineCatalogue(player);
+                case "gui:hunt-engine-admin" -> this.hasHuntEngineGuiPermission(player, "admin");
                 case "gui:playerbots" -> this.hasGuiFeaturePermission(player, "fake-players");
                 case "gui:npcs" -> this.hasGuiFeaturePermission(player, "npcs");
                 case "gui:story" -> this.hasGuiFeaturePermission(player, "story");
@@ -1153,15 +1942,15 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         if (root.equals("rtp")) {
             return this.hasGuiFeaturePermission(player, "random-teleport") && player.hasPermission("huntertpa.command.rtp");
         }
-        if (root.equals("hunterassets") || root.equals("ha") || root.equals("hassets")) {
+        if (root.equals("huntengine") || root.equals("he") || root.equals("hunterassets") || root.equals("ha") || root.equals("hassets")) {
             final String sub = parts.length > 1 ? HunterToolsPreferences.normalize(parts[1]) : "gui";
-            if (List.of("reload", "sendpack").contains(sub)) {
-                return this.hasGuiFeaturePermission(player, "assets-admin") && player.hasPermission("hunterassets.admin");
+            if (List.of("reload", "build", "publish", "sendpack", "pack").contains(sub)) {
+                return this.hasHuntEngineGuiPermission(player, "admin");
             }
             if (sub.equals("give")) {
-                return this.hasGuiFeaturePermission(player, "assets-give") && player.hasPermission("hunterassets.give");
+                return this.hasHuntEngineGuiPermission(player, "give");
             }
-            return this.hasGuiFeaturePermission(player, "assets") && player.hasPermission("hunterassets.use");
+            return this.canOpenHuntEngineCatalogue(player);
         }
         if (List.of("register", "reg", "login", "l", "logout", "changepassword", "changepw").contains(root)) {
             final String permissionRoot = switch (root) {
@@ -2780,10 +3569,23 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     @SuppressWarnings("deprecation")
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPlayerChat(final AsyncPlayerChatEvent event) {
-        final GuiChatSession guiChat = this.guiChatSessions.remove(event.getPlayer().getUniqueId());
+        final UUID playerId = event.getPlayer().getUniqueId();
+        if (this.suppressesHunterAuthChatObservation(playerId)) {
+            // An auth prompt supersedes any stale GUI prompt. Do not route the message through
+            // AI, web-panel, fake-player, story, or title observation chains.
+            this.guiChatSessions.remove(playerId);
+            return;
+        }
+        final GuiChatSession guiChat = this.guiChatSessions.remove(playerId);
         if (guiChat != null) {
             event.setCancelled(true);
-            this.getServer().getScheduler().runTask(this, () -> this.runGuiAction(event.getPlayer(), () -> this.handleGuiChatInput(event.getPlayer(), guiChat, event.getMessage())));
+            final String message = event.getMessage();
+            this.getServer().getScheduler().runTask(this, () -> {
+                final Player player = Bukkit.getPlayer(playerId);
+                if (player != null && player.isOnline()) {
+                    this.runGuiAction(player, () -> this.handleGuiChatInput(player, guiChat, message));
+                }
+            });
             return;
         }
         if (this.aiManager != null) {
@@ -3904,7 +4706,7 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
                     final HunterToolsPreferences.WebUser user = this.preferences.webUser(id);
                     if (user != null) {
                         sender.sendMessage("- " + user.displayName() + ": " + user.role()
-                            + (user.passwordConfigured() ? "" : " (password not set)")
+                            + ", HunterAuth=" + (user.identityUuid().isBlank() ? "unbound" : user.identityUuid())
                             + ", execution=" + user.commandExecution()
                             + ", allowed=" + webAllowedLine(user));
                     }
@@ -3930,15 +4732,15 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.sendUsage(sender, "/hc admin web map <url>", "设置地图 URL，支持 %host%。", "Sets the map URL; %host% is supported.");
         this.sendUsage(sender, "/hc admin web public-map <on|off>", "设置访客是否可见地图。", "Controls whether guests can see the map.");
         this.sendUsage(sender, "/hc admin web users", "列出网页用户。", "Lists web users.");
-        this.sendUsage(sender, "/hc admin web user <name> <admin|player> <password>", "新增或更新网页用户。", "Creates or updates a web user.");
+        this.sendUsage(sender, "/hc admin web user <name> <admin|player>", "绑定已验证的 HunterAuth 玩家到网页角色。", "Binds a verified HunterAuth player to a web role.");
         this.sendUsage(sender, "/hc admin web remove <name>", "删除网页用户。", "Removes a web user.");
         this.sendUsage(sender, "/hc admin web allow <name> <inherit|none|command...>", "设置网页可执行命令。", "Sets allowed web commands.");
         this.sendUsage(sender, "/hc admin web execution <name> <on|off>", "开关网页命令执行能力。", "Toggles web command execution.");
     }
 
     private boolean adminWebUser(final CommandSender sender, final String[] args) {
-        if (args.length != 5) {
-            this.sendUsage(sender, "/hc admin web user <name> <admin|player> <password>", "新增或更新网页用户。", "Creates or updates a web user.");
+        if (args.length != 4) {
+            this.sendUsage(sender, "/hc admin web user <name> <admin|player>", "绑定已验证的 HunterAuth 玩家到网页角色。", "Binds a verified HunterAuth player to a web role.");
             return true;
         }
         final String role = HunterToolsPreferences.normalize(args[3]);
@@ -3946,7 +4748,24 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             sender.sendMessage(this.text("角色必须是 admin 或 player。", "Role must be admin or player."));
             return true;
         }
-        this.preferences.setWebUser(args[2], role, HunterWebPanelManager.hashPassword(args[4]));
+        final String identityUuid;
+        try {
+            identityUuid = this.webPanelManager.trustedHunterAuthIdentityUuid(args[2]);
+        } catch (final IOException ex) {
+            sender.sendMessage(this.text("无法读取 HunterAuth 账号：", "Could not read the HunterAuth account: ") + ex.getMessage());
+            return true;
+        }
+        if (identityUuid.isBlank()) {
+            sender.sendMessage(this.text(
+                "该玩家必须先在游戏内完成一次 HunterAuth 登录，才能绑定网页角色。",
+                "That player must complete one in-game HunterAuth login before a web role can be bound."
+            ));
+            return true;
+        }
+        if (!this.preferences.setWebUser(args[2], role, identityUuid)) {
+            sender.sendMessage(this.text("该 HunterAuth 身份已绑定到另一个网页角色。", "That HunterAuth identity is already bound to another web role."));
+            return true;
+        }
         this.preferences.save(this.workerExecutor);
         sender.sendMessage(this.text("HunterCore 网页用户 ", "HunterCore web user ") + HunterToolsPreferences.webUserId(args[2]) + this.text(" 已保存为 ", " saved as ") + role + ".");
         return true;
@@ -4703,142 +5522,16 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         };
     }
 
-    private static Boolean parseToggle(final String input) {
-        return switch (input.toLowerCase(Locale.ROOT)) {
-            case "on", "enable", "enabled", "true", "yes" -> Boolean.TRUE;
-            case "off", "disable", "disabled", "false", "no" -> Boolean.FALSE;
-            default -> null;
-        };
-    }
-
-    private static boolean validCpuMode(final String input) {
-        if (input == null) {
-            return false;
-        }
-        final String normalized = input.trim().toLowerCase(Locale.ROOT).replace('_', '-');
-        return normalized.equals("single-thread")
-            || normalized.equals("high-clock")
-            || normalized.equals("high-core")
-            || normalized.equals("multi-thread")
-            || normalized.equals("single")
-            || normalized.equals("multi")
-            || normalized.equals("stable")
-            || normalized.equals("performance")
-            || normalized.equals("clock")
-            || normalized.equals("core")
-            || normalized.equals("balanced");
-    }
-
-    private static String normalizeCpuMode(final String input) {
-        final String normalized = input == null ? "" : input.trim().toLowerCase(Locale.ROOT).replace('_', '-');
-        return switch (normalized) {
-            case "high-clock", "clock" -> "high-clock";
-            case "high-core", "core" -> "high-core";
-            case "multi-thread", "multi", "performance" -> "multi-thread";
-            default -> "single-thread";
-        };
-    }
-
     private List<String> adminCompletions(final String[] args) {
-        if (args.length == 1) {
-            return matching(args[0], List.of("help", "reload", "modules", "module", "command", "plugins", "memory", "gc", "threads", "optimize", "ncr", "nochatreports", "chatreports", "motd", "web", "ai"));
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("help")) {
-            return matching(args[1], HunterHelp.topics());
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("motd")) {
-            return matching(args[1], List.of("status", "line1", "line2", "max"));
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("optimize")) {
-            return matching(args[1], List.of("status", "single-thread", "high-clock", "high-core", "multi-thread"));
-        }
-        if (args.length == 2 && (args[0].equalsIgnoreCase("ncr") || args[0].equalsIgnoreCase("nochatreports") || args[0].equalsIgnoreCase("chatreports"))) {
-            return matching(args[1], List.of("status", "on", "off", "convert", "query", "demand", "debug", "message"));
-        }
-        if (args.length == 3
-            && (args[0].equalsIgnoreCase("ncr") || args[0].equalsIgnoreCase("nochatreports") || args[0].equalsIgnoreCase("chatreports"))
-            && List.of("convert", "query", "demand", "debug").contains(args[1].toLowerCase(Locale.ROOT))) {
-            return matching(args[2], List.of("on", "off"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("motd") && args[1].equalsIgnoreCase("max")) {
-            return matching(args[2], List.of("default", "100", "500", "1000"));
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("web")) {
-            return matching(args[1], List.of("status", "restart", "bind", "address", "port", "map", "public-map", "user", "remove", "users", "allow", "execution"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("web") && (args[1].equalsIgnoreCase("bind") || args[1].equalsIgnoreCase("address"))) {
-            return matching(args[2], List.of("127.0.0.1", "0.0.0.0"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("port")) {
-            return matching(args[2], List.of("8088", "8090", "8100"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("map")) {
-            return matching(args[2], List.of("http://%host%:8100/"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("public-map")) {
-            return matching(args[2], List.of("on", "off"));
-        }
-        if (args.length == 4 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("user")) {
-            return matching(args[3], List.of("admin", "player"));
-        }
-        if (args.length == 4 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("allow")) {
-            return matching(args[3], List.of("inherit", "none", "*", "help", "list", "spawn", "tps", "htps"));
-        }
-        if (args.length == 4 && args[0].equalsIgnoreCase("web") && args[1].equalsIgnoreCase("execution")) {
-            return matching(args[3], List.of("on", "off"));
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("ai")) {
-            return matching(args[1], List.of("status", "enable", "disable", "model", "base-url", "key", "clear-key", "env", "prefix", "chat", "npc", "temperature", "max-tokens", "test"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("chat") || args[1].equalsIgnoreCase("npc"))) {
-            return matching(args[2], List.of("on", "off"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("model")) {
-            return matching(args[2], List.of("gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "o4-mini"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("base-url") || args[1].equalsIgnoreCase("url"))) {
-            return matching(args[2], List.of("https://api.openai.com/v1", "http://127.0.0.1:11434/v1"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("env") || args[1].equalsIgnoreCase("api-key-env"))) {
-            return matching(args[2], List.of("OPENAI_API_KEY", "HUNTERCORE_AI_API_KEY"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("prefix")) {
-            return matching(args[2], List.of("@ai", "AI", "ai"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("temperature")) {
-            return matching(args[2], List.of("0.2", "0.7", "1.0"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && (args[1].equalsIgnoreCase("max-tokens") || args[1].equalsIgnoreCase("maxtokens"))) {
-            return matching(args[2], List.of("256", "512", "1024"));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("ai") && args[1].equalsIgnoreCase("test")) {
-            return matching(args[2], List.of("Say HunterCore AI is ready.", "用中文简短介绍服务器状态"));
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("module")) {
-            return matching(args[1], MODULES);
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("command")) {
-            return matching(args[1], List.of(ESSENTIALS, MANAGEMENT, FAKE_PLAYERS, REAL_FAKE_PLAYERS, NPCS));
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("command")) {
-            final String module = args[1].toLowerCase(Locale.ROOT);
-            if (module.equals(ESSENTIALS)) {
-                return matching(args[2], HunterToolsPreferences.essentialsCommands());
-            }
-            if (module.equals(MANAGEMENT)) {
-                return matching(args[2], HunterToolsPreferences.managementCommands());
-            }
-            if (module.equals(FAKE_PLAYERS) || module.equals(NPCS)) {
-                return matching(args[2], HunterToolsPreferences.actorCommands());
-            }
-            if (module.equals(REAL_FAKE_PLAYERS)) {
-                return matching(args[2], HunterToolsPreferences.realFakePlayerCommands());
-            }
-        }
-        if ((args.length == 3 && args[0].equalsIgnoreCase("module")) || (args.length == 4 && args[0].equalsIgnoreCase("command"))) {
-            return matching(args[args.length - 1], List.of("on", "off"));
-        }
-        return List.of();
+        return HunterAdminCompletions.complete(
+            args,
+            MODULES,
+            HunterToolsPreferences.essentialsCommands(),
+            HunterToolsPreferences.managementCommands(),
+            HunterToolsPreferences.actorCommands(),
+            HunterToolsPreferences.realFakePlayerCommands(),
+            HunterHelp.topics()
+        );
     }
 
     private List<String> onlinePlayerNames() {
@@ -4932,26 +5625,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         this.sendHelp(sender, topic);
     }
 
-    private static boolean isHelp(final String value) {
-        final String normalized = HunterToolsPreferences.normalize(value);
-        return normalized.equals("help") || normalized.equals("?") || normalized.equals("usage");
-    }
-
-    private static String helpTopic(final String command) {
-        return switch (HunterToolsPreferences.normalize(command)) {
-            case "htps" -> "tps";
-            case "gms", "gmc", "gma", "gmsp" -> "gm";
-            case "bc" -> "broadcast";
-            case "cc" -> "clearchat";
-            case "workbench", "wb" -> "craft";
-            case "ec" -> "enderchest";
-            case "disposal" -> "trash";
-            case "player" -> "player";
-            case "npc" -> "npc";
-            default -> HunterToolsPreferences.normalize(command);
-        };
-    }
-
     private void sendCommandOverride(final Player player, final String target) {
         final List<String> lines = this.preferences.stringList(
             "modules.command-overrides.messages." + target,
@@ -5006,17 +5679,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         return player.isOp() || player.hasPermission("minecraft.command.op") || player.hasPermission("bukkit.command.op");
     }
 
-    private static List<String> matching(final String prefix, final Collection<String> values) {
-        final String lower = prefix.toLowerCase(Locale.ROOT);
-        final List<String> matches = new ArrayList<>();
-        for (final String value : values) {
-            if (value.toLowerCase(Locale.ROOT).startsWith(lower)) {
-                matches.add(value);
-            }
-        }
-        return matches;
-    }
-
     private static String webAllowedLine(final HunterToolsPreferences.WebUser user) {
         if (!user.allowedCommandsConfigured()) {
             return "inherit";
@@ -5025,26 +5687,6 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
             return "none";
         }
         return String.join(",", user.allowedCommands());
-    }
-
-    private static String normalizeWebCommand(final String command) {
-        return command.replaceFirst("^/+", "").trim().split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
-    }
-
-    private static String commandRoot(final String message) {
-        final String root = normalizeWebCommand(message);
-        final int namespace = root.indexOf(':');
-        return namespace >= 0 && namespace + 1 < root.length() ? root.substring(namespace + 1) : root;
-    }
-
-    private static String[] commandArguments(final String message) {
-        final String command = message.replaceFirst("^/+", "").trim();
-        final int space = command.indexOf(' ');
-        if (space < 0 || space + 1 >= command.length()) {
-            return new String[0];
-        }
-        final String arguments = command.substring(space + 1).trim();
-        return arguments.isBlank() ? new String[0] : arguments.split("\\s+");
     }
 
     private static boolean isAir(final ItemStack item) {
@@ -5091,6 +5733,9 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
     private record GuiChatSession(String kind, @Nullable String module, @Nullable String id) {
     }
 
+    private record AuthChatGuard(Plugin plugin, Method method) {
+    }
+
     private record GuiConfirmSession(String action, @Nullable String module, @Nullable String id) {
     }
 
@@ -5116,6 +5761,30 @@ public final class HunterToolsPlugin extends JavaPlugin implements CommandExecut
         String main,
         boolean legacyNoChatReports
     ) {
+    }
+
+    private final class SharedMainGuiScreen implements HunterGuiScreen {
+        @Override
+        public @NotNull String id() {
+            return SHARED_MAIN_GUI_SCREEN;
+        }
+
+        @Override
+        public @NotNull HunterGuiView render(@NotNull final HunterGuiRenderContext context) {
+            return HunterToolsPlugin.this.renderSharedMainMenu(context);
+        }
+    }
+
+    private final class HuntEngineGuiScreen implements HunterGuiScreen {
+        @Override
+        public @NotNull String id() {
+            return SHARED_HUNT_ENGINE_GUI_SCREEN;
+        }
+
+        @Override
+        public @NotNull HunterGuiView render(@NotNull final HunterGuiRenderContext context) {
+            return HunterToolsPlugin.this.renderHuntEngineGui(context);
+        }
     }
 
     private enum GuiPage {

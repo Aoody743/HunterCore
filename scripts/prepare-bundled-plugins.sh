@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-shopt -s nullglob globstar
+shopt -s nullglob
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${1:-"$ROOT_DIR/build/huntercore/bundled-plugins"}"
@@ -9,6 +9,14 @@ RUN_DIR="$WORK_DIR/run-$$"
 STAGE_DIR="$RUN_DIR/output"
 PLUGINS_DIR="$STAGE_DIR/plugins"
 MANIFEST="$STAGE_DIR/bundled-plugins.external.yml"
+# Keep checked downloads outside build/: build outputs may be deleted between
+# releases, while this cache is safe to retain because every read is rehashed.
+DEFAULT_CACHE_HOME="${XDG_CACHE_HOME:-${HOME:-$ROOT_DIR}/.cache}"
+CACHE_DIR="${HUNTERCORE_BUNDLED_PLUGIN_CACHE_DIR:-$DEFAULT_CACHE_HOME/huntercore/bundled-plugin-artifacts}"
+CURL_CONNECT_TIMEOUT_SECONDS="${HUNTERCORE_BUNDLED_PLUGIN_CONNECT_TIMEOUT_SECONDS:-60}"
+CURL_LOW_SPEED_LIMIT_BYTES_PER_SECOND="${HUNTERCORE_BUNDLED_PLUGIN_LOW_SPEED_LIMIT_BYTES_PER_SECOND:-1024}"
+CURL_LOW_SPEED_TIME_SECONDS="${HUNTERCORE_BUNDLED_PLUGIN_LOW_SPEED_TIME_SECONDS:-120}"
+CURL_DOWNLOAD_ATTEMPTS="${HUNTERCORE_BUNDLED_PLUGIN_DOWNLOAD_ATTEMPTS:-8}"
 
 mkdir -p "$PLUGINS_DIR" "$WORK_DIR"
 
@@ -28,20 +36,263 @@ sha512_file() {
   fi
 }
 
+require_positive_integer() {
+  local name="$1"
+  local value="$2"
+
+  if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "$name must be a positive integer, got: $value" >&2
+    exit 2
+  fi
+}
+
+require_positive_integer HUNTERCORE_BUNDLED_PLUGIN_CONNECT_TIMEOUT_SECONDS "$CURL_CONNECT_TIMEOUT_SECONDS"
+require_positive_integer HUNTERCORE_BUNDLED_PLUGIN_LOW_SPEED_LIMIT_BYTES_PER_SECOND "$CURL_LOW_SPEED_LIMIT_BYTES_PER_SECOND"
+require_positive_integer HUNTERCORE_BUNDLED_PLUGIN_LOW_SPEED_TIME_SECONDS "$CURL_LOW_SPEED_TIME_SECONDS"
+require_positive_integer HUNTERCORE_BUNDLED_PLUGIN_DOWNLOAD_ATTEMPTS "$CURL_DOWNLOAD_ATTEMPTS"
+
+digest_file() {
+  local algorithm="$1"
+  local file="$2"
+
+  case "$algorithm" in
+    sha256) sha256_file "$file" ;;
+    sha512) sha512_file "$file" ;;
+    *)
+      echo "Unsupported digest algorithm: $algorithm" >&2
+      return 2
+      ;;
+  esac
+}
+
+valid_digest() {
+  local algorithm="$1"
+  local digest="$2"
+
+  case "$algorithm" in
+    sha256) [[ "$digest" =~ ^[0-9a-f]{64}$ ]] ;;
+    sha512) [[ "$digest" =~ ^[0-9a-f]{128}$ ]] ;;
+    *) return 2 ;;
+  esac
+}
+
+checksum_matches() {
+  local algorithm="$1"
+  local expected_digest="$2"
+  local file="$3"
+
+  [[ -f "$file" ]] || return 1
+  if ! valid_digest "$algorithm" "$expected_digest"; then
+    echo "Invalid $algorithm digest: $expected_digest" >&2
+    return 2
+  fi
+  [[ "$(digest_file "$algorithm" "$file")" == "$expected_digest" ]]
+}
+
+cache_path_for() {
+  local algorithm="$1"
+  local digest="$2"
+  printf '%s/%s/%s/%s\n' "$CACHE_DIR" "$algorithm" "${digest:0:2}" "$digest"
+}
+
+write_checked_file_atomically() {
+  local algorithm="$1"
+  local expected_digest="$2"
+  local source="$3"
+  local target="$4"
+  local target_dir tmp
+
+  if ! checksum_matches "$algorithm" "$expected_digest" "$source"; then
+    echo "Refusing to install an invalid $algorithm artifact: $source" >&2
+    return 1
+  fi
+
+  target_dir="$(dirname "$target")"
+  mkdir -p "$target_dir"
+  tmp="$(mktemp "$target_dir/.${target##*/}.tmp.XXXXXX")"
+  if ! cp "$source" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! checksum_matches "$algorithm" "$expected_digest" "$tmp"; then
+    rm -f "$tmp"
+    echo "Refusing to install a corrupted copy of $source" >&2
+    return 1
+  fi
+  if ! mv -f "$tmp" "$target"; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+store_checked_cache() {
+  local algorithm="$1"
+  local expected_digest="$2"
+  local source="$3"
+  local cache_file cache_parent tmp
+
+  if ! checksum_matches "$algorithm" "$expected_digest" "$source"; then
+    echo "Refusing to cache an invalid $algorithm artifact: $source" >&2
+    return 1
+  fi
+
+  cache_file="$(cache_path_for "$algorithm" "$expected_digest")"
+  cache_parent="$(dirname "$cache_file")"
+  if ! mkdir -p "$cache_parent"; then
+    echo "Unable to create bundled plugin cache at $cache_parent; continuing without a cache write." >&2
+    return 0
+  fi
+
+  if [[ -f "$cache_file" ]]; then
+    if checksum_matches "$algorithm" "$expected_digest" "$cache_file"; then
+      return 0
+    fi
+    echo "Discarding corrupt bundled plugin cache entry: $cache_file" >&2
+    if ! rm -f "$cache_file"; then
+      echo "Unable to remove corrupt cache entry $cache_file; continuing without a cache write." >&2
+      return 0
+    fi
+  fi
+
+  tmp="$(mktemp "$cache_parent/.${expected_digest}.tmp.XXXXXX")"
+  if ! cp "$source" "$tmp"; then
+    rm -f "$tmp"
+    echo "Unable to copy $source into the bundled plugin cache; continuing without a cache write." >&2
+    return 0
+  fi
+  if ! checksum_matches "$algorithm" "$expected_digest" "$tmp"; then
+    rm -f "$tmp"
+    echo "Refusing to cache a corrupted copy of $source" >&2
+    return 1
+  fi
+  if ! mv -f "$tmp" "$cache_file"; then
+    rm -f "$tmp"
+    echo "Unable to publish bundled plugin cache entry $cache_file; continuing without a cache write." >&2
+  fi
+}
+
+restore_checked_cache() {
+  local algorithm="$1"
+  local expected_digest="$2"
+  local target="$3"
+  local cache_file
+
+  cache_file="$(cache_path_for "$algorithm" "$expected_digest")"
+  [[ -f "$cache_file" ]] || return 1
+  if ! checksum_matches "$algorithm" "$expected_digest" "$cache_file"; then
+    echo "Discarding corrupt bundled plugin cache entry: $cache_file" >&2
+    rm -f "$cache_file" || true
+    return 1
+  fi
+  if ! write_checked_file_atomically "$algorithm" "$expected_digest" "$cache_file" "$target"; then
+    return 1
+  fi
+  echo "Restored verified bundled artifact from cache: ${target##*/}" >&2
+}
+
+prior_output_sha256() {
+  local prior_output="$1"
+  local file_name="$2"
+  local prior_manifest="$prior_output/bundled-plugins.external.yml"
+
+  [[ -f "$prior_manifest" ]] || return 1
+  awk -v file_name="$file_name" '
+    $1 == "file:" { selected = ($2 == file_name); next }
+    selected && $1 == "sha256:" { print $2; exit }
+  ' "$prior_manifest"
+}
+
+adopt_prior_output() {
+  local algorithm="$1"
+  local expected_digest="$2"
+  local target="$3"
+  local prior_output prior_file declared_sha256
+
+  # An interrupted run leaves its staged output behind. It can be reused only
+  # when both its manifest SHA-256 and this script's pinned digest agree.
+  for prior_output in "$OUT_DIR" "$WORK_DIR"/run-*/output; do
+    [[ "$prior_output" != "$STAGE_DIR" && -d "$prior_output" ]] || continue
+    prior_file="$prior_output/plugins/${target##*/}"
+    [[ -f "$prior_file" ]] || continue
+    declared_sha256="$(prior_output_sha256 "$prior_output" "${target##*/}" || true)"
+    if ! valid_digest sha256 "$declared_sha256"; then
+      continue
+    fi
+    if ! checksum_matches sha256 "$declared_sha256" "$prior_file" \
+      || ! checksum_matches "$algorithm" "$expected_digest" "$prior_file"; then
+      echo "Refusing to adopt prior bundled output with an invalid declared checksum: ${target##*/}" >&2
+      continue
+    fi
+    if ! store_checked_cache "$algorithm" "$expected_digest" "$prior_file"; then
+      return 1
+    fi
+    if ! write_checked_file_atomically "$algorithm" "$expected_digest" "$prior_file" "$target"; then
+      return 1
+    fi
+    echo "Adopted verified bundled artifact from prior output: ${target##*/}" >&2
+    return 0
+  done
+  return 1
+}
+
+restore_or_adopt_checked_artifact() {
+  local algorithm="$1"
+  local expected_digest="$2"
+  local target="$3"
+
+  restore_checked_cache "$algorithm" "$expected_digest" "$target" \
+    || adopt_prior_output "$algorithm" "$expected_digest" "$target"
+}
+
+publish_checked_artifact() {
+  local algorithm="$1"
+  local expected_digest="$2"
+  local source="$3"
+  local target="$4"
+
+  if ! checksum_matches "$algorithm" "$expected_digest" "$source"; then
+    echo "$algorithm mismatch for ${target##*/}" >&2
+    return 1
+  fi
+  store_checked_cache "$algorithm" "$expected_digest" "$source" \
+    || echo "Unable to persist verified bundled artifact ${target##*/}; continuing without a cache write." >&2
+  write_checked_file_atomically "$algorithm" "$expected_digest" "$source" "$target"
+}
+
 curl_to_file() {
   local url="$1"
   local target="$2"
-  local attempts="${3:-6}"
-  local attempt status
+  local attempts="${3:-$CURL_DOWNLOAD_ATTEMPTS}"
+  local attempt status resume
+
+  require_positive_integer curl_attempts "$attempts"
 
   for attempt in $(seq 1 "$attempts"); do
+    resume=0
+    if [[ -s "$target" ]]; then
+      resume=1
+    fi
+
     set +e
-    curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --speed-limit 1024 --speed-time 30 -o "$target" "$url"
+    # Keep retry control here instead of curl's --retry loop: curl can reopen
+    # -o from byte zero internally, whereas the next outer attempt can resume
+    # the checked temporary file with -C -.
+    if [[ "$resume" == "1" ]]; then
+      curl --http1.1 -fL --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --speed-limit "$CURL_LOW_SPEED_LIMIT_BYTES_PER_SECOND" --speed-time "$CURL_LOW_SPEED_TIME_SECONDS" --continue-at - -o "$target" "$url"
+    else
+      curl --http1.1 -fL --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --speed-limit "$CURL_LOW_SPEED_LIMIT_BYTES_PER_SECOND" --speed-time "$CURL_LOW_SPEED_TIME_SECONDS" -o "$target" "$url"
+    fi
     status="$?"
     set -e
 
     if [[ "$status" == "0" ]]; then
       return 0
+    fi
+
+    # A server that does not implement byte ranges rejects -C -. Discard only
+    # that incomplete temporary file and retry from byte zero on the next pass.
+    if [[ "$resume" == "1" && "$status" == "33" ]]; then
+      rm -f "$target"
     fi
 
     sleep "$attempt"
@@ -50,50 +301,87 @@ curl_to_file() {
   return "$status"
 }
 
-download_file() {
-  local url="$1"
-  local target="$2"
-  local expected_sha="${3:-}"
+download_checked_file() {
+  local algorithm="$1"
+  local url="$2"
+  local target="$3"
+  local expected_digest="${4:-}"
+  local tmp actual_digest
 
-  if [[ -f "$target" && -n "$expected_sha" && "$(sha256_file "$target")" == "$expected_sha" ]]; then
+  if [[ -n "$expected_digest" ]]; then
+    if ! valid_digest "$algorithm" "$expected_digest"; then
+      echo "Invalid expected $algorithm digest for $url" >&2
+      return 2
+    fi
+    if restore_or_adopt_checked_artifact "$algorithm" "$expected_digest" "$target"; then
+      return
+    fi
+  fi
+
+  tmp="$(mktemp "$WORK_DIR/download.XXXXXX")"
+  if ! curl_to_file "$url" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if [[ -n "$expected_digest" ]]; then
+    actual_digest="$(digest_file "$algorithm" "$tmp")"
+    if [[ "$actual_digest" != "$expected_digest" ]]; then
+      rm -f "$tmp"
+      echo "$algorithm mismatch for $url: expected $expected_digest got $actual_digest" >&2
+      return 1
+    fi
+    if ! publish_checked_artifact "$algorithm" "$expected_digest" "$tmp" "$target"; then
+      rm -f "$tmp"
+      return 1
+    fi
+    rm -f "$tmp"
     return
   fi
 
-  local tmp
-  tmp="$(mktemp "$WORK_DIR/download.XXXXXX.tmp")"
-  curl_to_file "$url" "$tmp"
-  if [[ -n "$expected_sha" ]]; then
-    local actual_sha
-    actual_sha="$(sha256_file "$tmp")"
-    if [[ "$actual_sha" != "$expected_sha" ]]; then
-      rm -f "$tmp"
-      echo "SHA-256 mismatch for $url: expected $expected_sha got $actual_sha" >&2
-      exit 1
-    fi
-  fi
   mv "$tmp" "$target"
 }
 
-download_file_sha512() {
-  local url="$1"
-  local target="$2"
-  local expected_sha="$3"
+download_file() {
+  download_checked_file sha256 "$1" "$2" "${3:-}"
+}
 
-  if [[ -f "$target" && "$(sha512_file "$target")" == "$expected_sha" ]]; then
+download_file_sha512() {
+  download_checked_file sha512 "$1" "$2" "$3"
+}
+
+run_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$timeout_seconds" "$@"
+    return
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$timeout_seconds" "$@"
     return
   fi
 
-  local tmp
-  tmp="$(mktemp "$WORK_DIR/download.XXXXXX.tmp")"
-  curl_to_file "$url" "$tmp"
-  local actual_sha
-  actual_sha="$(sha512_file "$tmp")"
-  if [[ "$actual_sha" != "$expected_sha" ]]; then
-    rm -f "$tmp"
-    echo "SHA-512 mismatch for $url: expected $expected_sha got $actual_sha" >&2
-    exit 1
+  # macOS does not ship GNU timeout. gh performs the HTTP request in-process,
+  # so terminating its PID is sufficient to release this fallback path.
+  "$@" &
+  local command_pid="$!"
+  (
+    sleep "$timeout_seconds"
+    if kill -0 "$command_pid" >/dev/null 2>&1; then
+      kill "$command_pid" >/dev/null 2>&1 || true
+    fi
+  ) &
+  local watchdog_pid="$!"
+  local status
+  if wait "$command_pid"; then
+    status=0
+  else
+    status="$?"
   fi
-  mv "$tmp" "$target"
+  kill "$watchdog_pid" >/dev/null 2>&1 || true
+  wait "$watchdog_pid" >/dev/null 2>&1 || true
+  return "$status"
 }
 
 download_github_release_asset() {
@@ -103,31 +391,40 @@ download_github_release_asset() {
   local target="$4"
   local expected_sha="$5"
 
-  if [[ -f "$target" && "$(sha256_file "$target")" == "$expected_sha" ]]; then
+  if ! valid_digest sha256 "$expected_sha"; then
+    echo "Invalid expected SHA-256 digest for $repo $tag $pattern" >&2
+    return 2
+  fi
+  if restore_or_adopt_checked_artifact sha256 "$expected_sha" "$target"; then
     return
   fi
 
-  if command -v gh >/dev/null 2>&1; then
+  if command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1; then
     local tmp_dir="$WORK_DIR/gh-release-${repo//\//-}-$tag"
     rm -rf "$tmp_dir"
     mkdir -p "$tmp_dir"
-    gh release download "$tag" --repo "$repo" --pattern "$pattern" --dir "$tmp_dir" --clobber
+    local gh_status
+    local gh_timeout_seconds="${GH_RELEASE_DOWNLOAD_TIMEOUT_SECONDS:-120}"
+    if [[ ! "$gh_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+      echo "GH_RELEASE_DOWNLOAD_TIMEOUT_SECONDS must be a positive integer, got: $gh_timeout_seconds" >&2
+      exit 2
+    fi
+    set +e
+    run_with_timeout "$gh_timeout_seconds" gh release download "$tag" --repo "$repo" --pattern "$pattern" --dir "$tmp_dir" --clobber
+    gh_status="$?"
+    set -e
     local downloaded_candidates=("$tmp_dir"/$pattern)
     local downloaded="${downloaded_candidates[0]-}"
-    if [[ -z "$downloaded" ]]; then
-      echo "GitHub release asset $repo $tag $pattern was not downloaded." >&2
-      exit 1
+    if [[ "$gh_status" == "0" && -f "$downloaded" ]]; then
+      if ! publish_checked_artifact sha256 "$expected_sha" "$downloaded" "$target"; then
+        echo "SHA-256 mismatch for $repo $tag $pattern" >&2
+        return 1
+      fi
+      return
     fi
-    local actual_sha
-    actual_sha="$(sha256_file "$downloaded")"
-    if [[ "$actual_sha" != "$expected_sha" ]]; then
-      echo "SHA-256 mismatch for $repo $tag $pattern: expected $expected_sha got $actual_sha" >&2
-      exit 1
-    fi
-    cp "$downloaded" "$target"
-  else
-    download_file "https://github.com/$repo/releases/download/$tag/$pattern" "$target" "$expected_sha"
+    echo "gh release download failed for $repo $tag $pattern; retrying with curl." >&2
   fi
+  download_file "https://github.com/$repo/releases/download/$tag/$pattern" "$target" "$expected_sha"
 }
 
 manifest_header() {
@@ -155,62 +452,18 @@ manifest_entry() {
 YAML
 }
 
-prepare_luckperms() {
-  local artifact_id zip_file extracted jar_path file_name version
-  artifact_id="$(gh api 'repos/LuckPerms/LuckPerms/actions/artifacts?per_page=100' \
-    --jq '[.artifacts[] | select(.name == "jars" and .expired == false and .workflow_run.head_branch == "master") | .id][0] // ""')"
-  if [[ -z "$artifact_id" ]]; then
-    echo "Unable to find a non-expired LuckPerms jars artifact on GitHub Actions." >&2
-    exit 1
-  fi
-
-  zip_file="$WORK_DIR/luckperms-jars-$artifact_id.zip"
-  extracted="$WORK_DIR/luckperms-$artifact_id"
-  if [[ ! -s "$zip_file" ]] || ! unzip -tq "$zip_file" >/dev/null 2>&1; then
-    local tmp_zip token
-    tmp_zip="$zip_file.tmp"
-    rm -f "$zip_file" "$tmp_zip"
-    token="$(gh auth token 2>/dev/null || true)"
-    if [[ -n "$token" ]]; then
-      curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --speed-limit 1024 --speed-time 30 \
-        -H "Authorization: Bearer $token" \
-        -H 'Accept: application/vnd.github+json' \
-        -o "$tmp_zip" \
-        "https://api.github.com/repos/LuckPerms/LuckPerms/actions/artifacts/$artifact_id/zip"
-    else
-      MSYS_NO_PATHCONV=1 gh api -H 'Accept: application/vnd.github+json' "repos/LuckPerms/LuckPerms/actions/artifacts/$artifact_id/zip" > "$tmp_zip"
-    fi
-    mv "$tmp_zip" "$zip_file"
-  fi
-  if [[ ! -s "$zip_file" ]] || ! unzip -tq "$zip_file" >/dev/null 2>&1; then
-    echo "LuckPerms artifact $artifact_id was not downloaded as a valid zip file." >&2
-    exit 1
-  fi
-  rm -rf "$extracted"
-  mkdir -p "$extracted"
-  unzip -q "$zip_file" -d "$extracted"
-  local jar_candidates=("$extracted"/**/bukkit/loader/build/libs/LuckPerms-Bukkit-*.jar)
-  jar_path="${jar_candidates[0]-}"
-  if [[ -z "$jar_path" ]]; then
-    echo "LuckPerms Bukkit jar was not found in artifact $artifact_id." >&2
-    exit 1
-  fi
-  file_name="$(basename "$jar_path")"
-  version="${file_name#LuckPerms-Bukkit-}"
-  version="${version%.jar}"
-  cp "$jar_path" "$PLUGINS_DIR/$file_name"
-  manifest_entry "luckperms" "LuckPerms" "$version" "$file_name" "https://github.com/LuckPerms/LuckPerms/actions/artifacts/$artifact_id"
-}
-
 prepare_coreprotect() {
-  local tag="v23.2"
+  local commit="bf0e9cf6616816d4ecc3bbe8b2b4bcb9e20b8440"
   local version="23.2"
-  local source_dir="$WORK_DIR/CoreProtect-$tag"
+  local source_dir="$WORK_DIR/CoreProtect-$commit"
   local mvn_cmd
 
-  if [[ ! -d "$source_dir/.git" ]]; then
+  if [[ ! -d "$source_dir/.git" ]] || [[ "$(git -C "$source_dir" rev-parse HEAD 2>/dev/null || true)" != "$commit" ]]; then
     rm -rf "$source_dir"
-    git clone --depth 1 --branch "$tag" https://github.com/PlayPro/CoreProtect.git "$source_dir"
+    git init -q "$source_dir"
+    git -C "$source_dir" remote add origin https://github.com/PlayPro/CoreProtect.git
+    git -C "$source_dir" fetch -q --depth 1 origin "$commit"
+    git -C "$source_dir" checkout -q --detach "$commit"
   fi
 
   perl -0pi -e 's/public static final String LATEST_VERSION = "26\.1";/public static final String LATEST_VERSION = "26.1.2";/' \
@@ -223,7 +476,10 @@ prepare_coreprotect() {
     local maven_home="$WORK_DIR/apache-maven-$maven_version"
     if [[ ! -x "$maven_home/bin/mvn" ]]; then
       local archive="$WORK_DIR/apache-maven-$maven_version-bin.tar.gz"
-      download_file "https://archive.apache.org/dist/maven/maven-3/$maven_version/binaries/apache-maven-$maven_version-bin.tar.gz" "$archive"
+      download_file_sha512 \
+        "https://archive.apache.org/dist/maven/maven-3/$maven_version/binaries/apache-maven-$maven_version-bin.tar.gz" \
+        "$archive" \
+        "bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978"
       tar -xzf "$archive" -C "$WORK_DIR"
     fi
     mvn_cmd="$maven_home/bin/mvn"
@@ -248,7 +504,7 @@ prepare_coreprotect() {
 
   local file_name="CoreProtect-$version.jar"
   cp "$jar_path" "$PLUGINS_DIR/$file_name"
-  manifest_entry "coreprotect" "CoreProtect" "$version" "$file_name" "https://github.com/PlayPro/CoreProtect/tree/$tag"
+  manifest_entry "coreprotect" "CoreProtect" "$version" "$file_name" "https://github.com/PlayPro/CoreProtect/commit/$commit"
 }
 
 manifest_header
@@ -297,11 +553,11 @@ download_file \
   "44bdb908e2fb4ff1b974d5313d048a625a21555a9844cfb86256a98e8e1c6bd1"
 manifest_entry "floodgate" "Floodgate" "2.2.5-b138" "floodgate-spigot-2.2.5-b138.jar" "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/138"
 
-download_file \
-  "https://ci.loohpjames.com/job/ImageFrame/191/artifact/common/target/ImageFrame-2026.1.4.0.jar" \
+download_file_sha512 \
+  "https://cdn.modrinth.com/data/lJFOpcEj/versions/nt0GWT1y/ImageFrame-2026.1.4.0.jar" \
   "$PLUGINS_DIR/ImageFrame-2026.1.4.0.jar" \
-  ""
-manifest_entry "imageframe" "ImageFrame" "2026.1.4.0" "ImageFrame-2026.1.4.0.jar" "https://ci.loohpjames.com/job/ImageFrame/191/"
+  "2a510fa5906e26331351fb69da6b19ca08d82ffb3ea34781cde8de44eed25a18e43862e6144a3bcbc8bf2184ee3a975fe65ee10689ff07039d23076fda35f58a"
+manifest_entry "imageframe" "ImageFrame" "2026.1.4.0" "ImageFrame-2026.1.4.0.jar" "https://modrinth.com/plugin/imageframe/version/2026.1.4"
 
 download_github_release_asset \
   "BlueMap-Minecraft/BlueMap" \
@@ -363,7 +619,12 @@ download_github_release_asset \
   "90a39133f36240b28739b7c100492371702f8ad1d7f7621b028f8d2af49fe1c3"
 manifest_entry "multiverse-core" "Multiverse-Core" "5.7.1" "multiverse-core-5.7.1.jar" "https://github.com/Multiverse/Multiverse-Core/releases/tag/5.7.1"
 
-prepare_luckperms
+download_file_sha512 \
+  "https://cdn.modrinth.com/data/Vebnzrzj/versions/MBSY8toc/LuckPerms-Bukkit-5.5.53.jar" \
+  "$PLUGINS_DIR/LuckPerms-Bukkit-5.5.53.jar" \
+  "a0e087adfc1c7b9fab8fdb5a430a3331a2ca30bfc72818bb7e65ce9baff051a1490834be8cbb9cbeda292f2e92c44cf03fb829ebeb233ade9d666ed908e49ad5"
+manifest_entry "luckperms" "LuckPerms" "5.5.53" "LuckPerms-Bukkit-5.5.53.jar" "https://modrinth.com/plugin/luckperms/version/5.5.53-bukkit"
+
 prepare_coreprotect
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"

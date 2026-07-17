@@ -1,0 +1,139 @@
+package net.momirealms.craftengine.bukkit.plugin.network.handler;
+
+import com.google.common.collect.ImmutableList;
+import net.kyori.adventure.text.Component;
+import net.momirealms.craftengine.bukkit.entity.data.BaseEntityData;
+import net.momirealms.craftengine.bukkit.entity.data.item.ItemEntityData;
+import net.momirealms.craftengine.bukkit.item.BukkitItemManager;
+import net.momirealms.craftengine.bukkit.util.*;
+import net.momirealms.craftengine.core.entity.player.Player;
+import net.momirealms.craftengine.core.item.Item;
+import net.momirealms.craftengine.core.item.ItemDefinition;
+import net.momirealms.craftengine.core.item.setting.ItemSettings;
+import net.momirealms.craftengine.core.plugin.config.Config;
+import net.momirealms.craftengine.core.plugin.context.ContextHolder;
+import net.momirealms.craftengine.core.plugin.context.NetworkTextReplaceContext;
+import net.momirealms.craftengine.core.plugin.context.PlayerOptionalContext;
+import net.momirealms.craftengine.core.plugin.context.parameter.DirectContextParameters;
+import net.momirealms.craftengine.core.plugin.network.EntityPacketHandler;
+import net.momirealms.craftengine.core.plugin.network.event.ByteBufPacketEvent;
+import net.momirealms.craftengine.core.plugin.text.minimessage.CustomTagResolver;
+import net.momirealms.craftengine.core.util.*;
+import net.momirealms.craftengine.core.world.score.TeamManagerImpl;
+import net.momirealms.craftengine.proxy.bukkit.craftbukkit.inventory.CraftItemStackProxy;
+import net.momirealms.craftengine.proxy.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacketProxy;
+import net.momirealms.craftengine.proxy.minecraft.network.syncher.SynchedEntityDataProxy;
+import net.momirealms.craftengine.proxy.minecraft.world.entity.EntityProxy;
+import net.momirealms.craftengine.proxy.paper.chunk.system.entity.EntityLookupProxy;
+import org.bukkit.inventory.ItemStack;
+
+import java.util.List;
+import java.util.Optional;
+
+public final class ItemPacketHandler implements EntityPacketHandler {
+    public static final ItemPacketHandler INSTANCE = new ItemPacketHandler();
+
+    @Override
+    public void handleSetEntityData(Player user, ByteBufPacketEvent event) {
+        if (Config.disableItemOperations()) return;
+        FriendlyByteBuf buf = event.getBuffer();
+        int id = buf.readVarInt();
+        boolean changed = false;
+        List<Object> packedItems = PacketUtils.clientboundSetEntityDataPacket$unpack(buf);
+        Component nameToShow = null;
+        LegacyChatFormatter glowColor = null;
+        for (int i = 0; i < packedItems.size(); i++) {
+            Object packedItem = packedItems.get(i);
+            int entityDataId = SynchedEntityDataProxy.DataValueProxy.INSTANCE.getId(packedItem);
+            if (entityDataId == ItemEntityData.Item.id()) {
+                Object nmsItemStack = EntityUtils.getEntityDataValue(packedItem, ItemEntityData.Item);
+                ItemStack itemStack = ItemStackUtils.getBukkitStack(nmsItemStack);
+
+                // 转换为客户端侧物品
+                Optional<ItemStack> optional = BukkitItemManager.instance().s2c(itemStack, user);
+                if (optional.isPresent()) {
+                    changed = true;
+                    itemStack = optional.get();
+                    SynchedEntityDataProxy.DataValueProxy.INSTANCE.setValue(packedItem, CraftItemStackProxy.INSTANCE.asNMSCopy(itemStack));
+                }
+
+                // 处理 drop-display 物品设置
+                // 一定要处理经历过客户端侧组件修改的物品
+                Item wrappedItem = BukkitItemManager.instance().wrap(itemStack);
+                Optional<ItemDefinition> optionalCustomItem = wrappedItem.getDefinition();
+                String showName = null;
+                if (optionalCustomItem.isPresent()) {
+                    ItemSettings settings = optionalCustomItem.get().settings();
+                    showName = settings.dropDisplay();
+                    glowColor = settings.glowColor();
+                } else if (Config.enableDefaultDropDisplay()) {
+                    showName = Config.defaultDropDisplayFormat();
+                }
+
+                // 如果设定了自定义展示名
+                if (showName != null) {
+                    PlayerOptionalContext context = NetworkTextReplaceContext.of(user, ContextHolder.builder()
+                            .withParameter(DirectContextParameters.COUNT, itemStack.getAmount()));
+                    Optional<Component> optionalHoverComponent = wrappedItem.hoverNameComponent();
+                    Component hoverComponent;
+                    if (optionalHoverComponent.isPresent()) {
+                        hoverComponent = optionalHoverComponent.get();
+                    } else {
+                        hoverComponent = Component.translatable(ItemStackUtils.getDescriptionId(itemStack));
+                    }
+                    // 展示名称为空，则显示其hover name
+                    if (showName.isEmpty()) {
+                        nameToShow = hoverComponent;
+                    }
+                    // 显示自定义格式的名字
+                    else {
+                        nameToShow = AdventureHelper.miniMessage().deserialize(
+                                showName,
+                                ArrayUtils.appendElementToArrayTail(context.tagResolvers(), new CustomTagResolver("name", hoverComponent))
+                        );
+                    }
+                }
+                break;
+            }
+        }
+        if (glowColor != null) {
+            String teamName = TeamManagerImpl.instance().getTeamNameByColor(glowColor);
+            if (teamName != null) {
+                changed = true;
+                outer: {
+                    for (int i = 0; i < packedItems.size(); i++) {
+                        Object packedItem = packedItems.get(i);
+                        int entityDataId = SynchedEntityDataProxy.DataValueProxy.INSTANCE.getId(packedItem);
+                        if (entityDataId == BaseEntityData.SharedFlags.id()) {
+                            byte flags = EntityUtils.getEntityDataValue(packedItem, BaseEntityData.SharedFlags);
+                            flags |= (byte) 0x40;
+                            packedItems.set(i, BaseEntityData.SharedFlags.createEntityData(flags));
+                            break outer;
+                        }
+                    }
+                    packedItems.add(BaseEntityData.SharedFlags.createEntityData((byte) 0x40));
+                }
+                if (VersionHelper.hasPaperPatch) {
+                    Object level = user.clientSideWorld().minecraftWorld();
+                    Object entity = EntityLookupProxy.INSTANCE.get(LevelUtils.getEntityLookup(level), id);
+                    if (entity != null) {
+                        user.sendPacket(ClientboundSetPlayerTeamPacketProxy.INSTANCE.newInstance(teamName, 3, Optional.empty(), ImmutableList.of(EntityProxy.INSTANCE.getUUID(entity).toString())), false);
+                    }
+                }
+            }
+        }
+        // 添加自定义显示名
+        if (nameToShow != null) {
+            changed = true;
+            packedItems.add(ItemEntityData.CustomNameVisible.createEntityData(true));
+            packedItems.add(ItemEntityData.CustomName.createEntityData(Optional.of(ComponentUtils.adventureToMinecraft(nameToShow))));
+        }
+        if (changed) {
+            event.setChanged(true);
+            buf.clear();
+            buf.writeVarInt(event.packetID());
+            buf.writeVarInt(id);
+            PacketUtils.clientboundSetEntityDataPacket$pack(packedItems, buf);
+        }
+    }
+}

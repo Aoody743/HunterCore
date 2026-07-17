@@ -1,0 +1,24 @@
+HuntEngine
+==========
+
+HuntEngine is a modified HunterCraft distribution of CraftEngine Community
+Edition.
+
+Upstream project: CraftEngine Community Edition
+Upstream source: https://github.com/Xiao-MoMi/craft-engine
+Upstream commit: 22fe37c023ba348bac6602302dbcc08bee6d4860
+Upstream authors and contributors: XiaoMoMi and CraftEngine contributors
+HunterCraft modifications: see CHANGES.md
+
+CraftEngine Community Edition and HuntEngine are licensed under the GNU
+General Public License, version 3. A copy of GPLv3 is provided in LICENSE.
+Recipients of HuntEngine.jar must receive the corresponding source for this
+modified version, or a durable offer to obtain it, under the same license.
+
+The full dependency attribution and license-text collection is preserved in
+common-files/src/main/resources/THIRD_PARTY_LICENSES. The standalone
+HuntEngine distribution copies it, along with this notice, the GPL text,
+upstream provenance, and HunterCraft change log, to META-INF/huntengine/.
+This notice does not remove or replace any upstream copyright notice.
+
+HuntEngine is provided without warranty, to the extent permitted by GPLv3.

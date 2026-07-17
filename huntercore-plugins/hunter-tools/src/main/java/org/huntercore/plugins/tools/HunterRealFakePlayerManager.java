@@ -1,5 +1,15 @@
 package org.huntercore.plugins.tools;
 
+import static org.huntercore.plugins.tools.FakePlayerText.clamp;
+import static org.huntercore.plugins.tools.FakePlayerText.cleanError;
+import static org.huntercore.plugins.tools.FakePlayerText.containsName;
+import static org.huntercore.plugins.tools.FakePlayerText.format;
+import static org.huntercore.plugins.tools.FakePlayerText.looksLikeAiMetaText;
+import static org.huntercore.plugins.tools.FakePlayerText.removeFirstName;
+import static org.huntercore.plugins.tools.FakePlayerText.sanitizeChat;
+import static org.huntercore.plugins.tools.FakePlayerText.tokens;
+import static org.huntercore.plugins.tools.FakePlayerText.truncatePlain;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.net.URI;
@@ -4599,42 +4609,6 @@ final class HunterRealFakePlayerManager {
         return new BuildStep(new Location(world, x, y, z), blockData.getMaterial(), blockData);
     }
 
-    private static List<String> tokens(final String args) {
-        final List<String> values = new ArrayList<>();
-        if (args == null) {
-            return values;
-        }
-        for (final String token : args.replace(',', ' ').split("\\s+")) {
-            final String trimmed = token.trim();
-            if (!trimmed.isBlank()) {
-                values.add(trimmed);
-            }
-        }
-        return values;
-    }
-
-    private static String sanitizeChat(final String message) {
-        if (message == null) {
-            return "";
-        }
-        final String sanitized = message.replace('\n', ' ').replace('\r', ' ').trim();
-        return sanitized.length() > 160 ? sanitized.substring(0, 160).trim() : sanitized;
-    }
-
-    private static boolean looksLikeAiMetaText(final String message) {
-        final String lower = message.toLowerCase(Locale.ROOT);
-        return lower.contains("we need to")
-            || lower.contains("the player wants")
-            || lower.contains("the player's request")
-            || lower.contains("respond to recent chat")
-            || lower.contains("recent chat:")
-            || lower.contains("translates to")
-            || lower.contains("chain-of-thought")
-            || lower.contains("i need to")
-            || lower.contains("we should")
-            || lower.contains("let's ");
-    }
-
     private static String messageFingerprint(final String message) {
         if (message == null) {
             return "";
@@ -4643,33 +4617,6 @@ final class HunterRealFakePlayerManager {
         final String stripped = ChatColor.stripColor(colored);
         return (stripped == null ? "" : stripped)
             .toLowerCase(Locale.ROOT)
-            .replaceAll("\\s+", " ")
-            .trim();
-    }
-
-    private static String truncatePlain(final String value, final int maxLength) {
-        if (value == null) {
-            return "";
-        }
-        final String trimmed = value.replace('\n', ' ').replace('\r', ' ').trim();
-        return trimmed.length() > maxLength ? trimmed.substring(0, maxLength).trim() + "..." : trimmed;
-    }
-
-    private static boolean containsName(final String message, final String name) {
-        if (message == null || name == null || name.isBlank()) {
-            return false;
-        }
-        return message.toLowerCase(Locale.ROOT).contains(name.trim().toLowerCase(Locale.ROOT));
-    }
-
-    private static String removeFirstName(final String message, final String name) {
-        final String lower = message.toLowerCase(Locale.ROOT);
-        final String needle = name.trim().toLowerCase(Locale.ROOT);
-        final int index = lower.indexOf(needle);
-        if (index < 0) {
-            return message;
-        }
-        return (message.substring(0, index) + " " + message.substring(index + name.trim().length()))
             .replaceAll("\\s+", " ")
             .trim();
     }
@@ -4684,23 +4631,6 @@ final class HunterRealFakePlayerManager {
             (float) Math.toDegrees(Math.atan2(-dx, dz)),
             (float) Math.max(-90.0D, Math.min(90.0D, Math.toDegrees(-Math.atan2(dy, horizontal))))
         };
-    }
-
-    private static double clamp(final double value, final double min, final double max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private static String format(final double value) {
-        return String.format(Locale.ROOT, "%.2f", value);
-    }
-
-    private static String cleanError(final Throwable error) {
-        Throwable current = error;
-        while (current.getCause() != null && current.getCause() != current) {
-            current = current.getCause();
-        }
-        final String message = current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
-        return message.length() > 160 ? message.substring(0, 160) + "..." : message;
     }
 
     private static MojangSkinTexture fetchMojangSkinTexture(final String playerName) {

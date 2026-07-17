@@ -46,11 +46,15 @@ java -Xms2G -Xmx4G -jar HunterCore-<version>-MinecraftServer-<mcVersion>-release
 
 首次启动会生成 EULA 和配置文件。接受 Minecraft EULA 后再次启动即可。
 
-如果你要开启网页管理账号，进控制台输入：
+先用该玩家名在游戏内完成一次 `/register` 与 `/login`，再在控制台绑定网页管理员角色：
 
 ```text
-/hc admin web user admin admin <你的密码>
+/hc admin web user admin admin
 ```
+
+网页注册与游戏内 `/register` 使用同一套 HunterAuth 账号：用户名会双向占用，密码也完全一致。网页角色只绑定到已经在游戏内成功登录过的 HunterAuth UUID，因此改名不会丢失权限，也没有独立网页密码。HunterAuth 玩家不会因为用户名与 Minecraft OP 相同而自动获得网页管理员权限；网页管理员角色必须由已有管理员显式绑定和授权。
+
+升级到此版本时，旧的独立网页密码会被安全停用。让原网页管理员先用同一账号在游戏内登录一次，再执行上面的绑定命令即可恢复角色。
 
 默认网页面板地址：
 
@@ -65,6 +69,8 @@ http://127.0.0.1:8088/
 /hc admin web port 8088
 /hc admin web restart
 ```
+
+内置 Web 服务只提供 HTTP。不要把 `8088` 端口直接暴露到公网；公网访问必须通过 Caddy、Nginx 等反向代理终止 HTTPS，并用防火墙限制后端端口只允许反向代理访问。否则登录密码、会话 Cookie 和 API key 都可能在传输途中泄露。确认用户始终通过 HTTPS 访问后，还必须将 `modules.web-panel.secure-cookies` 设为 `true` 并重启网页服务，才能启用 Secure Cookie 和 HSTS。局域网内也建议使用 HTTPS，或保持默认的 `127.0.0.1` 绑定并通过安全隧道访问。
 
 ## 网页面板
 
@@ -265,7 +271,7 @@ ProtocolLib 5.4.0
 WorldEdit 7.4.3
 WorldGuard 7.0.17
 Multiverse-Core 5.7.1
-LuckPerms 5.5.58
+LuckPerms 5.5.53
 CoreProtect 23.2
 HunterTPA builtin
 HunterAuth builtin
@@ -308,6 +314,7 @@ modules:
     public-map: true
     map-url: http://%host%:8100/
     require-csrf: true
+    secure-cookies: false
     command-output-lines: 80
     command-output-chars: 12000
 ```
@@ -320,7 +327,7 @@ modules:
 /hc admin web port <1-65535>
 /hc admin web map <url>
 /hc admin web public-map <on|off>
-/hc admin web user <name> <admin|player> <password>
+/hc admin web user <name> <admin|player>
 /hc admin web allow <name> <inherit|none|*|command...>
 /hc admin web execution <name> <on|off>
 ```
@@ -336,7 +343,7 @@ HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
 HunterCore-<version>-WebPanel-<mcVersion>-release.zip
 ```
 
-发行 jar 默认控制在 100MB 以内，并保留 Linux、macOS、Windows 的 x86_64/aarch64 常见原生库；SQLite 额外保留 Linux-Musl x86_64/aarch64。非常规架构可以从源码构建未瘦身的 `divinemc-paperclip` jar。
+发行 jar 会移除不常用的原生库以减小体积，并保留 Linux、macOS、Windows 的 x86_64/aarch64 常见原生库；SQLite 额外保留 Linux-Musl x86_64/aarch64。包体大小会随服务端和内置插件变化，不承诺固定上限。非常规架构可以从源码构建未瘦身的 `divinemc-paperclip` jar。
 
 如果你要检查文件完整性：
 
@@ -346,9 +353,21 @@ shasum -a 256 HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
 
 ## 从源码构建
 
-需要 Java 25。
+需要 Java 25、Git、Bash 3.2 或更高版本，以及 `curl`、`unzip`、`tar`、`perl`。构建脚本会在系统没有 Maven 时下载并校验固定版本的 Maven。Windows 建议在 WSL 中构建。
+
+普通开发验证不会下载或构建外部内置插件：
 
 ```bash
+./gradlew check --no-daemon
+```
+
+只有 `packageHunterCoreRelease` 和 `:divinemc-server:createPaperclipJar` 会准备外部内置插件，因此发行构建需要可访问 GitHub、Modrinth、PaperMC 和脚本中列出的固定下载源。
+
+HuntEngine 是独立固定源码构建，必须先构建并验证产物；HunterCore 不使用 Gradle composite build，也不会在首次启动时下载它的运行时依赖。
+
+```bash
+(cd third-party/hunt-engine && ./gradlew assembleHuntEngine --no-daemon)
+bash scripts/verify-hunt-engine-vendor.sh third-party/hunt-engine/target/HuntEngine.jar
 GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
 GIT_CONFIG_VALUE_0=https://github.com/ \
@@ -364,7 +383,7 @@ divinemc-server/build/libs/
 可直接发布的 HunterCore jar 会生成在：
 
 ```text
-divinemc-server/build/libs/HunterCore-1.5.0-build.1-MinecraftServer-26.1.2-release.jar
+divinemc-server/build/libs/HunterCore-2.9.16-build.1-MinecraftServer-26.2-release.jar
 ```
 
 如果你需要未瘦身的通用 paperclip jar，也可以单独运行 `./gradlew :divinemc-server:createPaperclipJar`，产物是 `divinemc-server/build/libs/divinemc-paperclip-<mcVersion>.local-SNAPSHOT.jar`。

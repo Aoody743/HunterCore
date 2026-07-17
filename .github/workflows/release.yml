@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release tag, for example v1.0.1-build.42
+        description: Release tag, for example v2.9.16 or v2.9.16-build.42
         required: true
         type: string
 
@@ -28,15 +28,24 @@ jobs:
       RELEASE_VERSION_INPUT: ${{ github.event.inputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
 
       - name: Setup JDK 25
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
         with:
           distribution: temurin
           java-version: 25
+          cache: gradle
+
+      - name: Restore verified bundled plugin cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/huntercore/bundled-plugin-artifacts
+          key: ${{ runner.os }}-huntercore-bundled-plugin-artifacts-${{ hashFiles('scripts/prepare-bundled-plugins.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-huntercore-bundled-plugin-artifacts-
 
       - name: Configure Git and Gradle
         run: |
@@ -44,28 +53,19 @@ jobs:
           git config --global user.name "GitHub Actions"
           chmod +x gradlew
           chmod +x scripts/prepare-bundled-plugins.sh
+          chmod +x scripts/verify-hunt-engine-vendor.sh
+          chmod +x third-party/hunt-engine/gradlew
 
-      - name: Apply patches
-        run: ./gradlew applyAllPatches --stacktrace --no-daemon
+      - name: Verify vendored HuntEngine source
+        run: bash scripts/verify-hunt-engine-vendor.sh
 
-      - name: Build HunterCore release assets
+      - name: Build HuntEngine independently
         run: |
-          set -euo pipefail
-          tag="${RELEASE_VERSION_INPUT:-${GITHUB_REF_NAME}}"
-          case "$tag" in
-            v*) ;;
-            *) tag="v${tag}" ;;
-          esac
-          tag_version="${tag#v}"
-          if [[ "$tag_version" =~ -build\.([0-9]+)$ ]]; then
-            huntercore_build="${BASH_REMATCH[1]}"
-          else
-            huntercore_build="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER}}"
-          fi
-          BUILD_NUMBER="$huntercore_build" ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel --stacktrace --no-daemon --no-configuration-cache
+          (cd third-party/hunt-engine && ./gradlew assembleHuntEngine --stacktrace --no-daemon)
+          bash scripts/verify-hunt-engine-vendor.sh third-party/hunt-engine/target/HuntEngine.jar
 
-      - name: Prepare release assets
-        id: assets
+      - name: Validate release tag and source
+        id: release
         run: |
           set -euo pipefail
           tag="${RELEASE_VERSION_INPUT:-${GITHUB_REF_NAME}}"
@@ -73,43 +73,97 @@ jobs:
             echo "Release tag is empty" >&2
             exit 1
           fi
-          case "$tag" in
-            v*) ;;
-            *) tag="v${tag}" ;;
-          esac
-          tag_version="${tag#v}"
-          huntercore_version="$(grep '^huntercoreVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
-          if [[ "$tag_version" =~ -build\.([0-9]+)$ ]]; then
+          expected_version="$(grep '^huntercoreVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          exact_tag="v${expected_version}"
+          build_tag_regex="^v${expected_version//./\\.}-build\\.([0-9]+)$"
+          if [[ "$tag" == "$exact_tag" ]]; then
+            huntercore_build="$(grep '^huntercoreBuildNumber=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          elif [[ "$tag" =~ $build_tag_regex ]]; then
             huntercore_build="${BASH_REMATCH[1]}"
           else
-            huntercore_build="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER}}"
+            echo "Expected $exact_tag or $exact_tag-build.<number>, got $tag" >&2
+            exit 1
           fi
-          huntercore_version_label="${huntercore_version}-build.${huntercore_build}"
+          version_label="$expected_version-build.$huntercore_build"
           mc_version="$(grep '^mcVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           release_channel="$(grep '^releaseChannel=' gradle.properties | cut -d= -f2 | tr -d '\r')"
-          out="build/huntercore-release"
-          mkdir -p "$out"
-          jar_name="HunterCore-${huntercore_version_label}-MinecraftServer-${mc_version}-${release_channel}.jar"
-          web_name="HunterCore-${huntercore_version_label}-WebPanel-${mc_version}-${release_channel}.zip"
-          cp "divinemc-server/build/libs/${jar_name}" "$out/${jar_name}"
-          test -f "$out/${web_name}"
-          (cd "$out" && sha256sum * > SHA256SUMS.txt)
+          jar_name="HunterCore-$version_label-MinecraftServer-$mc_version-$release_channel.jar"
+          web_name="HunterCore-$version_label-WebPanel-$mc_version-$release_channel.zip"
           {
             echo "tag=$tag"
-            echo "version=$tag_version"
+            echo "version=$expected_version"
+            echo "huntercore_build=$huntercore_build"
+            echo "version_label=$version_label"
+            echo "jar_name=$jar_name"
+            echo "web_name=$web_name"
+          } >> "$GITHUB_OUTPUT"
+
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --no-tags origin '+refs/heads/codex/mc-26.2-experimental:refs/remotes/origin/codex/mc-26.2-experimental' || true
+          allowed_source=false
+          for branch in origin/main origin/codex/mc-26.2-experimental; do
+            if git rev-parse --verify "$branch^{commit}" >/dev/null 2>&1 && git merge-base --is-ancestor "$GITHUB_SHA" "$branch"; then
+              allowed_source=true
+              break
+            fi
+          done
+          if [ "$allowed_source" != true ]; then
+            echo "Release commit $GITHUB_SHA is not contained in an allowed release branch" >&2
+            exit 1
+          fi
+
+      - name: Apply patches
+        run: ./gradlew applyAllPatches --stacktrace --no-daemon
+
+      - name: Run targeted HunterCore checks
+        run: |
+          ./gradlew :divinemc-api:test --stacktrace --no-daemon
+          ./gradlew :huntercore-plugins:hunter-auth:test --stacktrace --no-daemon
+          ./gradlew :huntercore-plugins:hunter-tools:test --stacktrace --no-daemon
+          ./gradlew :huntercore-plugins:hunter-tpa:test --stacktrace --no-daemon
+          ./gradlew :divinemc-server:compileJava --stacktrace --no-daemon
+
+      - name: Build HunterCore release assets
+        env:
+          RELEASE_BUILD_NUMBER: ${{ steps.release.outputs.huntercore_build }}
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER="$RELEASE_BUILD_NUMBER" ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease --stacktrace --no-daemon --no-configuration-cache
+
+      - name: Prepare release assets
+        id: assets
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_BUILD_NUMBER: ${{ steps.release.outputs.huntercore_build }}
+          RELEASE_VERSION_LABEL: ${{ steps.release.outputs.version_label }}
+          RELEASE_JAR_NAME: ${{ steps.release.outputs.jar_name }}
+          RELEASE_WEB_NAME: ${{ steps.release.outputs.web_name }}
+        run: |
+          set -euo pipefail
+          out="build/huntercore-release"
+          mkdir -p "$out"
+          jar_name="$RELEASE_JAR_NAME"
+          web_name="$RELEASE_WEB_NAME"
+          test -f "$out/${jar_name}"
+          test -f "$out/${web_name}"
+          (cd "$out" && sha256sum "$jar_name" "$web_name" > SHA256SUMS.txt)
+          {
             echo "out=$out"
           } >> "$GITHUB_OUTPUT"
           cat > "$out/RELEASE_NOTES.md" <<EOF
-          HunterCore ${tag} (${huntercore_version_label})
+          HunterCore ${RELEASE_TAG} (${RELEASE_VERSION_LABEL})
 
-          Built from commit ${GITHUB_SHA}, build ${huntercore_build}.
+          Built from commit ${GITHUB_SHA}, build ${RELEASE_BUILD_NUMBER}.
 
           Highlights:
+          - HuntEngine 26.7.3 Community Edition fork, integrated as the HunterCore custom-content engine with GPLv3 source and notices.
+          - HuntEngine content-pack workspace, catalogue, validation, publishing, migration diagnostics, and role-scoped WebPanel controls.
+          - Unified HuntEngine catalogue GUI and HunterAuth resource-pack ownership with classic-GUI fallback.
           - Optimized web panel layout with Settings / Access / AI / Admin pages and in-page category navigation.
           - Unified command system around /hc, /hplayer, and /hnpc with Chinese/English help and language switching.
           - HunterAuth web registration/login, TPA/Home commands, and clickable teleport accept/deny chat UI.
           - Web-editable MOTD, F3 server name, sidebar, TPS actionbar/subtitle text, and AI settings.
-          - Common-native slim release jar under 100MB while keeping Linux/macOS/Windows x86_64/aarch64 native libraries.
+          - Common-native release jar keeping Linux/macOS/Windows x86_64/aarch64 native libraries.
           - Standalone WebPanel zip for separated frontend deployments with backend URL and optional API key connection.
 
           Assets:
@@ -119,11 +173,19 @@ jobs:
           EOF
 
       - name: Create or update GitHub release
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_JAR_NAME: ${{ steps.release.outputs.jar_name }}
+          RELEASE_WEB_NAME: ${{ steps.release.outputs.web_name }}
         run: |
           set -euo pipefail
-          tag="${{ steps.assets.outputs.tag }}"
+          tag="$RELEASE_TAG"
           out="${{ steps.assets.outputs.out }}"
-          assets=("$out"/*.jar "$out"/*.zip "$out"/SHA256SUMS.txt)
+          assets=(
+            "$out/$RELEASE_JAR_NAME"
+            "$out/$RELEASE_WEB_NAME"
+            "$out/SHA256SUMS.txt"
+          )
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release edit "$tag" --notes-file "$out/RELEASE_NOTES.md"
             gh release upload "$tag" "${assets[@]}" --clobber

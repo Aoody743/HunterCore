@@ -308,31 +308,52 @@ final class HunterToolsPreferences {
 
     WebUser webUser(final String username) {
         synchronized (this.lock) {
-            final String id = webUserId(username);
-            final String path = "modules.web-panel.users." + id;
-            if (!this.config.contains(path)) {
-                return null;
-            }
-            return new WebUser(
-                id,
-                this.config.getString(path + ".display-name", username),
-                normalize(this.config.getString(path + ".role", "player")),
-                this.config.getString(path + ".password", ""),
-                this.config.getBoolean(path + ".command-execution", true),
-                this.config.contains(path + ".allowed-commands"),
-                this.config.getStringList(path + ".allowed-commands")
-            );
+            return this.webUserById(webUserId(username), username);
         }
     }
 
-    void setWebUser(final String username, final String role, final String passwordHash) {
+    @Nullable WebUser webUserByIdentityUuid(final UUID identityUuid) {
+        if (identityUuid == null) {
+            return null;
+        }
+        synchronized (this.lock) {
+            final ConfigurationSection section = this.config.getConfigurationSection("modules.web-panel.users");
+            if (section == null) {
+                return null;
+            }
+            WebUser match = null;
+            for (final String rawId : new TreeSet<>(section.getKeys(false))) {
+                final String id = webUserId(rawId);
+                final String configuredUuid = this.config.getString("modules.web-panel.users." + id + ".identity-uuid", "");
+                if (configuredUuid == null || !configuredUuid.trim().equalsIgnoreCase(identityUuid.toString())) {
+                    continue;
+                }
+                if (match != null) {
+                    // A duplicated binding is ambiguous; never choose a role arbitrarily.
+                    return null;
+                }
+                match = this.webUserById(id, id);
+            }
+            return match;
+        }
+    }
+
+    boolean setWebUser(final String username, final String role, final String identityUuid) {
         synchronized (this.lock) {
             final String id = webUserId(username);
+            final String identity = identityUuid == null ? "" : identityUuid.trim();
+            if (identity.isBlank() || !this.identityUuidAvailable(id, identity)) {
+                return false;
+            }
             final String path = "modules.web-panel.users." + id;
             this.config.set(path + ".display-name", username);
             this.config.set(path + ".role", normalize(role));
-            this.config.set(path + ".password", passwordHash);
+            // Web roles authorize an already verified HunterAuth identity; they never own a
+            // second password. Clearing the legacy field also retires stale local hashes.
+            this.config.set(path + ".password", null);
+            this.config.set(path + ".identity-uuid", identity);
             this.config.set(path + ".command-execution", true);
+            return true;
         }
     }
 
@@ -353,6 +374,44 @@ final class HunterToolsPreferences {
         synchronized (this.lock) {
             this.config.set("modules.web-panel.users." + webUserId(username), null);
         }
+    }
+
+    @Nullable
+    private WebUser webUserById(final String id, final String fallbackDisplayName) {
+        final String path = "modules.web-panel.users." + id;
+        if (!this.config.contains(path)) {
+            return null;
+        }
+        return new WebUser(
+            id,
+            this.config.getString(path + ".display-name", fallbackDisplayName),
+            normalize(this.config.getString(path + ".role", "player")),
+            this.config.getBoolean(path + ".command-execution", true),
+            this.config.contains(path + ".allowed-commands"),
+            this.config.getStringList(path + ".allowed-commands"),
+            this.config.getString(path + ".identity-uuid", "")
+        );
+    }
+
+    private boolean identityUuidAvailable(final String id, final String identityUuid) {
+        final ConfigurationSection section = this.config.getConfigurationSection("modules.web-panel.users");
+        if (section == null) {
+            return true;
+        }
+        for (final String rawId : section.getKeys(false)) {
+            final String otherId = webUserId(rawId);
+            if (otherId.equals(id)) {
+                continue;
+            }
+            final String otherValue = this.config.getString(
+                "modules.web-panel.users." + otherId + ".identity-uuid",
+                ""
+            );
+            if (otherValue != null && otherValue.trim().equalsIgnoreCase(identityUuid)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     Set<String> actorIds(final String module) {
@@ -673,6 +732,14 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.web-panel.status-cache-admin-millis", 400);
         changed |= this.setDefault("modules.web-panel.require-csrf", true);
         changed |= this.setDefault("modules.web-panel.session-minutes", 360);
+        changed |= this.setDefault("modules.web-panel.secure-cookies", false);
+        changed |= this.setDefault("modules.web-panel.auth-rate-limit.max-attempts-per-user", 5);
+        changed |= this.setDefault("modules.web-panel.auth-rate-limit.max-attempts-per-ip", 30);
+        changed |= this.setDefault("modules.web-panel.auth-rate-limit.window-seconds", 60);
+        changed |= this.setDefault("modules.web-panel.auth-rate-limit.base-backoff-millis", 500);
+        changed |= this.setDefault("modules.web-panel.auth-rate-limit.max-backoff-seconds", 30);
+        changed |= this.setDefault("modules.web-panel.auth-rate-limit.max-tracked-identities", 4096);
+        changed |= this.setDefault("modules.web-panel.auth-rate-limit.max-concurrent-hashes", 2);
         changed |= this.setDefault("modules.web-panel.command-timeout-seconds", 10);
         changed |= this.setDefault("modules.web-panel.command-output-lines", 80);
         changed |= this.setDefault("modules.web-panel.command-output-chars", 12000);
@@ -698,12 +765,12 @@ final class HunterToolsPreferences {
         changed |= this.setDefault("modules.web-panel.admin-bypass.player-data", true);
         changed |= this.setDefault("modules.web-panel.users.admin.display-name", "admin");
         changed |= this.setDefault("modules.web-panel.users.admin.role", "admin");
-        changed |= this.setDefault("modules.web-panel.users.admin.password", "");
+        changed |= this.setDefault("modules.web-panel.users.admin.identity-uuid", "");
         changed |= this.setDefault("modules.web-panel.users.admin.command-execution", true);
         changed |= this.setDefault("modules.web-panel.users.admin.allowed-commands", List.of("*"));
         changed |= this.setDefault("modules.web-panel.users.player.display-name", "player");
         changed |= this.setDefault("modules.web-panel.users.player.role", "player");
-        changed |= this.setDefault("modules.web-panel.users.player.password", "");
+        changed |= this.setDefault("modules.web-panel.users.player.identity-uuid", "");
         changed |= this.setDefault("modules.web-panel.users.player.command-execution", true);
         changed |= this.setDefault("modules.web-panel.users.player.allowed-commands", defaultWebPlayerCommands());
         changed |= this.setDefault("optimizations.cpu.enabled", true);
@@ -755,7 +822,37 @@ final class HunterToolsPreferences {
             this.config.set("migrations.2-5-0-safe-defaults", true);
             changed = true;
         }
+        if (!this.config.getBoolean("migrations.2-9-0-hunterauth-only-web-login", false)) {
+            final ConfigurationSection users = this.config.getConfigurationSection("modules.web-panel.users");
+            if (users != null) {
+                for (final String rawId : users.getKeys(false)) {
+                    final String passwordPath = "modules.web-panel.users." + webUserId(rawId) + ".password";
+                    if (this.config.contains(passwordPath)) {
+                        this.config.set(passwordPath, null);
+                        changed = true;
+                    }
+                }
+            }
+            this.config.set("migrations.2-9-0-hunterauth-only-web-login", true);
+            changed = true;
+        }
+        if (!this.config.getBoolean("migrations.2-9-16-hunt-engine-gui", false)) {
+            changed |= this.copyValueIfAbsent("modules.gui.permissions.assets", "modules.gui.permissions.hunt-engine");
+            changed |= this.copyValueIfAbsent("modules.gui.permissions.assets-give", "modules.gui.permissions.hunt-engine-give");
+            changed |= this.copyValueIfAbsent("modules.gui.permissions.assets-admin", "modules.gui.permissions.hunt-engine-admin");
+            changed |= this.copyValueIfAbsent("bundled-plugins.plugins.hunter-assets", "bundled-plugins.plugins.hunt-engine");
+            this.config.set("migrations.2-9-16-hunt-engine-gui", true);
+            changed = true;
+        }
         return changed;
+    }
+
+    private boolean copyValueIfAbsent(final String source, final String target) {
+        if (!this.config.contains(source) || this.config.contains(target)) {
+            return false;
+        }
+        this.config.set(target, this.config.get(source));
+        return true;
     }
 
     static List<String> essentialsCommands() {
@@ -768,7 +865,7 @@ final class HunterToolsPreferences {
     static List<String> guiPermissionFeatures() {
         return List.of(
             "admin", "fake-players", "npcs", "story", "titles", "title-admin",
-            "teleport", "homes", "random-teleport", "assets", "assets-give", "assets-admin", "auth",
+            "teleport", "homes", "random-teleport", "hunt-engine", "hunt-engine-give", "hunt-engine-admin", "auth",
             "tps", "heal", "feed", "fly", "gamemode", "time", "weather", "broadcast", "clearchat",
             "speed", "spawn", "setspawn", "back", "hat", "craft", "enderchest", "trash", "menu", "profile", "settings"
         );
@@ -785,6 +882,10 @@ final class HunterToolsPreferences {
             case "teleport" -> "huntertpa.command.tpgui";
             case "homes" -> "huntertpa.command.homes";
             case "random-teleport" -> "huntertpa.command.rtp";
+            case "hunt-engine" -> "huntengine.use";
+            case "hunt-engine-give" -> "huntengine.items.give";
+            case "hunt-engine-admin" -> "huntengine.admin";
+            // Legacy values remain readable for 2.9.x migration and command forwarding.
             case "assets" -> "hunterassets.use";
             case "assets-give" -> "hunterassets.give";
             case "assets-admin" -> "hunterassets.admin";
@@ -1094,14 +1195,11 @@ final class HunterToolsPreferences {
         String id,
         String displayName,
         String role,
-        String passwordHash,
         boolean commandExecution,
         boolean allowedCommandsConfigured,
-        List<String> allowedCommands
+        List<String> allowedCommands,
+        String identityUuid
     ) {
-        boolean passwordConfigured() {
-            return this.passwordHash != null && !this.passwordHash.isBlank();
-        }
     }
 
     record AiChatProfile(

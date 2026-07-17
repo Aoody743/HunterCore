@@ -12,5 +12,11 @@ run
 /divinemc-api/build.gradle.kts
 /paper-api
 /purpur-api
+
 *.jar
 changelog.md
+
+# The GPL-licensed HuntEngine source snapshot intentionally vendors its build inputs.
+!third-party/hunt-engine/libs/*.jar
+!third-party/hunt-engine/bukkit/compatibility/legacy/libs/*.jar
+!third-party/hunt-engine/gradle/wrapper/*.jar

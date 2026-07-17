@@ -7,21 +7,24 @@ HunterCore is an independent Minecraft server core with a bundled plugin layer, 
 Use the Paperweight patch/build flow:
 
 ```bash
+(cd third-party/hunt-engine && ./gradlew assembleHuntEngine --no-daemon)
 GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
 GIT_CONFIG_VALUE_0=https://github.com/ \
 ./gradlew packageHunterCoreRelease --no-daemon --no-configuration-cache
 ```
 
+The build requires Java 25, Git, Bash 3.2 or newer, `curl`, `unzip`, `tar`, and `perl`. Windows developers should use WSL. Build HuntEngine first with its own fixed Gradle wrapper, then HunterCore embeds only `third-party/hunt-engine/target/HuntEngine.jar`; HunterCore does not use a Gradle composite build.
+
 The release jar is generated at:
 
 ```text
-divinemc-server/build/libs/HunterCore-1.5.0-build.1-MinecraftServer-26.1.2-release.jar
+divinemc-server/build/libs/HunterCore-2.9.16-build.1-MinecraftServer-26.2-release.jar
 ```
 
-`packageHunterCoreRelease` trims bundled Zstd and SQLite native jars to common server platforms so the release artifact stays below 100MB. It keeps Linux, macOS, and Windows x86_64/aarch64 native libraries, plus Linux-Musl x86_64/aarch64 for SQLite. Use `:divinemc-server:createPaperclipJar` when a fully universal upstream-style paperclip jar is needed.
+`packageHunterCoreRelease` trims bundled Zstd and SQLite native jars to reduce the release size. It keeps Linux, macOS, and Windows x86_64/aarch64 native libraries, plus Linux-Musl x86_64/aarch64 for SQLite. Artifact size varies with the server and bundled plugin set; there is no fixed size promise. Use `:divinemc-server:createPaperclipJar` when a fully universal upstream-style paperclip jar is needed.
 
-The `Build HunterCore` GitHub Actions workflow runs on `main`, pull requests targeting `main`, and manual dispatches. Release jars are built by the `Release HunterCore` workflow.
+The `Build HunterCore` GitHub Actions workflow runs on `main`, `codex/mc-26.2-experimental`, pull requests targeting either branch, and manual dispatches. It builds HuntEngine independently, applies patches, then runs targeted API/plugin/server checks before assembling release assets. The release workflow uses the same targeted verification.
 
 ## Bundled Plugins
 
@@ -48,11 +51,12 @@ ProtocolLib 5.4.0
 WorldEdit 7.4.3
 WorldGuard 7.0.17
 Multiverse-Core 5.7.1
-LuckPerms 5.5.58
+LuckPerms 5.5.53
 CoreProtect 23.2
 HunterTPA builtin
 HunterAuth builtin
 HunterTools builtin
+HuntEngine builtin (GPL-3.0 Community Edition fork)
 ```
 
 On the current 26.2 experimental line, `CoreProtect 23.2` is still bundled but defaults to disabled in fresh `preferences.yml` because its latest upstream release does not yet advertise 26.2 support. Everything else in the default bundled set is enabled by default.
@@ -64,6 +68,14 @@ scripts/prepare-bundled-plugins.sh
 ```
 
 To add another external bundled plugin, extend that script with a download/build step and call `manifest_entry`. To add another built-in plugin, add a subproject under `huntercore-plugins/`, copy its jar into `META-INF/huntercore/bundled-plugins` from `build.gradle.kts`, and add a resource entry to `divinemc-server/src/main/resources/META-INF/huntercore/bundled-plugins.yml`.
+
+## HuntEngine
+
+HuntEngine is HunterCore's GPL-3.0 Community Edition distribution of CraftEngine, pinned to upstream `22fe37c` (`26.7.3`) and the HunterCore 26.2 Paper build-1 baseline. Its source, license, attribution, and change log are included under `third-party/hunt-engine/`; only the independently verified `target/HuntEngine.jar` is embedded in the server release. The jar itself carries GPLv3, provenance, change-log, notice, and complete third-party license text in `META-INF/huntengine/`. It owns the custom-content catalogue and resource-pack lifecycle. HunterAuth asks the service to send its UI pack, then cleanly retains the normal inventory GUI if a player declines or the pack cannot be used.
+
+Use `bash scripts/verify-hunt-engine-vendor.sh third-party/hunt-engine/target/HuntEngine.jar` after an independent HuntEngine build. The verifier is network-free and checks the vendored source restrictions, fixed coordinates, plugin identity, legal records, proxy layout, and duplicate zip entries. It is not a substitute for the required pre-publish cold-start smoke test, which also needs a verified Paper server fixture.
+
+Use `/huntengine` or `/he` for the engine. The old `/hunterassets`, `/ha`, and `/hassets` names remain migration notices during the 2.9.x line; the old plugin itself is not installed beside HuntEngine. Existing HunterAssets content is backed up and journaled before migration, with complex content preserved as a `huntercraft-legacy` draft for manual review rather than silently rewritten.
 
 ## Commands
 
@@ -91,7 +103,7 @@ To add another external bundled plugin, extend that script with a download/build
 /hc admin web status
 /hc admin web restart
 /hc admin web users
-/hc admin web user <name> <admin|player> <password>
+/hc admin web user <name> <admin|player>
 /hc admin web allow <name> <inherit|none|*|command...>
 /hc admin web execution <name> <on|off>
 /hc admin web remove <name>
@@ -148,18 +160,22 @@ Story Mode is an experimental HunterTools sequence that combines real fake playe
 
 ## Web Panel And Map
 
-HunterTools includes a lightweight built-in web panel. It defaults to `http://127.0.0.1:8088/`; set `modules.web-panel.bind-address` to `0.0.0.0` and change `modules.web-panel.port` to expose it.
+HunterTools includes a lightweight built-in web panel. It defaults to `http://127.0.0.1:8088/`. The built-in service is HTTP-only: never expose its port directly to the public Internet. Public access must terminate HTTPS at a reverse proxy such as Caddy or Nginx, with a firewall restricting the backend port to that proxy. After confirming users always connect through HTTPS, set `modules.web-panel.secure-cookies` to `true` and restart the panel so Secure cookies and HSTS are enabled. Binding to `0.0.0.0` is appropriate only when those network controls are in place.
 
-Guests can view public status, health alerts, and the configured BlueMap URL. Logged-in player users can view detailed player/plugin data and run only `modules.web-panel.player-allowed-commands` or their per-user `allowed-commands`; admin users can run console commands when `modules.web-panel.admin-command-execution` is enabled, and can also be restricted with per-user command lists. Admin users also get Actors, Operations, and Web Users panels for spawning/removing fake players and NPCs, toggling HunterTools modules and built-in module commands, and creating/updating/removing web users with player/admin roles, command execution toggles, and allowed-command lists. The web UI blocks deleting or demoting the last password-configured admin. The `web-panel` module is self-protected from web shutdown. Web commands capture command output when possible, capped by `modules.web-panel.command-output-lines` and `modules.web-panel.command-output-chars`. Logged-in POST requests require a session CSRF token by default.
+Guests can view public status, health alerts, and the configured BlueMap URL. Only logged-in player users with a verified, bound HunterAuth game UUID can view detailed player/plugin data and run `modules.web-panel.player-allowed-commands` or their per-user `allowed-commands`; admin users can run console commands when `modules.web-panel.admin-command-execution` is enabled, and can also be restricted with per-user command lists. Web roles are bound to a verified HunterAuth UUID, so they survive Minecraft name changes and cannot have a separate web password. The web UI blocks deleting or demoting the last identity-bound admin. The `web-panel` module is self-protected from web shutdown. Web commands capture command output when possible, capped by `modules.web-panel.command-output-lines` and `modules.web-panel.command-output-chars`. Logged-in POST requests require a session CSRF token by default.
 
 Create web users from console or an op account:
 
 ```text
-/hc admin web user admin admin <password>
-/hc admin web user player player <password>
+/hc admin web user admin admin
+/hc admin web user player player
 /hc admin web allow player list spawn
 /hc admin web execution player on
 ```
+
+Web registration and in-game `/register` share the same HunterAuth account, username reservation, and password. Before assigning any web role, the player must complete one in-game HunterAuth login so the account is bound to its real UUID. A HunterAuth player does not become a web administrator merely because the matching Minecraft name is an operator; an existing administrator must explicitly assign and authorize the web admin role.
+
+On upgrade, legacy standalone web-password hashes are removed. Have each former web administrator sign in to the game once with HunterAuth, then bind the role again with the command above.
 
 BlueMap is bundled for the web map, and Chunky is bundled for chunk pre-generation/performance prep. HunterCore prepares `plugins/BlueMap/core.conf` with `accept-download: true` on first startup so BlueMap can download Mojang client resources and start rendering without a manual config edit.
 

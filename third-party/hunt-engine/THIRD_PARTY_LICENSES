@@ -1,0 +1,8 @@
+The complete, unmodified third-party license notice collection for HuntEngine
+is retained at:
+
+common-files/src/main/resources/THIRD_PARTY_LICENSES
+
+That file is the authoritative notice collection and is included in the
+HuntEngine jar. This top-level pointer exists so source and binary distributors
+can find the notices alongside LICENSE, NOTICE, UPSTREAM.md, and CHANGES.md.

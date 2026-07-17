@@ -69,7 +69,28 @@ public final class HunterBundledPluginInstaller {
                 return report;
             }
 
-            final List<InstallResult> results = installPlugins(pluginDirectory, plugins, preferences);
+            final HunterAssetsMigration.Result migration = HunterAssetsMigration.migrateIfRequired(pluginDirectory, plugins);
+            final List<InstallResult> results = new ArrayList<>();
+            final List<HunterBundledPluginRecord> installationPlugins;
+            if (migration.blockHuntEngine()) {
+                installationPlugins = plugins.stream()
+                    .filter(plugin -> !HunterAssetsMigration.HUNT_ENGINE_ID.equals(plugin.id()))
+                    .toList();
+                plugins.stream()
+                    .filter(plugin -> HunterAssetsMigration.HUNT_ENGINE_ID.equals(plugin.id()))
+                    .forEach(plugin -> results.add(new InstallResult(
+                        plugin,
+                        InstallState.FAILED,
+                        "HuntEngine installation blocked to preserve HunterAssets: " + migration.message()
+                    )));
+                LOGGER.error("HunterCore blocked HuntEngine installation. {}", migration.message());
+            } else {
+                installationPlugins = plugins;
+                if (migration.journal() != null) {
+                    LOGGER.info("HunterCore HunterAssets migration journal: {}", migration.journal());
+                }
+            }
+            results.addAll(installPlugins(pluginDirectory, installationPlugins, preferences));
             prepareBlueMapDefaults(pluginDirectory, plugins, preferences);
             prepareGeyserDefaults(pluginDirectory, plugins, preferences);
 

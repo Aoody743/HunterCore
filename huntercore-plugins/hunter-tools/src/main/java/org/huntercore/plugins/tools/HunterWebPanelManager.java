@@ -7,6 +7,8 @@ import com.google.gson.JsonSyntaxException;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
@@ -23,17 +25,19 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.security.spec.KeySpec;
+import java.text.Normalizer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -48,19 +52,19 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.command.ConsoleCommandSender;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.conversations.Conversation;
 import org.bukkit.conversations.ConversationAbandonedEvent;
@@ -73,19 +77,55 @@ import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginDescriptionFile;
+import org.huntercore.api.huntengine.HuntEngineActionResult;
+import org.huntercore.api.huntengine.HuntEngineCatalogue;
+import org.huntercore.api.huntengine.HuntEngineContent;
+import org.huntercore.api.huntengine.HuntEngineContentPackage;
+import org.huntercore.api.huntengine.HuntEngineContentPackageUpload;
+import org.huntercore.api.huntengine.HuntEngineMigrationEntry;
+import org.huntercore.api.huntengine.HuntEngineMigrationReport;
+import org.huntercore.api.huntengine.HuntEngineOperation;
+import org.huntercore.api.huntengine.HuntEngineOperationTicket;
+import org.huntercore.api.huntengine.HuntEngineResourcePack;
+import org.huntercore.api.huntengine.HuntEngineService;
+import org.huntercore.api.huntengine.HuntEngineServices;
+import org.huntercore.api.huntengine.HuntEngineStatus;
 
 final class HunterWebPanelManager {
     private static final String SESSION_COOKIE = "HCSESSION";
     private static final String SESSION_HEADER = "X-HunterCore-Session";
     private static final String CSRF_HEADER = "X-HunterCore-CSRF";
     private static final String API_KEY_HEADER = "X-HunterCore-Api-Key";
+    private static final int HUNT_ENGINE_CONTENT_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+    private static final int HUNT_ENGINE_UPLOAD_REQUEST_MAX_BYTES = 12 * 1024 * 1024;
+    private static final int HUNT_ENGINE_SIMPLE_ITEM_REQUEST_MAX_BYTES = 32 * 1024;
+    private static final int HUNT_ENGINE_ZIP_MAX_ENTRIES = 4_000;
+    private static final long HUNT_ENGINE_ZIP_MAX_EXPANDED_BYTES = 48L * 1024L * 1024L;
+    private static final long HUNT_ENGINE_ZIP_MAX_COMPRESSION_RATIO = 100L;
+    private static final String HUNT_ENGINE_SIMPLE_ITEM_NAMESPACE = "huntercraft";
+    /**
+     * The simple-item wizard intentionally covers a conservative set of ordinary vanilla items.
+     * Advanced materials and every item with a custom model, behavior, recipe, block, or furniture
+     * definition must enter through a reviewed native content package instead.
+     */
+    private static final Set<String> HUNT_ENGINE_SIMPLE_ITEM_MATERIALS = Set.of(
+        "AMETHYST_SHARD", "APPLE", "BAKED_POTATO", "BARREL", "BONE", "BOOK", "BOOKSHELF", "BREAD",
+        "BUNDLE", "CHARCOAL", "CHEST", "CLOCK", "COAL", "COBBLESTONE", "COMPASS", "COPPER_INGOT",
+        "DIAMOND", "DIAMOND_AXE", "DIAMOND_PICKAXE", "DIAMOND_SHOVEL", "DIAMOND_SWORD", "EMERALD",
+        "ENDER_PEARL", "FEATHER", "FIREWORK_ROCKET", "GLASS", "GOLD_INGOT", "GOLDEN_APPLE",
+        "HONEY_BOTTLE", "IRON_INGOT", "IRON_AXE", "IRON_PICKAXE", "IRON_SHOVEL", "IRON_SWORD",
+        "LANTERN", "LAPIS_LAZULI", "LEATHER", "MAP", "NAME_TAG", "NETHERITE_INGOT", "NETHERITE_AXE",
+        "NETHERITE_PICKAXE", "NETHERITE_SHOVEL", "NETHERITE_SWORD", "OAK_PLANKS", "PAPER", "QUARTZ",
+        "REDSTONE", "SLIME_BALL", "SOUL_LANTERN", "STICK", "STONE", "STONE_AXE", "STONE_PICKAXE",
+        "STONE_SHOVEL", "STONE_SWORD", "STRING", "TORCH", "WOODEN_AXE", "WOODEN_PICKAXE",
+        "WOODEN_SHOVEL", "WOODEN_SWORD"
+    );
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
         .followRedirects(HttpClient.Redirect.NEVER)
         .connectTimeout(Duration.ofSeconds(15L))
         .build();
-    private static final int HASH_ITERATIONS = 120_000;
-    private static final int HASH_BITS = 256;
+    private static final Set<String> COMMON_AUTH_PASSWORDS = Set.of("password", "qwerty", "minecraft", "admin", "letmein");
     private static final Pattern LUCKPERMS_EDITOR_URL = Pattern.compile("https://luckperms\\.net/editor/[^\\s<>\\]\")]+", Pattern.CASE_INSENSITIVE);
     private static final List<String> MODULES = List.of("tps-display", "sidebar", "motd", "command-overrides", "essentials", "management", "fake-players", "real-fake-players", "npcs", "ai", "auth", "web-panel", "titles");
     private static final Map<String, List<String>> MODULE_COMMANDS = Map.of(
@@ -96,13 +136,20 @@ final class HunterWebPanelManager {
         "npcs", HunterToolsPreferences.actorCommands()
     );
 
+    private enum HuntEngineCapability {
+        READ,
+        STAGE,
+        PUBLISH,
+        ADMIN
+    }
+
     private final HunterToolsPlugin plugin;
     private final HunterToolsPreferences preferences;
-    private final HunterAssetsWorkspaceService assetsWorkspaceService;
+    private final WebAuthThrottle authThrottle;
+    private final HunterAuthWebAccountStore hunterAuthAccountStore;
     private final Map<String, WebSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, CachedResponse> statusCaches = new ConcurrentHashMap<>();
     private final AtomicLong nextPluginOperationAt = new AtomicLong();
-    private final Object hunterAuthUsersLock = new Object();
     private final Deque<WebChatLine> chatLines = new ArrayDeque<>();
     private HttpServer server;
     private ExecutorService executor;
@@ -110,7 +157,22 @@ final class HunterWebPanelManager {
     HunterWebPanelManager(final HunterToolsPlugin plugin, final HunterToolsPreferences preferences) {
         this.plugin = plugin;
         this.preferences = preferences;
-        this.assetsWorkspaceService = new HunterAssetsWorkspaceService(plugin, preferences);
+        this.hunterAuthAccountStore = new HunterAuthWebAccountStore(
+            Bukkit.getPluginsFolder().toPath().resolve("HunterAuth").resolve("users.yml")
+        );
+        this.authThrottle = new WebAuthThrottle(
+            preferences.intValue("modules.web-panel.auth-rate-limit.max-tracked-identities", 4096),
+            preferences.intValue("modules.web-panel.auth-rate-limit.max-attempts-per-user", 5),
+            preferences.intValue("modules.web-panel.auth-rate-limit.max-attempts-per-ip", 30),
+            preferences.intValue("modules.web-panel.auth-rate-limit.max-concurrent-hashes", 2),
+            Math.max(1L, preferences.intValue("modules.web-panel.auth-rate-limit.window-seconds", 60)) * 1_000L,
+            preferences.intValue("modules.web-panel.auth-rate-limit.base-backoff-millis", 500),
+            Math.max(1L, preferences.intValue("modules.web-panel.auth-rate-limit.max-backoff-seconds", 30)) * 1_000L
+        );
+    }
+
+    String trustedHunterAuthIdentityUuid(final String username) throws IOException {
+        return this.hunterAuthAccountStore.trustedIdentityUuid(username);
     }
 
     synchronized void start() {
@@ -133,14 +195,6 @@ final class HunterWebPanelManager {
         this.server.createContext("/", this::handle);
         this.server.start();
         this.plugin.getLogger().info("HunterCore web panel listening on http://" + bindAddress + ":" + port + "/");
-        try {
-            final HunterAssetsWorkspaceService.PublishedPack defaultPack = this.assetsWorkspaceService.publishDefaultPackIfNeeded();
-            if (defaultPack != null) {
-                this.plugin.getLogger().info("HunterAssets default resource pack published at " + defaultPack.url());
-            }
-        } catch (final IOException ex) {
-            this.plugin.getLogger().warning("Failed to publish HunterAssets default resource pack: " + ex.getMessage());
-        }
     }
 
     synchronized void restart() {
@@ -189,22 +243,6 @@ final class HunterWebPanelManager {
         this.statusCaches.clear();
     }
 
-    private String cacheBucket(final WebSession session) {
-        if (session == null) {
-            return "guest";
-        }
-        return session.admin() ? "admin" : "player";
-    }
-
-    private int cacheMillis(final MetricsSnapshot snapshot, final String bucket) {
-        final AdaptiveBudget adaptiveBudget = snapshot.adaptiveBudget();
-        return switch (bucket) {
-            case "admin" -> adaptiveBudget.adminCacheMillis();
-            case "player" -> adaptiveBudget.playerCacheMillis();
-            default -> adaptiveBudget.guestCacheMillis();
-        };
-    }
-
     private String pluginOperationRateLimitError() {
         final long now = System.currentTimeMillis();
         final int minInterval = Math.max(0, this.preferences.intValue("modules.web-panel.plugin-operation-min-interval-millis", 1500));
@@ -214,71 +252,6 @@ final class HunterWebPanelManager {
         }
         this.nextPluginOperationAt.set(now + minInterval);
         return null;
-    }
-
-    static String hashPassword(final String password) {
-        final byte[] salt = new byte[16];
-        RANDOM.nextBytes(salt);
-        final byte[] hash = pbkdf2(password.toCharArray(), salt, HASH_ITERATIONS, HASH_BITS);
-        return "pbkdf2$" + HASH_ITERATIONS + "$" + Base64.getEncoder().encodeToString(salt) + "$" + Base64.getEncoder().encodeToString(hash);
-    }
-
-    static boolean verifyPassword(final String password, final String stored) {
-        if (stored == null || stored.isBlank() || !stored.startsWith("pbkdf2$")) {
-            return false;
-        }
-        final String[] parts = stored.split("\\$");
-        if (parts.length != 4) {
-            return false;
-        }
-        try {
-            final int iterations = Integer.parseInt(parts[1]);
-            final byte[] salt = Base64.getDecoder().decode(parts[2]);
-            final byte[] expected = Base64.getDecoder().decode(parts[3]);
-            final byte[] actual = pbkdf2(password.toCharArray(), salt, iterations, expected.length * 8);
-            return MessageDigest.isEqual(expected, actual);
-        } catch (final IllegalArgumentException ex) {
-            return false;
-        }
-    }
-
-    private static boolean verifyHunterAuthPassword(final String username, final String password) {
-        if (username == null || username.isBlank() || password == null || password.isBlank()) {
-            return false;
-        }
-        final Path usersPath = hunterAuthUsersPath();
-        if (!Files.isRegularFile(usersPath)) {
-            return false;
-        }
-        final YamlConfiguration users = YamlConfiguration.loadConfiguration(usersPath.toFile());
-        final ConfigurationSection section = users.getConfigurationSection("users");
-        if (section == null) {
-            return false;
-        }
-        for (final String id : section.getKeys(false)) {
-            final String path = "users." + id;
-            final String name = users.getString(path + ".name", "");
-            if (!id.equalsIgnoreCase(username) && !name.equalsIgnoreCase(username)) {
-                continue;
-            }
-            final String salt = users.getString(path + ".salt");
-            final String expectedHash = users.getString(path + ".hash");
-            if (salt == null || expectedHash == null) {
-                return false;
-            }
-            try {
-                final byte[] expected = Base64.getDecoder().decode(expectedHash);
-                final byte[] actual = pbkdf2(password.toCharArray(), Base64.getDecoder().decode(salt), HASH_ITERATIONS, HASH_BITS);
-                return MessageDigest.isEqual(expected, actual);
-            } catch (final IllegalArgumentException ex) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    private static Path hunterAuthUsersPath() {
-        return Bukkit.getPluginsFolder().toPath().resolve("HunterAuth").resolve("users.yml");
     }
 
     private ExecutorService createExecutor() {
@@ -484,44 +457,69 @@ final class HunterWebPanelManager {
                 this.adminPluginUpdate(exchange);
                 return;
             }
-            if (path.equals("/api/admin/assets")) {
+            if (path.equals("/api/admin/hunt-engine")) {
                 this.requireMethod(exchange, "GET");
-                this.adminAssets(exchange);
+                this.adminHuntEngine(exchange);
                 return;
             }
-            if (path.equals("/api/admin/assets/upload")) {
-                this.requireMethod(exchange, "POST");
-                this.adminAssetsUpload(exchange);
-                return;
-            }
-            if (path.equals("/api/admin/assets/item/save")) {
-                this.requireMethod(exchange, "POST");
-                this.adminAssetsItemSave(exchange);
-                return;
-            }
-            if (path.equals("/api/admin/assets/item/remove")) {
-                this.requireMethod(exchange, "POST");
-                this.adminAssetsItemRemove(exchange);
-                return;
-            }
-            if (path.equals("/api/admin/assets/prompt")) {
-                this.requireMethod(exchange, "POST");
-                this.adminAssetsPrompt(exchange);
-                return;
-            }
-            if (path.equals("/api/admin/assets/validate")) {
-                this.requireMethod(exchange, "POST");
-                this.adminAssetsValidate(exchange);
-                return;
-            }
-            if (path.equals("/api/admin/assets/publish")) {
-                this.requireMethod(exchange, "POST");
-                this.adminAssetsPublish(exchange);
-                return;
-            }
-            if (path.startsWith("/api/assets/download/")) {
+            if (path.equals("/api/admin/hunt-engine/catalogue")) {
                 this.requireMethod(exchange, "GET");
-                this.assetsDownload(exchange, path.substring("/api/assets/download/".length()));
+                this.adminHuntEngineCatalogue(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/packages")) {
+                this.requireMethod(exchange, "GET");
+                this.adminHuntEnginePackages(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/item/create")) {
+                this.requireMethod(exchange, "POST");
+                this.adminHuntEngineSimpleItemCreate(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/upload")) {
+                this.requireMethod(exchange, "POST");
+                this.adminHuntEngineUpload(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/package/remove")) {
+                this.requireMethod(exchange, "POST");
+                this.adminHuntEnginePackageRemove(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/validate")) {
+                this.requireMethod(exchange, "POST");
+                this.adminHuntEngineOperation(exchange, "validate");
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/build")) {
+                this.requireMethod(exchange, "POST");
+                this.adminHuntEngineOperation(exchange, "build");
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/publish")) {
+                this.requireMethod(exchange, "POST");
+                this.adminHuntEngineOperation(exchange, "publish");
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/reload")) {
+                this.requireMethod(exchange, "POST");
+                this.adminHuntEngineOperation(exchange, "reload");
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/send-pack")) {
+                this.requireMethod(exchange, "POST");
+                this.adminHuntEngineSendPack(exchange);
+                return;
+            }
+            if (path.equals("/api/admin/hunt-engine/migration")) {
+                this.requireMethod(exchange, "GET");
+                this.adminHuntEngineMigration(exchange);
+                return;
+            }
+            if (path.startsWith("/api/admin/hunt-engine/operation/")) {
+                this.requireMethod(exchange, "GET");
+                this.adminHuntEngineOperationStatus(exchange, path.substring("/api/admin/hunt-engine/operation/".length()));
                 return;
             }
             if (path.equals("/api/admin/title/save")) {
@@ -557,18 +555,20 @@ final class HunterWebPanelManager {
 
     private String statusJson(final HttpExchange exchange) throws InterruptedException, ExecutionException, TimeoutException {
         final WebSession session = this.session(exchange);
-        final boolean detailed = session != null;
-        final String bucket = this.cacheBucket(session);
-        final CachedResponse cached = this.statusCaches.get(bucket);
-        if (cached != null && cached.expiresAtMillis() > System.currentTimeMillis()) {
-            return cached.body();
+        final boolean authenticated = session != null;
+        final boolean detailed = session != null && WebSessionAccessPolicy.hasDetailedStatusAccess(session.playerUuid(), session.authSource());
+        if (WebSessionAccessPolicy.mayCacheStatusResponse(authenticated)) {
+            final CachedResponse cached = this.statusCaches.get("guest");
+            if (cached != null && cached.expiresAtMillis() > System.currentTimeMillis()) {
+                return cached.body();
+            }
         }
 
         final int timeout = Math.max(1, this.preferences.intValue("modules.web-panel.command-timeout-seconds", 10));
         final String json = Bukkit.getScheduler().callSyncMethod(this.plugin, () -> this.buildStatusJson(session, detailed)).get(timeout, TimeUnit.SECONDS);
-        final int cacheMillis = this.cacheMillis(this.plugin.metricsSnapshot(), bucket);
-        if (cacheMillis > 0) {
-            this.statusCaches.put(bucket, new CachedResponse(json, System.currentTimeMillis() + cacheMillis));
+        final int cacheMillis = this.plugin.metricsSnapshot().adaptiveBudget().guestCacheMillis();
+        if (WebSessionAccessPolicy.mayCacheStatusResponse(authenticated) && cacheMillis > 0) {
+            this.statusCaches.put("guest", new CachedResponse(json, System.currentTimeMillis() + cacheMillis));
         }
         return json;
     }
@@ -812,10 +812,12 @@ final class HunterWebPanelManager {
             json.append(']');
 
             json.append(",\"plugins\":").append(this.pluginsJson());
-            json.append(",\"assets\":").append(this.assetsWorkspaceService.summaryJson(this.preferences.language()));
             if (this.plugin.titleManager() != null) {
                 json.append(",\"titles\":").append(this.plugin.titleManager().titlesJson());
             }
+        }
+        if (session != null && this.hasHuntEngineCapability(session, HuntEngineCapability.READ)) {
+            json.append(",\"huntEngine\":").append(this.huntEngineSummaryJson());
         }
         if (session != null && session.admin()) {
             json.append(",\"modules\":").append(this.modulesJson());
@@ -850,20 +852,7 @@ final class HunterWebPanelManager {
     }
 
     private Player sessionPlayer(final WebSession session) {
-        Player player = Bukkit.getPlayerExact(session.displayName());
-        if (player != null) {
-            return player;
-        }
-        player = Bukkit.getPlayerExact(session.username());
-        if (player != null) {
-            return player;
-        }
-        for (final Player online : Bukkit.getOnlinePlayers()) {
-            if (HunterToolsPreferences.webUserId(online.getName()).equals(session.username())) {
-                return online;
-            }
-        }
-        return null;
+        return session.playerUuid() == null ? null : Bukkit.getPlayer(session.playerUuid());
     }
 
     private String playerProfileJson(final Player player, final boolean detailed) {
@@ -1129,7 +1118,8 @@ final class HunterWebPanelManager {
             field(json, "displayName", user.displayName()).append(',');
             field(json, "role", normalizeRole(user.role())).append(',');
             booleanField(json, "admin", normalizeRole(user.role()).equals("admin")).append(',');
-            booleanField(json, "passwordConfigured", user.passwordConfigured()).append(',');
+            booleanField(json, "identityBound", parseUuid(user.identityUuid()) != null).append(',');
+            field(json, "identityUuid", user.identityUuid()).append(',');
             booleanField(json, "commandExecution", user.commandExecution()).append(',');
             booleanField(json, "allowedCommandsConfigured", user.allowedCommandsConfigured()).append(',');
             json.append("\"allowedCommands\":").append(stringArrayJson(user.allowedCommands()));
@@ -1317,13 +1307,14 @@ final class HunterWebPanelManager {
         booleanField(json, "authOpenGuiOnJoin", this.preferences.booleanValue("modules.auth.open-gui-on-join", true)).append(',');
         booleanField(json, "authResourcePackGui", this.preferences.booleanValue("modules.auth.resource-pack-gui", true)).append(',');
         booleanField(json, "authResourcePackPromptOnJoin", this.preferences.booleanValue("modules.auth.resource-pack-prompt-on-join", true)).append(',');
-        numberField(json, "authMinimumPasswordLength", this.preferences.intValue("modules.auth.minimum-password-length", 4)).append(',');
+        numberField(json, "authMinimumPasswordLength", this.preferences.intValue("modules.auth.minimum-password-length", 6)).append(',');
         numberField(json, "authLoginTimeoutSeconds", this.preferences.intValue("modules.auth.login-timeout-seconds", 90)).append(',');
         numberField(json, "authMaxLoginAttempts", this.preferences.intValue("modules.auth.max-login-attempts", 5)).append(',');
         numberField(json, "authLockoutSeconds", this.preferences.intValue("modules.auth.lockout-seconds", 60)).append(',');
         field(json, "authRegistrationUrl", this.preferences.stringValue("modules.auth.registration-url", "")).append(',');
         booleanField(json, "corsEnabled", this.preferences.booleanValue("modules.web-panel.cors-enabled", true)).append(',');
         field(json, "corsAllowOrigin", this.preferences.stringValue("modules.web-panel.cors-allow-origin", "*")).append(',');
+        booleanField(json, "secureCookies", this.preferences.booleanValue("modules.web-panel.secure-cookies", false)).append(',');
         booleanField(json, "apiKeyEnabled", this.preferences.booleanValue("modules.web-panel.api-key-enabled", false)).append(',');
         booleanField(json, "apiKeyConfigured", !this.preferences.stringValue("modules.web-panel.api-key", "").isBlank()).append(',');
         booleanField(json, "asyncEnabled", !cpuMode.equals("single-thread")).append(',');
@@ -1591,8 +1582,11 @@ final class HunterWebPanelManager {
 
     private String mapJson(final HttpExchange exchange) {
         final boolean publicMap = this.preferences.booleanValue("modules.web-panel.public-map", true);
-        if (!publicMap && this.session(exchange) == null) {
-            return "{\"ok\":false,\"error\":\"login_required\"}";
+        if (!publicMap) {
+            final WebSession session = this.session(exchange);
+            if (session == null || !WebSessionAccessPolicy.mayPerformPlayerOperations(session.playerUuid(), session.authSource())) {
+                return "{\"ok\":false,\"error\":\"identity_binding_required\"}";
+            }
         }
         final String rawUrl = this.preferences.stringValue("modules.web-panel.map-url", "http://%host%:8100/");
         final String host = requestHost(exchange);
@@ -1646,74 +1640,73 @@ final class HunterWebPanelManager {
 
     private void login(final HttpExchange exchange) throws IOException {
         final Map<String, String> body = parseJsonObject(this.body(exchange, 16 * 1024));
-        final String username = body.getOrDefault("username", "");
+        final String username = body.getOrDefault("username", "").trim();
         final String password = body.getOrDefault("password", "");
-        final HunterToolsPreferences.WebUser user = this.preferences.webUser(username);
-        final boolean webPassword = user != null && user.passwordConfigured() && verifyPassword(password, user.passwordHash());
-        final boolean hunterAuthPassword = this.preferences.booleanValue("modules.auth.web-login-enabled", false) && verifyHunterAuthPassword(username, password);
-        if (!webPassword && !hunterAuthPassword) {
-            this.send(exchange, 401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_login\"}");
+        final WebAuthThrottle.Decision decision = this.authThrottle.acquire(
+            "login",
+            remoteAddress(exchange),
+            username,
+            System.currentTimeMillis()
+        );
+        if (!decision.allowed()) {
+            this.sendAuthRateLimited(exchange, decision.retryAfterMillis());
             return;
         }
-        final boolean operator = this.operatorUsername(username);
-        final String role = operator ? "admin" : webPassword && user != null ? normalizeRole(user.role()) : "player";
-        final String id = webPassword && user != null ? user.id() : HunterToolsPreferences.webUserId(username);
-        final String displayName = webPassword && user != null ? user.displayName() : username;
-        final boolean commandExecution = webPassword && user != null ? user.commandExecution() : true;
-        final boolean allowedCommandsConfigured = webPassword && user != null && user.allowedCommandsConfigured();
-        final List<String> allowedCommands = webPassword && user != null ? List.copyOf(user.allowedCommands()) : List.of();
-        final long minutes = Math.max(5L, this.preferences.intValue("modules.web-panel.session-minutes", 360));
-        final WebSession session = new WebSession(
-            this.newToken(),
-            this.newToken(),
-            id,
-            displayName,
-            role,
-            operator ? (webPassword ? "web-op" : "hunterauth-op") : webPassword ? "web" : "hunterauth",
-            operator || commandExecution,
-            allowedCommandsConfigured,
-            allowedCommands,
-            Instant.now().plusSeconds(minutes * 60L).toEpochMilli()
-        );
-        this.sessions.put(session.token(), session);
-        exchange.getResponseHeaders().add("Set-Cookie", SESSION_COOKIE + "=" + session.token() + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" + (minutes * 60L));
-        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"session\":" + sessionJson(session) + "}");
-    }
 
-    private boolean operatorUsername(final String username) {
-        final String id = HunterToolsPreferences.webUserId(username);
-        if (id.isBlank()) {
-            return false;
-        }
+        boolean success = false;
         try {
-            if (Bukkit.isPrimaryThread()) {
-                return this.operatorUsernameMain(id);
+            if (!WebSessionAccessPolicy.mayStartHunterAuthSession(
+                this.preferences.booleanValue("modules.auth.enabled", true),
+                this.preferences.booleanValue("modules.auth.web-login-enabled", false)
+            )) {
+                this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"web_login_closed\"}");
+                return;
             }
-            return Bukkit.getScheduler()
-                .callSyncMethod(this.plugin, () -> this.operatorUsernameMain(id))
-                .get(3L, TimeUnit.SECONDS);
-        } catch (final InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return false;
-        } catch (final ExecutionException | TimeoutException ex) {
-            this.plugin.getLogger().warning("HunterCore web panel could not check OP role for " + username + ": " + ex.getMessage());
-            return false;
-        }
-    }
+            final HunterAuthWebAccountStore.Identity hunterAuth = this.hunterAuthAccountStore.authenticate(username, password);
+            if (hunterAuth == null) {
+                this.send(exchange, 401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_login\"}");
+                return;
+            }
 
-    private boolean operatorUsernameMain(final String id) {
-        for (final Player player : Bukkit.getOnlinePlayers()) {
-            if (HunterToolsPreferences.webUserId(player.getName()).equals(id) && player.isOp()) {
-                return true;
-            }
+            final boolean hunterAuthTrusted = hunterAuth.trustedIdentity();
+            final HunterToolsPreferences.WebUser identityBoundUser = hunterAuthTrusted
+                ? this.preferences.webUserByIdentityUuid(hunterAuth.identityUuid())
+                : null;
+            final boolean boundIdentity = WebIdentityAuthorization.matchesTrustedIdentity(
+                identityBoundUser == null ? "" : identityBoundUser.identityUuid(),
+                hunterAuth
+            );
+            final HunterToolsPreferences.WebUser user = boundIdentity ? identityBoundUser : null;
+            final boolean explicitlyAuthorized = boundIdentity && user != null;
+            final UUID playerUuid = WebIdentityAuthorization.trustedSessionPlayerUuid(hunterAuth);
+            final String role = explicitlyAuthorized && user != null ? normalizeRole(user.role()) : "player";
+            final String canonicalName = hunterAuth.name();
+            final String id = explicitlyAuthorized && user != null ? user.id() : HunterToolsPreferences.webUserId(canonicalName);
+            final String displayName = canonicalName;
+            final boolean commandExecution = explicitlyAuthorized && user != null ? user.commandExecution() : playerUuid != null;
+            final boolean allowedCommandsConfigured = explicitlyAuthorized && user != null && user.allowedCommandsConfigured();
+            final List<String> allowedCommands = explicitlyAuthorized && user != null ? List.copyOf(user.allowedCommands()) : List.of();
+            final long minutes = Math.max(5L, this.preferences.intValue("modules.web-panel.session-minutes", 360));
+            final WebSession session = new WebSession(
+                this.newToken(),
+                this.newToken(),
+                id,
+                displayName,
+                role,
+                boundIdentity ? "hunterauth-bound" : "hunterauth",
+                playerUuid,
+                commandExecution,
+                allowedCommandsConfigured,
+                allowedCommands,
+                Instant.now().plusSeconds(minutes * 60L).toEpochMilli()
+            );
+            this.sessions.put(session.token(), session);
+            exchange.getResponseHeaders().add("Set-Cookie", this.sessionCookie(session.token(), minutes * 60L));
+            success = true;
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"session\":" + sessionJson(session) + "}");
+        } finally {
+            this.authThrottle.complete(decision.ticket(), success, System.currentTimeMillis());
         }
-        for (final OfflinePlayer operator : Bukkit.getOperators()) {
-            final String name = operator.getName();
-            if (name != null && HunterToolsPreferences.webUserId(name).equals(id)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private void authRegister(final HttpExchange exchange) throws IOException {
@@ -1731,36 +1724,83 @@ final class HunterWebPanelManager {
         final String username = body.getOrDefault("username", "").trim();
         final String password = body.getOrDefault("password", "");
         final String confirmPassword = body.getOrDefault("confirmPassword", body.getOrDefault("passwordConfirm", ""));
-        final int minimumLength = Math.max(1, this.preferences.intValue("modules.auth.minimum-password-length", 4));
+        final int minimumLength = Math.max(1, this.preferences.intValue("modules.auth.minimum-password-length", 6));
         if (!validMinecraftUsername(username) || password.length() < minimumLength || password.length() > 256
-            || (!confirmPassword.isBlank() && !password.equals(confirmPassword))) {
+            || !password.equals(confirmPassword) || COMMON_AUTH_PASSWORDS.contains(password.toLowerCase(Locale.ROOT))) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_registration\"}");
             return;
         }
 
-        final UUID uuid = offlineUuid(username);
-        final Path usersPath = hunterAuthUsersPath();
-        synchronized (this.hunterAuthUsersLock) {
-            Files.createDirectories(usersPath.getParent());
-            final YamlConfiguration users = Files.isRegularFile(usersPath)
-                ? YamlConfiguration.loadConfiguration(usersPath.toFile())
-                : new YamlConfiguration();
-            if (users.contains("users." + uuid + ".hash") || hunterAuthNameExists(users, username)) {
+        final WebAuthThrottle.Decision decision = this.authThrottle.acquire(
+            "register",
+            remoteAddress(exchange),
+            username,
+            System.currentTimeMillis()
+        );
+        if (!decision.allowed()) {
+            this.sendAuthRateLimited(exchange, decision.retryAfterMillis());
+            return;
+        }
+
+        boolean success = false;
+        try {
+            if (this.protectedOperatorUsername(username)) {
+                this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"protected_username\"}");
+                return;
+            }
+            final HunterAuthWebAccountStore.RegistrationResult result = this.hunterAuthAccountStore.register(username, password);
+            if (result == HunterAuthWebAccountStore.RegistrationResult.INVALID) {
+                this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_registration\"}");
+                return;
+            }
+            if (result == HunterAuthWebAccountStore.RegistrationResult.CONFLICT) {
                 this.send(exchange, 409, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"already_registered\"}");
                 return;
             }
-            final byte[] salt = new byte[16];
-            RANDOM.nextBytes(salt);
-            final String path = "users." + uuid;
-            users.set(path + ".name", username);
-            users.set(path + ".salt", Base64.getEncoder().encodeToString(salt));
-            users.set(path + ".hash", hunterAuthHash(password, salt));
-            users.set(path + ".registered-from", "web-panel");
-            users.set(path + ".registered-at", Instant.now().toString());
-            users.save(usersPath.toFile());
-        }
 
-        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"username\":\"" + escapeJson(username) + "\"}");
+            success = true;
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"username\":\"" + escapeJson(username) + "\"}");
+        } finally {
+            this.authThrottle.complete(decision.ticket(), success, System.currentTimeMillis());
+        }
+    }
+
+    private boolean protectedOperatorUsername(final String username) {
+        final String id = HunterToolsPreferences.webUserId(username);
+        if (id.isBlank()) {
+            return true;
+        }
+        try {
+            if (Bukkit.isPrimaryThread()) {
+                return protectedOperatorUsernameMain(id, username);
+            }
+            return Bukkit.getScheduler()
+                .callSyncMethod(this.plugin, () -> protectedOperatorUsernameMain(id, username))
+                .get(3L, TimeUnit.SECONDS);
+        } catch (final InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return true;
+        } catch (final ExecutionException | TimeoutException ex) {
+            this.plugin.getLogger().warning("HunterCore web registration could not check protected player names: " + ex.getMessage());
+            return true;
+        }
+    }
+
+    private static boolean protectedOperatorUsernameMain(final String id, final String username) {
+        for (final Player player : Bukkit.getOnlinePlayers()) {
+            if (player.isOp() && HunterToolsPreferences.webUserId(player.getName()).equals(id)) {
+                return true;
+            }
+        }
+        final UUID derivedOfflineUuid = offlineUuid(username);
+        for (final OfflinePlayer operator : Bukkit.getOperators()) {
+            final String name = operator.getName();
+            if ((name != null && HunterToolsPreferences.webUserId(name).equals(id))
+                || (name == null && operator.getUniqueId().equals(derivedOfflineUuid))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void logout(final HttpExchange exchange) {
@@ -1772,7 +1812,7 @@ final class HunterWebPanelManager {
             }
             this.sessions.remove(session.token());
         }
-        exchange.getResponseHeaders().add("Set-Cookie", SESSION_COOKIE + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+        exchange.getResponseHeaders().add("Set-Cookie", this.sessionCookie("", 0L));
         this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true}");
     }
 
@@ -1786,7 +1826,7 @@ final class HunterWebPanelManager {
             this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"csrf_required\"}");
             return;
         }
-        if (!session.commandExecution()) {
+        if (!WebSessionAccessPolicy.mayPerformPlayerOperations(session.playerUuid(), session.authSource()) || !session.commandExecution()) {
             this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"chat_denied\"}");
             return;
         }
@@ -2014,7 +2054,7 @@ final class HunterWebPanelManager {
             return;
         }
         final String role = body.getOrDefault("role", "player").toLowerCase(Locale.ROOT);
-        if (!role.equals("admin") && !role.equals("player")) {
+        if (!role.equals("admin") && !role.equals("player") && !role.equals("content-editor") && !role.equals("content-publisher")) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_role\"}");
             return;
         }
@@ -2023,12 +2063,20 @@ final class HunterWebPanelManager {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"last_admin\"}");
             return;
         }
-        final String password = body.getOrDefault("password", "").trim();
-        if (existing == null && password.isBlank()) {
-            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"password_required\"}");
+        final String requestedIdentityUuid = body.getOrDefault("identityUuid", "").trim();
+        String identityUuid = existing == null ? "" : existing.identityUuid();
+        if (identityUuid.isBlank()) {
+            identityUuid = this.hunterAuthAccountStore.trustedIdentityUuid(username);
+        }
+        final UUID parsedIdentityUuid = parseUuid(identityUuid);
+        if (parsedIdentityUuid == null) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"hunterauth_identity_required\"}");
             return;
         }
-        final String passwordHash = password.isBlank() ? existing.passwordHash() : hashPassword(password);
+        if (!requestedIdentityUuid.isBlank() && !requestedIdentityUuid.equalsIgnoreCase(identityUuid)) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"identity_uuid_mismatch\"}");
+            return;
+        }
         final Boolean commandExecution = parseBoolean(body.getOrDefault("commandExecution", "true"));
         if (commandExecution == null) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_command_execution\"}");
@@ -2043,7 +2091,10 @@ final class HunterWebPanelManager {
             return;
         }
 
-        this.preferences.setWebUser(username, role, passwordHash);
+        if (!this.preferences.setWebUser(username, role, identityUuid)) {
+            this.send(exchange, 409, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"identity_uuid_in_use\"}");
+            return;
+        }
         this.preferences.setWebUserCommandExecution(username, commandExecution);
         this.preferences.setWebUserAllowedCommands(username, allowedCommands.commands());
         this.savePreferences();
@@ -2169,19 +2220,20 @@ final class HunterWebPanelManager {
         final Boolean authOpenGuiOnJoin = parseBoolean(body.getOrDefault("authOpenGuiOnJoin", String.valueOf(this.preferences.booleanValue("modules.auth.open-gui-on-join", true))));
         final Boolean authResourcePackGui = parseBoolean(body.getOrDefault("authResourcePackGui", String.valueOf(this.preferences.booleanValue("modules.auth.resource-pack-gui", true))));
         final Boolean authResourcePackPromptOnJoin = parseBoolean(body.getOrDefault("authResourcePackPromptOnJoin", String.valueOf(this.preferences.booleanValue("modules.auth.resource-pack-prompt-on-join", true))));
-        final Integer authMinimumPasswordLength = parseInteger(body.getOrDefault("authMinimumPasswordLength", String.valueOf(this.preferences.intValue("modules.auth.minimum-password-length", 4))), 1, 128);
+        final Integer authMinimumPasswordLength = parseInteger(body.getOrDefault("authMinimumPasswordLength", String.valueOf(this.preferences.intValue("modules.auth.minimum-password-length", 6))), 1, 128);
         final Integer authLoginTimeoutSeconds = parseInteger(body.getOrDefault("authLoginTimeoutSeconds", String.valueOf(this.preferences.intValue("modules.auth.login-timeout-seconds", 90))), 0, 3600);
         final Integer authMaxLoginAttempts = parseInteger(body.getOrDefault("authMaxLoginAttempts", String.valueOf(this.preferences.intValue("modules.auth.max-login-attempts", 5))), 1, 100);
         final Integer authLockoutSeconds = parseInteger(body.getOrDefault("authLockoutSeconds", String.valueOf(this.preferences.intValue("modules.auth.lockout-seconds", 60))), 1, 86400);
         final String authRegistrationUrl = body.getOrDefault("authRegistrationUrl", this.preferences.stringValue("modules.auth.registration-url", "")).trim();
         final Boolean corsEnabled = parseBoolean(body.getOrDefault("corsEnabled", String.valueOf(this.preferences.booleanValue("modules.web-panel.cors-enabled", true))));
         final String corsAllowOrigin = body.getOrDefault("corsAllowOrigin", this.preferences.stringValue("modules.web-panel.cors-allow-origin", "*")).trim();
+        final Boolean secureCookies = parseBoolean(body.getOrDefault("secureCookies", String.valueOf(this.preferences.booleanValue("modules.web-panel.secure-cookies", false))));
         final Boolean apiKeyEnabled = parseBoolean(body.getOrDefault("apiKeyEnabled", String.valueOf(this.preferences.booleanValue("modules.web-panel.api-key-enabled", false))));
         final Boolean clearApiKey = parseBoolean(body.getOrDefault("clearApiKey", "false"));
         final String apiKey = body.getOrDefault("apiKey", "").trim();
         final Boolean bundleGeyser = parseBoolean(body.getOrDefault("bundleGeyser", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.geyser", true))));
         final Boolean bundleFloodgate = parseBoolean(body.getOrDefault("bundleFloodgate", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.floodgate", true))));
-        final Boolean bundleHunterAssets = parseBoolean(body.getOrDefault("bundleHunterAssets", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.hunter-assets", true))));
+        final Boolean bundleHuntEngine = parseBoolean(body.getOrDefault("bundleHuntEngine", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.hunt-engine", true))));
         final Boolean bundleImageFrame = parseBoolean(body.getOrDefault("bundleImageFrame", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.imageframe", true))));
         final Boolean bundleViaLegacy = parseBoolean(body.getOrDefault("bundleViaLegacy", String.valueOf(this.preferences.booleanValue("bundled-plugins.plugins.viarewind-legacysupport", true))));
         final HunterNoChatReportsBridge.Settings currentNoChatReports = HunterNoChatReportsBridge.read();
@@ -2191,11 +2243,6 @@ final class HunterWebPanelManager {
         final Boolean noChatReportsDemandOnClient = parseBoolean(body.getOrDefault("noChatReportsDemandOnClient", String.valueOf(currentNoChatReports.demandOnClient())));
         final Boolean noChatReportsDebugLog = parseBoolean(body.getOrDefault("noChatReportsDebugLog", String.valueOf(currentNoChatReports.debugLog())));
         final String noChatReportsDisconnectMessage = body.getOrDefault("noChatReportsDisconnectMessage", currentNoChatReports.disconnectMessage()).trim();
-        final Boolean assetsResourcePackEnabled = parseBoolean(body.getOrDefault("assetsResourcePackEnabled", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.enabled", false))));
-        final Boolean assetsResourcePackRequired = parseBoolean(body.getOrDefault("assetsResourcePackRequired", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.required", false))));
-        final Boolean assetsSendOnJoin = parseBoolean(body.getOrDefault("assetsSendOnJoin", String.valueOf(this.hunterAssetsBooleanValue("resource-pack.send-on-join", false))));
-        final String assetsResourcePackUrl = body.getOrDefault("assetsResourcePackUrl", this.hunterAssetsValue("resource-pack.url", "")).trim();
-        final String assetsResourcePackSha1 = body.getOrDefault("assetsResourcePackSha1", this.hunterAssetsValue("resource-pack.sha1", "")).trim();
         final String geyserBedrockAddress = body.getOrDefault("geyserBedrockAddress", this.geyserValue("bedrock.address", "0.0.0.0")).trim();
         final Integer geyserBedrockPort = parseInteger(body.getOrDefault("geyserBedrockPort", String.valueOf(this.geyserIntValue("bedrock.port", 19132))), 1, 65535);
         final String geyserJavaAuthType = HunterToolsPreferences.normalize(body.getOrDefault("geyserJavaAuthType", this.geyserAuthType()).trim());
@@ -2219,19 +2266,16 @@ final class HunterWebPanelManager {
             || motdLine1.length() > 256 || motdLine2.length() > 256 || motdMaxPlayers == null
             || authEnabled == null || authRegistrationRequired == null || authWebRegistrationRequired == null || authWebRegistrationEnabled == null || authWebLoginEnabled == null
             || authGuiEnabled == null || authOpenGuiOnJoin == null || authResourcePackGui == null || authResourcePackPromptOnJoin == null || authMinimumPasswordLength == null
-            || corsEnabled == null || apiKeyEnabled == null || clearApiKey == null
-            || bundleGeyser == null || bundleFloodgate == null || bundleHunterAssets == null || bundleImageFrame == null || bundleViaLegacy == null
+            || corsEnabled == null || secureCookies == null || apiKeyEnabled == null || clearApiKey == null
+            || bundleGeyser == null || bundleFloodgate == null || bundleHuntEngine == null || bundleImageFrame == null || bundleViaLegacy == null
             || noChatReportsEnabled == null || noChatReportsAddQueryData == null || noChatReportsConvertToGameMessage == null
             || noChatReportsDemandOnClient == null || noChatReportsDebugLog == null || noChatReportsDisconnectMessage.length() > 256
-            || assetsResourcePackEnabled == null || assetsResourcePackRequired == null || assetsSendOnJoin == null
             || geyserBedrockPort == null || geyserPassthroughMotd == null || geyserPassthroughPlayerCounts == null
             || f3ServerName.isBlank() || f3ServerName.length() > 96 || apiKey.length() > 256
             || geyserBedrockAddress.isBlank() || geyserBedrockAddress.length() > 128 || geyserJavaAuthType.isBlank()
             || !(geyserJavaAuthType.equals("floodgate") || geyserJavaAuthType.equals("online") || geyserJavaAuthType.equals("offline"))
             || geyserPrimaryMotd.isBlank() || geyserPrimaryMotd.length() > 128 || geyserSecondaryMotd.length() > 128 || geyserServerName.isBlank() || geyserServerName.length() > 128
-            || assetsResourcePackUrl.length() > 512 || assetsResourcePackSha1.length() > 64
             || invalidOptionalUrl(externalUrl) || invalidOptionalUrl(authRegistrationUrl)
-            || invalidOptionalUrl(assetsResourcePackUrl)
             || corsAllowOrigin.isBlank() || corsAllowOrigin.length() > 256 || containsHeaderBreak(corsAllowOrigin)) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_web_settings\"}");
             return;
@@ -2280,10 +2324,11 @@ final class HunterWebPanelManager {
         this.preferences.setValue("modules.auth.registration-url", authRegistrationUrl);
         this.preferences.setValue("modules.web-panel.cors-enabled", corsEnabled);
         this.preferences.setValue("modules.web-panel.cors-allow-origin", corsAllowOrigin);
+        this.preferences.setValue("modules.web-panel.secure-cookies", secureCookies);
         this.preferences.setValue("modules.web-panel.api-key-enabled", apiKeyEnabled);
         this.preferences.setValue("bundled-plugins.plugins.geyser", bundleGeyser);
         this.preferences.setValue("bundled-plugins.plugins.floodgate", bundleFloodgate);
-        this.preferences.setValue("bundled-plugins.plugins.hunter-assets", bundleHunterAssets);
+        this.preferences.setValue("bundled-plugins.plugins.hunt-engine", bundleHuntEngine);
         this.preferences.setValue("bundled-plugins.plugins.imageframe", bundleImageFrame);
         this.preferences.setValue("bundled-plugins.plugins.viarewind-legacysupport", bundleViaLegacy);
         if (clearApiKey) {
@@ -2307,13 +2352,19 @@ final class HunterWebPanelManager {
             noChatReportsDebugLog,
             noChatReportsDisconnectMessage
         ));
-        this.saveHunterAssetsSettings(assetsResourcePackEnabled, assetsResourcePackRequired, assetsSendOnJoin, assetsResourcePackUrl, assetsResourcePackSha1);
         this.saveGeyserSettings(geyserBedrockAddress, geyserBedrockPort, geyserJavaAuthType, geyserPrimaryMotd, geyserSecondaryMotd, geyserPassthroughMotd, geyserPassthroughPlayerCounts, geyserServerName);
         this.savePreferences();
         this.plugin.applyServerBrand();
         this.plugin.restartDisplayTasks();
         this.invalidateStatusCaches();
-        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"restart\":" + restart + ",\"threadingChanged\":" + threadingChanged + ",\"settings\":" + this.webSettingsJson() + "}");
+        final String settings;
+        try {
+            settings = this.onHuntEngineMainThread(this::webSettingsJson);
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+            return;
+        }
+        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"restart\":" + restart + ",\"threadingChanged\":" + threadingChanged + ",\"settings\":" + settings + "}");
         if (restart) {
             CompletableFuture.runAsync(() -> {
                 try {
@@ -2333,121 +2384,580 @@ final class HunterWebPanelManager {
             || input.equals("multi-thread");
     }
 
-    private void adminAssets(final HttpExchange exchange) throws IOException {
-        if (this.adminOperator(exchange) == null) {
+    private void adminHuntEngine(final HttpExchange exchange) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.READ) == null) {
             return;
         }
-        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
-    }
-
-    private void adminAssetsUpload(final HttpExchange exchange) throws IOException {
-        if (this.adminOperator(exchange) == null) {
-            return;
-        }
-        final Map<String, String> body = parseJsonObject(this.body(exchange, 12 * 1024 * 1024));
         try {
-            final HunterAssetsWorkspaceService.UploadedAsset uploaded = this.assetsWorkspaceService.upload(
-                body.getOrDefault("scope", "presets"),
-                body.getOrDefault("fileName", "asset.bin"),
-                body.getOrDefault("contentBase64", "")
-            );
-            this.invalidateStatusCaches();
-            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"uploaded\":" + uploaded.toJson() + ",\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"huntEngine\":" + this.onHuntEngineMainThread(this::huntEngineSummaryJson) + "}");
         } catch (final Exception ex) {
-            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":" + string(ex.getMessage()) + "}");
+            this.huntEngineFailure(exchange, ex);
         }
     }
 
-    private void adminAssetsItemSave(final HttpExchange exchange) throws IOException {
-        if (this.adminOperator(exchange) == null) {
+    private void adminHuntEngineCatalogue(final HttpExchange exchange) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.READ) == null) {
             return;
         }
-        final Map<String, String> body = parseJsonObject(this.body(exchange, 256 * 1024));
         try {
-            final HunterAssetsWorkspaceService.AssetItemDefinition saved = this.assetsWorkspaceService.saveItem(new HunterAssetsWorkspaceService.AssetItemDefinition(
+            final String catalogue = this.onHuntEngineMainThread(() -> this.huntEngineCatalogueJson(HuntEngineServices.get().catalogue()));
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"catalogue\":" + catalogue + "}");
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+        }
+    }
+
+    private void adminHuntEnginePackages(final HttpExchange exchange) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.READ) == null) {
+            return;
+        }
+        try {
+            final String packages = this.onHuntEngineMainThread(() -> this.huntEnginePackagesJson(HuntEngineServices.get().stagedContentPackages()));
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"packages\":" + packages + "}");
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+        }
+    }
+
+    /**
+     * Stages one deliberately small native item package. The WebPanel never writes into the
+     * HuntEngine data directory: it creates a deterministic ZIP in memory and hands that ZIP to
+     * the service-owned staging boundary just like an uploaded native package.
+     */
+    private void adminHuntEngineSimpleItemCreate(final HttpExchange exchange) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.STAGE) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, HUNT_ENGINE_SIMPLE_ITEM_REQUEST_MAX_BYTES));
+        final SimpleHuntEngineItemPackage simpleItem;
+        try {
+            simpleItem = createHuntEngineSimpleItemPackage(
                 body.getOrDefault("id", ""),
-                parseBoolean(body.getOrDefault("enabled", "true")) != Boolean.FALSE,
-                body.getOrDefault("category", "items"),
-                body.getOrDefault("material", "PAPER"),
-                parseInt(body.getOrDefault("amount", "1"), 1),
-                parseInt(body.getOrDefault("customModelData", "0"), 0),
-                body.getOrDefault("permission", ""),
-                body.getOrDefault("pack", ""),
-                body.getOrDefault("icon", ""),
-                body.getOrDefault("description", ""),
-                body.getOrDefault("nameZhCn", body.getOrDefault("id", "")),
-                body.getOrDefault("nameEnUs", body.getOrDefault("id", "")),
-                lines(body.getOrDefault("loreZhCn", "")),
-                lines(body.getOrDefault("loreEnUs", ""))
-            ));
-            this.invalidateStatusCaches();
-            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"item\":{\"id\":" + string(saved.id()) + "},\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
-        } catch (final Exception ex) {
+                body.getOrDefault("material", ""),
+                body.getOrDefault("displayName", ""),
+                body.getOrDefault("description", "")
+            );
+        } catch (final IllegalArgumentException ex) {
             this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":" + string(ex.getMessage()) + "}");
-        }
-    }
-
-    private void adminAssetsItemRemove(final HttpExchange exchange) throws IOException {
-        if (this.adminOperator(exchange) == null) {
             return;
         }
-        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
         try {
-            final boolean removed = this.assetsWorkspaceService.removeItem(body.getOrDefault("id", ""));
-            this.invalidateStatusCaches();
-            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":" + removed + ",\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
-        } catch (final Exception ex) {
-            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":" + string(ex.getMessage()) + "}");
-        }
-    }
-
-    private void adminAssetsPrompt(final HttpExchange exchange) throws IOException {
-        if (this.adminOperator(exchange) == null) {
-            return;
-        }
-        final Map<String, String> body = parseJsonObject(this.body(exchange, 128 * 1024));
-        final HunterAssetsWorkspaceService.AssetPromptBundle bundle = this.assetsWorkspaceService.generatePrompt(new HunterAssetsWorkspaceService.PromptRequest(
-            body.getOrDefault("style", ""),
-            body.getOrDefault("useCase", ""),
-            body.getOrDefault("theme", ""),
-            body.getOrDefault("category", "items"),
-            body.getOrDefault("colorPalette", ""),
-            body.getOrDefault("materialFeel", ""),
-            body.getOrDefault("resolution", "16x16"),
-            parseBoolean(body.getOrDefault("transparentBackground", "true")) != Boolean.FALSE
-        ), this.preferences.language());
-        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"prompt\":" + bundle.toJson() + "}");
-    }
-
-    private void adminAssetsValidate(final HttpExchange exchange) throws IOException {
-        if (this.adminOperator(exchange) == null) {
-            return;
-        }
-        this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"validation\":" + this.assetsWorkspaceService.validate().toJson() + ",\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
-    }
-
-    private void adminAssetsPublish(final HttpExchange exchange) throws IOException {
-        if (this.adminOperator(exchange) == null) {
-            return;
-        }
-        final Map<String, String> body = parseJsonObject(this.body(exchange, 64 * 1024));
-        try {
-            final HunterAssetsWorkspaceService.PublishedPack pack = this.assetsWorkspaceService.publishSelectedPack(
-                body.getOrDefault("fileName", ""),
-                parseBoolean(body.getOrDefault("required", "false")) == Boolean.TRUE,
-                parseBoolean(body.getOrDefault("sendOnJoin", "false")) == Boolean.TRUE,
-                body.getOrDefault("externalBaseUrl", "")
+            final boolean alreadyExists = this.onHuntEngineMainThread(
+                () -> HuntEngineServices.get().content(simpleItem.contentId()).isPresent()
+            );
+            if (alreadyExists) {
+                this.send(exchange, 409, "application/json; charset=utf-8",
+                    "{\"ok\":false,\"error\":\"hunt_engine_content_already_exists\",\"contentId\":" + string(simpleItem.contentId()) + "}");
+                return;
+            }
+            this.preflightHuntEngineZip(simpleItem.contents());
+            final HuntEngineActionResult result = this.onHuntEngineMainThread(
+                () -> HuntEngineServices.get().stageContentPackage(
+                    new HuntEngineContentPackageUpload(simpleItem.fileName(), simpleItem.contents())
+                )
             );
             this.invalidateStatusCaches();
-            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"published\":" + pack.toJson() + ",\"assets\":" + this.assetsWorkspaceService.summaryJson(this.preferences.language()) + "}");
+            final String summary = this.onHuntEngineMainThread(this::huntEngineSummaryJson);
+            this.send(exchange, result.success() ? 201 : 400, "application/json; charset=utf-8",
+                "{\"ok\":" + result.success() + ",\"contentId\":" + string(simpleItem.contentId())
+                    + ",\"message\":" + string(result.message()) + ",\"huntEngine\":" + summary + "}");
         } catch (final Exception ex) {
-            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":" + string(ex.getMessage()) + "}");
+            this.huntEngineFailure(exchange, ex);
         }
     }
 
-    private void assetsDownload(final HttpExchange exchange, final String fileName) throws IOException {
-        final byte[] bytes = this.assetsWorkspaceService.downloadPack(fileName);
-        this.sendBytes(exchange, 200, "application/zip", bytes);
+    private void adminHuntEngineUpload(final HttpExchange exchange) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.STAGE) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, HUNT_ENGINE_UPLOAD_REQUEST_MAX_BYTES));
+        final String fileName = body.getOrDefault("fileName", "").trim();
+        if (!this.safeHuntEnginePackageFileName(fileName)) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_content_package_file_name\"}");
+            return;
+        }
+        final byte[] contents;
+        try {
+            contents = Base64.getDecoder().decode(body.getOrDefault("contentBase64", ""));
+        } catch (final IllegalArgumentException ex) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_content_package_encoding\"}");
+            return;
+        }
+        if (contents.length == 0 || contents.length > HUNT_ENGINE_CONTENT_UPLOAD_MAX_BYTES) {
+            this.send(exchange, 413, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"content_package_too_large\"}");
+            return;
+        }
+        try {
+            this.preflightHuntEngineZip(contents);
+            final HuntEngineActionResult result = this.onHuntEngineMainThread(
+                () -> HuntEngineServices.get().stageContentPackage(new HuntEngineContentPackageUpload(fileName, contents))
+            );
+            this.invalidateStatusCaches();
+            final String summary = this.onHuntEngineMainThread(this::huntEngineSummaryJson);
+            this.send(exchange, result.success() ? 200 : 400, "application/json; charset=utf-8",
+                "{\"ok\":" + result.success() + ",\"message\":" + string(result.message()) + ",\"huntEngine\":" + summary + "}");
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+        }
+    }
+
+    private void adminHuntEnginePackageRemove(final HttpExchange exchange) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.STAGE) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 32 * 1024));
+        final String packageId = body.getOrDefault("id", "").trim();
+        if (!packageId.matches("[a-zA-Z0-9._:-]{1,160}")) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_content_package_id\"}");
+            return;
+        }
+        try {
+            final HuntEngineActionResult result = this.onHuntEngineMainThread(
+                () -> HuntEngineServices.get().removeStagedContentPackage(packageId)
+            );
+            this.invalidateStatusCaches();
+            this.send(exchange, result.success() ? 200 : 400, "application/json; charset=utf-8",
+                "{\"ok\":" + result.success() + ",\"message\":" + string(result.message()) + ",\"huntEngine\":" + this.onHuntEngineMainThread(this::huntEngineSummaryJson) + "}");
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+        }
+    }
+
+    private void adminHuntEngineOperation(final HttpExchange exchange, final String requestedOperation) throws IOException {
+        final HuntEngineCapability capability = requestedOperation.equals("validate") ? HuntEngineCapability.READ : HuntEngineCapability.PUBLISH;
+        if (this.huntEngineOperator(exchange, capability) == null) {
+            return;
+        }
+        try {
+            final HuntEngineOperationTicket ticket = this.onHuntEngineMainThread(() -> {
+                final HuntEngineService service = HuntEngineServices.get();
+                return switch (requestedOperation) {
+                    case "validate" -> service.validate();
+                    case "build" -> service.build();
+                    case "publish" -> service.publish();
+                    case "reload" -> service.reload();
+                    default -> throw new IllegalArgumentException("unknown HuntEngine operation");
+                };
+            });
+            ticket.completion().whenComplete((operation, failure) -> this.invalidateStatusCaches());
+            this.send(exchange, 202, "application/json; charset=utf-8", "{\"ok\":true,\"operation\":" + this.huntEngineOperationJson(ticket.operation()) + "}");
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+        }
+    }
+
+    private void adminHuntEngineOperationStatus(final HttpExchange exchange, final String rawOperationId) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.READ) == null) {
+            return;
+        }
+        final UUID operationId;
+        try {
+            operationId = UUID.fromString(rawOperationId);
+        } catch (final IllegalArgumentException ex) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_hunt_engine_operation\"}");
+            return;
+        }
+        try {
+            final Optional<HuntEngineOperation> operation = this.onHuntEngineMainThread(
+                () -> HuntEngineServices.get().operation(operationId)
+            );
+            if (operation.isEmpty()) {
+                this.send(exchange, 404, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"hunt_engine_operation_not_found\"}");
+                return;
+            }
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"operation\":" + this.huntEngineOperationJson(operation.get()) + "}");
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+        }
+    }
+
+    private void adminHuntEngineSendPack(final HttpExchange exchange) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.PUBLISH) == null) {
+            return;
+        }
+        final Map<String, String> body = parseJsonObject(this.body(exchange, 32 * 1024));
+        final String playerName = commandToken(body.getOrDefault("player", ""), 16);
+        if (playerName.isBlank()) {
+            this.send(exchange, 400, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_player\"}");
+            return;
+        }
+        try {
+            final HuntEngineActionResult result = this.onHuntEngineMainThread(() -> {
+                final Player target = Bukkit.getPlayerExact(playerName);
+                return target == null
+                    ? HuntEngineActionResult.fail("Player is not online.")
+                    : HuntEngineServices.get().requestResourcePack(target);
+            });
+            this.send(exchange, result.success() ? 200 : 400, "application/json; charset=utf-8",
+                "{\"ok\":" + result.success() + ",\"message\":" + string(result.message()) + "}");
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+        }
+    }
+
+    private void adminHuntEngineMigration(final HttpExchange exchange) throws IOException {
+        if (this.huntEngineOperator(exchange, HuntEngineCapability.ADMIN) == null) {
+            return;
+        }
+        try {
+            final String report = this.onHuntEngineMainThread(() -> this.huntEngineMigrationJson(HuntEngineServices.get().migrationReport(), true));
+            this.send(exchange, 200, "application/json; charset=utf-8", "{\"ok\":true,\"migration\":" + report + "}");
+        } catch (final Exception ex) {
+            this.huntEngineFailure(exchange, ex);
+        }
+    }
+
+    private String huntEngineSummaryJson() {
+        final HuntEngineService service = HuntEngineServices.get();
+        final HuntEngineStatus status = service.status();
+        final HuntEngineCatalogue catalogue = service.catalogue();
+        final HuntEngineResourcePack resourcePack = service.resourcePack();
+        final HuntEngineMigrationReport migration = service.migrationReport();
+        final StringBuilder json = new StringBuilder(4_096);
+        json.append('{');
+        json.append("\"status\":").append(this.huntEngineStatusJson(status)).append(',');
+        json.append("\"catalogue\":").append(this.huntEngineCatalogueJson(catalogue)).append(',');
+        json.append("\"packages\":").append(this.huntEnginePackagesJson(service.stagedContentPackages())).append(',');
+        json.append("\"resourcePack\":").append(this.huntEngineResourcePackJson(resourcePack)).append(',');
+        json.append("\"migration\":").append(this.huntEngineMigrationJson(migration, false));
+        return json.append('}').toString();
+    }
+
+    private String huntEngineStatusJson(final HuntEngineStatus status) {
+        final StringBuilder json = new StringBuilder(256);
+        json.append('{');
+        booleanField(json, "available", status.available()).append(',');
+        field(json, "version", status.version()).append(',');
+        numberField(json, "contentRevision", status.contentRevision()).append(',');
+        field(json, "lifecycle", status.lifecycle().name().toLowerCase(Locale.ROOT)).append(',');
+        field(json, "message", status.message());
+        return json.append('}').toString();
+    }
+
+    private String huntEngineCatalogueJson(final HuntEngineCatalogue catalogue) {
+        final StringBuilder json = new StringBuilder(2_048);
+        json.append('{');
+        numberField(json, "revision", catalogue.revision()).append(',');
+        json.append("\"contents\":[");
+        boolean first = true;
+        for (final HuntEngineContent content : catalogue.contents()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append(this.huntEngineContentJson(content));
+        }
+        return json.append("]}").toString();
+    }
+
+    private String huntEngineContentJson(final HuntEngineContent content) {
+        final StringBuilder json = new StringBuilder(384);
+        json.append('{');
+        field(json, "id", content.id()).append(',');
+        field(json, "kind", content.kind().name().toLowerCase(Locale.ROOT)).append(',');
+        field(json, "displayName", content.displayName()).append(',');
+        field(json, "description", content.description()).append(',');
+        json.append("\"categories\":").append(stringArrayJson(content.categories())).append(',');
+        if (content.permission() == null) {
+            json.append("\"permission\":null,");
+        } else {
+            field(json, "permission", content.permission()).append(',');
+        }
+        booleanField(json, "enabled", content.enabled());
+        return json.append('}').toString();
+    }
+
+    private String huntEnginePackagesJson(final Collection<HuntEngineContentPackage> packages) {
+        final StringBuilder json = new StringBuilder(1_024);
+        json.append('[');
+        boolean first = true;
+        for (final HuntEngineContentPackage contentPackage : packages) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('{');
+            field(json, "id", contentPackage.id()).append(',');
+            field(json, "fileName", contentPackage.fileName()).append(',');
+            numberField(json, "size", contentPackage.size()).append(',');
+            field(json, "state", contentPackage.state().name().toLowerCase(Locale.ROOT)).append(',');
+            field(json, "message", contentPackage.message());
+            json.append('}');
+        }
+        return json.append(']').toString();
+    }
+
+    private String huntEngineResourcePackJson(final HuntEngineResourcePack resourcePack) {
+        final StringBuilder json = new StringBuilder(384);
+        json.append('{');
+        booleanField(json, "configured", resourcePack.configured()).append(',');
+        booleanField(json, "published", resourcePack.published()).append(',');
+        booleanField(json, "required", resourcePack.required()).append(',');
+        field(json, "url", resourcePack.url()).append(',');
+        field(json, "sha1", resourcePack.sha1()).append(',');
+        field(json, "revision", resourcePack.revision()).append(',');
+        field(json, "message", resourcePack.message());
+        return json.append('}').toString();
+    }
+
+    private String huntEngineOperationJson(final HuntEngineOperation operation) {
+        final StringBuilder json = new StringBuilder(384);
+        json.append('{');
+        field(json, "id", operation.id().toString()).append(',');
+        field(json, "type", operation.type().name().toLowerCase(Locale.ROOT)).append(',');
+        field(json, "state", operation.state().name().toLowerCase(Locale.ROOT)).append(',');
+        numberField(json, "contentRevision", operation.contentRevision()).append(',');
+        field(json, "message", operation.message()).append(',');
+        numberField(json, "startedAt", operation.startedAt().toEpochMilli()).append(',');
+        if (operation.completedAt() == null) {
+            json.append("\"completedAt\":null");
+        } else {
+            numberField(json, "completedAt", operation.completedAt().toEpochMilli());
+        }
+        return json.append('}').toString();
+    }
+
+    private String huntEngineMigrationJson(final HuntEngineMigrationReport report, final boolean includeEntries) {
+        final StringBuilder json = new StringBuilder(1_024);
+        json.append('{');
+        field(json, "state", report.state().name().toLowerCase(Locale.ROOT)).append(',');
+        if (includeEntries) {
+            field(json, "journalLocation", report.journalLocation()).append(',');
+        }
+        if (report.startedAt() == null) {
+            json.append("\"startedAt\":null,");
+        } else {
+            numberField(json, "startedAt", report.startedAt().toEpochMilli()).append(',');
+        }
+        if (report.completedAt() == null) {
+            json.append("\"completedAt\":null,");
+        } else {
+            numberField(json, "completedAt", report.completedAt().toEpochMilli()).append(',');
+        }
+        numberField(json, "entryCount", report.entries().size()).append(',');
+        field(json, "message", report.message());
+        if (includeEntries) {
+            json.append(",\"entries\":[");
+            boolean first = true;
+            for (final HuntEngineMigrationEntry entry : report.entries()) {
+                if (!first) {
+                    json.append(',');
+                }
+                first = false;
+                json.append('{');
+                field(json, "source", entry.source()).append(',');
+                field(json, "target", entry.target()).append(',');
+                field(json, "sha256", entry.sha256()).append(',');
+                field(json, "state", entry.state().name().toLowerCase(Locale.ROOT)).append(',');
+                field(json, "message", entry.message());
+                json.append('}');
+            }
+            json.append(']');
+        }
+        return json.append('}').toString();
+    }
+
+    /**
+     * A generated native package is purposefully constrained to one vanilla-backed item. The
+     * fixed namespace avoids user-selected namespaces and permits regular HuntEngine duplicate
+     * checks during validation/build without exposing arbitrary engine configuration fields.
+     */
+    static SimpleHuntEngineItemPackage createHuntEngineSimpleItemPackage(
+        final String rawId,
+        final String rawMaterial,
+        final String rawDisplayName,
+        final String rawDescription
+    ) {
+        final String id = simpleHuntEngineItemId(rawId);
+        final String material = simpleHuntEngineItemMaterial(rawMaterial);
+        final String displayName = simpleHuntEnginePlainText(rawDisplayName, 64, true);
+        final String description = simpleHuntEnginePlainText(rawDescription, 256, false);
+        final String contentId = HUNT_ENGINE_SIMPLE_ITEM_NAMESPACE + ':' + id;
+        final String packageMetadata = "author: 'HunterCore WebPanel'\n"
+            + "version: '1.0'\n"
+            + "description: 'Generated safe simple item package'\n"
+            + "namespace: " + HUNT_ENGINE_SIMPLE_ITEM_NAMESPACE + "\n";
+        final StringBuilder configuration = new StringBuilder(512);
+        configuration.append("items:\n")
+            .append("  ").append(contentId).append(":\n")
+            .append("    material: ").append(material).append("\n")
+            .append("    data:\n")
+            .append("      item_name: ").append(yamlPlainScalar(displayName)).append("\n");
+        if (!description.isBlank()) {
+            configuration.append("      lore:\n")
+                .append("        - ").append(yamlPlainScalar(description)).append("\n");
+        }
+        return new SimpleHuntEngineItemPackage(
+            contentId,
+            "huntercraft-item-" + id + ".zip",
+            simpleHuntEngineZip(packageMetadata, configuration.toString())
+        );
+    }
+
+    private static String simpleHuntEngineItemId(final String rawId) {
+        final String id = rawId == null ? "" : rawId.strip().toLowerCase(Locale.ROOT);
+        if (!id.matches("[a-z0-9][a-z0-9_-]{0,47}")) {
+            throw new IllegalArgumentException("invalid_simple_item_id");
+        }
+        return id;
+    }
+
+    private static String simpleHuntEngineItemMaterial(final String rawMaterial) {
+        final String materialName = rawMaterial == null ? "" : rawMaterial.strip().toUpperCase(Locale.ROOT);
+        if (!HUNT_ENGINE_SIMPLE_ITEM_MATERIALS.contains(materialName)) {
+            throw new IllegalArgumentException("invalid_simple_item_material");
+        }
+        final Material material;
+        try {
+            material = Material.valueOf(materialName);
+        } catch (final IllegalArgumentException ex) {
+            throw new IllegalArgumentException("invalid_simple_item_material");
+        }
+        // The fixed allowlist above is the safety boundary. Do not call Material#isItem here:
+        // Paper's modern registry-backed implementation deliberately requires a running server,
+        // while this request is safely validated before any engine/main-thread interaction.
+        if (material.name().startsWith("LEGACY_")) {
+            throw new IllegalArgumentException("invalid_simple_item_material");
+        }
+        return material.name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * HuntEngine's item display processors accept MiniMessage and configuration templates. The
+     * wizard's text fields intentionally accept no formatting/template delimiters, then quote the
+     * final scalar, so a content editor cannot smuggle a behavior or a text action through a name
+     * or lore value.
+     */
+    private static String simpleHuntEnginePlainText(final String raw, final int maximumCodePoints, final boolean required) {
+        final String source = Normalizer.normalize(raw == null ? "" : raw, Normalizer.Form.NFC).strip();
+        final StringBuilder normalized = new StringBuilder(source.length());
+        boolean pendingWhitespace = false;
+        for (int index = 0; index < source.length();) {
+            final int codePoint = source.codePointAt(index);
+            index += Character.charCount(codePoint);
+            if (Character.isISOControl(codePoint) || Character.getType(codePoint) == Character.FORMAT) {
+                throw new IllegalArgumentException("invalid_simple_item_text");
+            }
+            if (Character.isWhitespace(codePoint)) {
+                pendingWhitespace = normalized.length() > 0;
+                continue;
+            }
+            if (codePoint == '&' || codePoint == '\u00a7' || codePoint == '<' || codePoint == '>'
+                || codePoint == '$' || codePoint == '{' || codePoint == '}') {
+                throw new IllegalArgumentException("invalid_simple_item_text");
+            }
+            if (pendingWhitespace) {
+                normalized.append(' ');
+                pendingWhitespace = false;
+            }
+            normalized.appendCodePoint(codePoint);
+        }
+        final String text = normalized.toString();
+        if ((required && text.isBlank()) || text.codePointCount(0, text.length()) > maximumCodePoints) {
+            throw new IllegalArgumentException("invalid_simple_item_text");
+        }
+        return text;
+    }
+
+    private static String yamlPlainScalar(final String value) {
+        return '\'' + value.replace("'", "''") + '\'';
+    }
+
+    private static byte[] simpleHuntEngineZip(final String packageMetadata, final String configuration) {
+        try (ByteArrayOutputStream output = new ByteArrayOutputStream();
+             ZipOutputStream zip = new ZipOutputStream(output, StandardCharsets.UTF_8)) {
+            writeSimpleHuntEngineZipEntry(zip, "pack.yml", packageMetadata);
+            writeSimpleHuntEngineZipEntry(zip, "configuration/huntercraft-simple-items.yml", configuration);
+            zip.finish();
+            return output.toByteArray();
+        } catch (final IOException ex) {
+            throw new IllegalStateException("could_not_create_simple_item_package", ex);
+        }
+    }
+
+    private static void writeSimpleHuntEngineZipEntry(final ZipOutputStream zip, final String name, final String contents) throws IOException {
+        final ZipEntry entry = new ZipEntry(name);
+        entry.setTime(0L);
+        zip.putNextEntry(entry);
+        zip.write(contents.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+    }
+
+    static record SimpleHuntEngineItemPackage(String contentId, String fileName, byte[] contents) {
+        SimpleHuntEngineItemPackage {
+            contents = contents == null ? new byte[0] : contents.clone();
+        }
+
+        @Override
+        public byte[] contents() {
+            return this.contents.clone();
+        }
+    }
+
+    static boolean safeHuntEnginePackageFileName(final String fileName) {
+        return fileName != null
+            && fileName.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}\\.zip")
+            && !fileName.contains("..")
+            && !fileName.contains("/")
+            && !fileName.contains("\\");
+    }
+
+    static void preflightHuntEngineZip(final byte[] contents) throws IOException {
+        int entries = 0;
+        long expandedBytes = 0L;
+        boolean hasFile = false;
+        final byte[] buffer = new byte[8_192];
+        try (ZipInputStream input = new ZipInputStream(new ByteArrayInputStream(contents), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = input.getNextEntry()) != null) {
+                entries++;
+                if (entries > HUNT_ENGINE_ZIP_MAX_ENTRIES) {
+                    throw new IOException("content package contains too many ZIP entries");
+                }
+                final String name = entry.getName() == null ? "" : entry.getName().replace('\\', '/');
+                if (name.isBlank() || name.startsWith("/") || name.matches("^[A-Za-z]:.*")
+                    || name.equals("..") || name.startsWith("../") || name.contains("/../")) {
+                    throw new IOException("content package contains an unsafe ZIP path");
+                }
+                if (!entry.isDirectory()) {
+                    hasFile = true;
+                }
+                int read;
+                while ((read = input.read(buffer)) >= 0) {
+                    expandedBytes += read;
+                    if (expandedBytes > HUNT_ENGINE_ZIP_MAX_EXPANDED_BYTES
+                        || expandedBytes > (long) contents.length * HUNT_ENGINE_ZIP_MAX_COMPRESSION_RATIO) {
+                        throw new IOException("content package expands beyond the safety limit");
+                    }
+                }
+                input.closeEntry();
+            }
+        }
+        if (!hasFile) {
+            throw new IOException("content package ZIP is empty");
+        }
+    }
+
+    private <T> T onHuntEngineMainThread(final HuntEngineMainThreadCall<T> call) throws Exception {
+        if (Bukkit.isPrimaryThread()) {
+            return call.call();
+        }
+        final int timeout = Math.max(1, this.preferences.intValue("modules.web-panel.command-timeout-seconds", 10));
+        return Bukkit.getScheduler().callSyncMethod(this.plugin, call::call).get(timeout, TimeUnit.SECONDS);
+    }
+
+    private void huntEngineFailure(final HttpExchange exchange, final Exception exception) {
+        final String message = exception.getMessage() == null || exception.getMessage().isBlank()
+            ? "HuntEngine request failed."
+            : exception.getMessage();
+        this.plugin.getLogger().warning("HuntEngine web request failed: " + message);
+        this.send(exchange, exception instanceof IOException ? 400 : 503, "application/json; charset=utf-8",
+            "{\"ok\":false,\"error\":" + string(message) + "}");
+    }
+
+    @FunctionalInterface
+    private interface HuntEngineMainThreadCall<T> {
+        T call() throws Exception;
     }
 
     private void adminTitleSave(final HttpExchange exchange) throws IOException {
@@ -2538,7 +3048,7 @@ final class HunterWebPanelManager {
         json.append("\"bundled\":{");
         booleanField(json, "geyser", this.preferences.booleanValue("bundled-plugins.plugins.geyser", true)).append(',');
         booleanField(json, "floodgate", this.preferences.booleanValue("bundled-plugins.plugins.floodgate", true)).append(',');
-        booleanField(json, "hunterAssets", this.preferences.booleanValue("bundled-plugins.plugins.hunter-assets", true)).append(',');
+        booleanField(json, "huntEngine", this.preferences.booleanValue("bundled-plugins.plugins.hunt-engine", true)).append(',');
         booleanField(json, "imageFrame", this.preferences.booleanValue("bundled-plugins.plugins.imageframe", true)).append(',');
         booleanField(json, "viaLegacy", this.preferences.booleanValue("bundled-plugins.plugins.viarewind-legacysupport", true));
         json.append("},\"noChatReports\":{");
@@ -2549,14 +3059,21 @@ final class HunterWebPanelManager {
         booleanField(json, "demandOnClient", noChatReports.demandOnClient()).append(',');
         booleanField(json, "debugLog", noChatReports.debugLog()).append(',');
         field(json, "disconnectMessage", noChatReports.disconnectMessage());
-        json.append("},\"hunterAssets\":{");
-        final Path assetsPath = this.hunterAssetsConfigPath();
-        booleanField(json, "configPresent", Files.isRegularFile(assetsPath)).append(',');
-        booleanField(json, "enabled", this.hunterAssetsBooleanValue("resource-pack.enabled", false)).append(',');
-        booleanField(json, "required", this.hunterAssetsBooleanValue("resource-pack.required", false)).append(',');
-        booleanField(json, "sendOnJoin", this.hunterAssetsBooleanValue("resource-pack.send-on-join", false)).append(',');
-        field(json, "url", this.hunterAssetsValue("resource-pack.url", "")).append(',');
-        field(json, "sha1", this.hunterAssetsValue("resource-pack.sha1", ""));
+        json.append("},\"huntEngine\":{");
+        final HuntEngineService huntEngine = HuntEngineServices.get();
+        final HuntEngineStatus huntEngineStatus = huntEngine.status();
+        final HuntEngineResourcePack resourcePack = huntEngine.resourcePack();
+        booleanField(json, "available", huntEngineStatus.available()).append(',');
+        field(json, "version", huntEngineStatus.version()).append(',');
+        numberField(json, "contentRevision", huntEngineStatus.contentRevision()).append(',');
+        field(json, "lifecycle", huntEngineStatus.lifecycle().name().toLowerCase(Locale.ROOT)).append(',');
+        booleanField(json, "configured", resourcePack.configured()).append(',');
+        booleanField(json, "published", resourcePack.published()).append(',');
+        booleanField(json, "required", resourcePack.required()).append(',');
+        field(json, "url", resourcePack.url()).append(',');
+        field(json, "sha1", resourcePack.sha1()).append(',');
+        field(json, "revision", resourcePack.revision()).append(',');
+        field(json, "message", resourcePack.message());
         json.append("},\"geyser\":{");
         final Path geyserPath = this.geyserConfigPath();
         booleanField(json, "configPresent", Files.isRegularFile(geyserPath)).append(',');
@@ -2574,45 +3091,6 @@ final class HunterWebPanelManager {
 
     private Path geyserConfigPath() {
         return Bukkit.getPluginsFolder().toPath().resolve("Geyser-Spigot").resolve("config.yml");
-    }
-
-    private Path hunterAssetsConfigPath() {
-        return Bukkit.getPluginsFolder().toPath().resolve("HunterAssets").resolve("config.yml");
-    }
-
-    private YamlConfiguration loadHunterAssetsConfig() {
-        final Path path = this.hunterAssetsConfigPath();
-        return Files.isRegularFile(path) ? YamlConfiguration.loadConfiguration(path.toFile()) : new YamlConfiguration();
-    }
-
-    private String hunterAssetsValue(final String path, final String fallback) {
-        return this.loadHunterAssetsConfig().getString(path, fallback);
-    }
-
-    private boolean hunterAssetsBooleanValue(final String path, final boolean fallback) {
-        return this.loadHunterAssetsConfig().getBoolean(path, fallback);
-    }
-
-    private void saveHunterAssetsSettings(
-        final boolean enabled,
-        final boolean required,
-        final boolean sendOnJoin,
-        final String url,
-        final String sha1
-    ) {
-        final Path path = this.hunterAssetsConfigPath();
-        try {
-            Files.createDirectories(path.getParent());
-            final YamlConfiguration yaml = Files.isRegularFile(path) ? YamlConfiguration.loadConfiguration(path.toFile()) : new YamlConfiguration();
-            yaml.set("resource-pack.enabled", enabled);
-            yaml.set("resource-pack.required", required);
-            yaml.set("resource-pack.send-on-join", sendOnJoin);
-            yaml.set("resource-pack.url", url);
-            yaml.set("resource-pack.sha1", sha1);
-            yaml.save(path.toFile());
-        } catch (final IOException ex) {
-            throw new IllegalStateException("Failed to save HunterAssets config", ex);
-        }
     }
 
     private YamlConfiguration loadGeyserConfig() {
@@ -3380,7 +3858,8 @@ final class HunterWebPanelManager {
         boolean targetAdmin = false;
         for (final String userId : this.preferences.webUserIds()) {
             final HunterToolsPreferences.WebUser user = this.preferences.webUser(userId);
-            if (user != null && user.passwordConfigured() && normalizeRole(user.role()).equals("admin")) {
+            if (user != null && parseUuid(user.identityUuid()) != null
+                && normalizeRole(user.role()).equals("admin")) {
                 admins++;
                 if (user.id().equals(id)) {
                     targetAdmin = true;
@@ -3430,6 +3909,49 @@ final class HunterWebPanelManager {
             return null;
         }
         return session;
+    }
+
+    private WebSession huntEngineOperator(final HttpExchange exchange, final HuntEngineCapability capability) {
+        final WebSession session = this.session(exchange);
+        if (session == null) {
+            this.send(exchange, 401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"login_required\"}");
+            return null;
+        }
+        if (!this.csrfAllowed(exchange, session)) {
+            this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"csrf_required\"}");
+            return null;
+        }
+        if (!WebSessionAccessPolicy.hasTrustedGameIdentity(session.playerUuid(), session.authSource())) {
+            this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"hunterauth_identity_required\"}");
+            return null;
+        }
+        if (!this.hasHuntEngineCapability(session, capability)) {
+            this.send(exchange, 403, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"hunt_engine_capability_required\"}");
+            return null;
+        }
+        return session;
+    }
+
+    private boolean hasHuntEngineCapability(final WebSession session, final HuntEngineCapability capability) {
+        if (session == null) {
+            return false;
+        }
+        return switch (normalizeRole(session.role())) {
+            case "admin" -> true;
+            case "content-editor" -> capability == HuntEngineCapability.READ || capability == HuntEngineCapability.STAGE;
+            case "content-publisher" -> capability == HuntEngineCapability.READ || capability == HuntEngineCapability.PUBLISH;
+            default -> false;
+        };
+    }
+
+    private String huntEngineCapabilitiesJson(final WebSession session) {
+        final StringBuilder json = new StringBuilder(96);
+        json.append('{');
+        booleanField(json, "read", this.hasHuntEngineCapability(session, HuntEngineCapability.READ)).append(',');
+        booleanField(json, "stage", this.hasHuntEngineCapability(session, HuntEngineCapability.STAGE)).append(',');
+        booleanField(json, "publish", this.hasHuntEngineCapability(session, HuntEngineCapability.PUBLISH)).append(',');
+        booleanField(json, "admin", this.hasHuntEngineCapability(session, HuntEngineCapability.ADMIN));
+        return json.append('}').toString();
     }
 
     private static String actorCommandLabel(final String module) {
@@ -3526,6 +4048,9 @@ final class HunterWebPanelManager {
     }
 
     private boolean commandAllowed(final WebSession session, final String command) {
+        if (!WebSessionAccessPolicy.mayPerformPlayerOperations(session.playerUuid(), session.authSource())) {
+            return false;
+        }
         final String root = commandRoot(command);
         if (session.admin()) {
             if (!this.preferences.booleanValue("modules.web-panel.admin-command-execution", true)) {
@@ -3587,6 +4112,12 @@ final class HunterWebPanelManager {
             this.sessions.remove(token);
             return null;
         }
+        if (!WebSessionAccessPolicy.mayUseExistingSession(
+            session.authSource(), this.preferences.booleanValue("modules.auth.enabled", true)
+        )) {
+            this.sessions.remove(token, session);
+            return null;
+        }
         return session;
     }
 
@@ -3618,6 +4149,7 @@ final class HunterWebPanelManager {
             "API Key",
             "admin",
             "api-key",
+            null,
             true,
             false,
             List.of(),
@@ -3644,6 +4176,7 @@ final class HunterWebPanelManager {
             final byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             final Headers headers = exchange.getResponseHeaders();
             this.applyCorsHeaders(exchange);
+            this.applySecurityHeaders(exchange);
             headers.set("Content-Type", type);
             headers.set("Cache-Control", "no-store");
             headers.set("X-Content-Type-Options", "nosniff");
@@ -3658,6 +4191,7 @@ final class HunterWebPanelManager {
     private void sendNoContent(final HttpExchange exchange, final int status) {
         try {
             this.applyCorsHeaders(exchange);
+            this.applySecurityHeaders(exchange);
             exchange.sendResponseHeaders(status, -1);
         } catch (final IOException ignored) {
         }
@@ -3667,6 +4201,7 @@ final class HunterWebPanelManager {
         try {
             final Headers headers = exchange.getResponseHeaders();
             this.applyCorsHeaders(exchange);
+            this.applySecurityHeaders(exchange);
             headers.set("Content-Type", type);
             headers.set("Cache-Control", "no-store");
             headers.set("X-Content-Type-Options", "nosniff");
@@ -3695,6 +4230,13 @@ final class HunterWebPanelManager {
             headers.set("Access-Control-Allow-Credentials", "true");
             headers.add("Vary", "Origin");
         }
+    }
+
+    private void applySecurityHeaders(final HttpExchange exchange) {
+        WebResponseSecurity.apply(
+            exchange.getResponseHeaders(),
+            this.preferences.booleanValue("modules.web-panel.secure-cookies", false)
+        );
     }
 
     private String corsAllowOrigin(final HttpExchange exchange) {
@@ -3732,95 +4274,56 @@ final class HunterWebPanelManager {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private static byte[] pbkdf2(final char[] password, final byte[] salt, final int iterations, final int bits) {
-        try {
-            final SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-            final KeySpec spec = new PBEKeySpec(password, salt, iterations, bits);
-            return factory.generateSecret(spec).getEncoded();
-        } catch (final Exception ex) {
-            throw new IllegalStateException("PBKDF2 is unavailable", ex);
-        }
+    private String sessionCookie(final String value, final long maxAgeSeconds) {
+        return WebResponseSecurity.sessionCookie(
+            SESSION_COOKIE,
+            value,
+            maxAgeSeconds,
+            this.preferences.booleanValue("modules.web-panel.secure-cookies", false)
+        );
     }
 
-    private static String hunterAuthHash(final String password, final byte[] salt) {
-        return Base64.getEncoder().encodeToString(pbkdf2(password.toCharArray(), salt, HASH_ITERATIONS, HASH_BITS));
+    private void sendAuthRateLimited(final HttpExchange exchange, final long retryAfterMillis) {
+        final long seconds = Math.max(1L, (retryAfterMillis + 999L) / 1_000L);
+        exchange.getResponseHeaders().set("Retry-After", Long.toString(seconds));
+        this.send(
+            exchange,
+            429,
+            "application/json; charset=utf-8",
+            "{\"ok\":false,\"error\":\"rate_limited\",\"retryAfterSeconds\":" + seconds + "}"
+        );
+    }
+
+    private static String remoteAddress(final HttpExchange exchange) {
+        final InetSocketAddress remote = exchange.getRemoteAddress();
+        if (remote == null) {
+            return "unknown";
+        }
+        final InetAddress address = remote.getAddress();
+        return address == null ? remote.getHostString() : address.getHostAddress();
     }
 
     private static UUID offlineUuid(final String username) {
         return UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(StandardCharsets.UTF_8));
     }
 
+    private static UUID parseUuid(final String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value.trim());
+        } catch (final IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
     private static boolean validMinecraftUsername(final String username) {
         return username != null && username.matches("[A-Za-z0-9_]{3,16}");
     }
 
-    private static boolean hunterAuthNameExists(final YamlConfiguration users, final String username) {
-        final ConfigurationSection section = users.getConfigurationSection("users");
-        if (section == null) {
-            return false;
-        }
-        for (final String id : section.getKeys(false)) {
-            if (users.getString("users." + id + ".name", "").equalsIgnoreCase(username)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static Map<String, String> parseJsonObject(final String json) {
-        final Map<String, String> values = new HashMap<>();
-        int index = 0;
-        while (index < json.length()) {
-            final int keyStart = json.indexOf('"', index);
-            if (keyStart < 0) {
-                break;
-            }
-            final int keyEnd = findStringEnd(json, keyStart + 1);
-            if (keyEnd < 0) {
-                break;
-            }
-            final String key = unescapeJson(json.substring(keyStart + 1, keyEnd));
-            final int colon = json.indexOf(':', keyEnd + 1);
-            if (colon < 0) {
-                break;
-            }
-            final int valueStart = json.indexOf('"', colon + 1);
-            if (valueStart < 0) {
-                index = colon + 1;
-                continue;
-            }
-            final int valueEnd = findStringEnd(json, valueStart + 1);
-            if (valueEnd < 0) {
-                break;
-            }
-            values.put(key, unescapeJson(json.substring(valueStart + 1, valueEnd)));
-            index = valueEnd + 1;
-        }
-        return values;
-    }
-
-    private static int findStringEnd(final String json, final int start) {
-        boolean escaped = false;
-        for (int i = start; i < json.length(); i++) {
-            final char c = json.charAt(i);
-            if (escaped) {
-                escaped = false;
-            } else if (c == '\\') {
-                escaped = true;
-            } else if (c == '"') {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private static String unescapeJson(final String value) {
-        return value
-            .replace("\\\"", "\"")
-            .replace("\\\\", "\\")
-            .replace("\\n", "\n")
-            .replace("\\r", "\r")
-            .replace("\\t", "\t");
+        return WebJsonObjectParser.parse(json);
     }
 
     private static String normalizePath(final String path) {
@@ -3856,7 +4359,9 @@ final class HunterWebPanelManager {
         return "{\"username\":\"" + escapeJson(session.displayName())
             + "\",\"role\":\"" + escapeJson(session.role())
             + "\",\"admin\":" + session.admin()
+            + ",\"huntEngineCapabilities\":" + huntEngineCapabilitiesJsonForRole(session.role())
             + ",\"authSource\":\"" + escapeJson(session.authSource()) + '"'
+            + ",\"identityBound\":" + WebSessionAccessPolicy.hasTrustedGameIdentity(session.playerUuid(), session.authSource())
             + ",\"token\":\"" + escapeJson(session.token()) + '"'
             + ",\"csrf\":\"" + escapeJson(session.csrfToken()) + '"'
             + ",\"commandExecution\":" + session.commandExecution()
@@ -4322,7 +4827,29 @@ final class HunterWebPanelManager {
 
     private static String normalizeRole(final String role) {
         final String normalized = role == null ? "player" : role.toLowerCase(Locale.ROOT);
-        return normalized.equals("admin") ? "admin" : "player";
+        return switch (normalized) {
+            case "admin", "content-editor", "content-publisher" -> normalized;
+            default -> "player";
+        };
+    }
+
+    private static boolean hasHuntEngineCapabilityForRole(final String role, final HuntEngineCapability capability) {
+        return switch (normalizeRole(role)) {
+            case "admin" -> true;
+            case "content-editor" -> capability == HuntEngineCapability.READ || capability == HuntEngineCapability.STAGE;
+            case "content-publisher" -> capability == HuntEngineCapability.READ || capability == HuntEngineCapability.PUBLISH;
+            default -> false;
+        };
+    }
+
+    private static String huntEngineCapabilitiesJsonForRole(final String role) {
+        final StringBuilder json = new StringBuilder(96);
+        json.append('{');
+        booleanField(json, "read", hasHuntEngineCapabilityForRole(role, HuntEngineCapability.READ)).append(',');
+        booleanField(json, "stage", hasHuntEngineCapabilityForRole(role, HuntEngineCapability.STAGE)).append(',');
+        booleanField(json, "publish", hasHuntEngineCapabilityForRole(role, HuntEngineCapability.PUBLISH)).append(',');
+        booleanField(json, "admin", hasHuntEngineCapabilityForRole(role, HuntEngineCapability.ADMIN));
+        return json.append('}').toString();
     }
 
     private static String webAsset(final String name, final String fallback) {
@@ -4360,6 +4887,7 @@ final class HunterWebPanelManager {
         String displayName,
         String role,
         String authSource,
+        UUID playerUuid,
         boolean commandExecution,
         boolean allowedCommandsConfigured,
         List<String> allowedCommands,
@@ -4758,7 +5286,7 @@ final class HunterWebPanelManager {
                     <option value="player">player</option>
                     <option value="admin">admin</option>
                   </select>
-                  <input id="webUserPassword" type="password" autocomplete="new-password" placeholder="new password">
+                  <p class="subtleLine">The player must complete one in-game HunterAuth login; web and game use the same password.</p>
                   <label class="inlineToggle"><input id="webUserCommandExecution" type="checkbox" checked> commands</label>
                   <select id="webUserAllowedMode">
                     <option value="inherit">inherit</option>
@@ -4901,7 +5429,7 @@ final class HunterWebPanelManager {
           return user.allowedCommands?.length ? user.allowedCommands.join(', ') : 'none';
         };
         const webUserLine = (user) =>
-          `<div class="item"><span>${esc(user.displayName)} <small>${esc(user.role)} · ${user.passwordConfigured ? 'password set' : 'no password'} · commands ${user.commandExecution ? 'on' : 'off'} · ${esc(allowedLine(user))}</small></span><span class="userActions"><button type="button" data-user-edit="${esc(user.id)}">Edit</button><button type="button" data-user-remove="${esc(user.id)}">Remove</button></span></div>`;
+          `<div class="item"><span>${esc(user.displayName)} <small>${esc(user.role)} · ${user.identityBound ? 'HunterAuth bound' : 'HunterAuth binding required'} · commands ${user.commandExecution ? 'on' : 'off'} · ${esc(allowedLine(user))}</small></span><span class="userActions"><button type="button" data-user-edit="${esc(user.id)}">Edit</button><button type="button" data-user-remove="${esc(user.id)}">Remove</button></span></div>`;
 
         function closeAuthModals() {
           $('modalBackdrop').hidden = true;
@@ -5074,7 +5602,6 @@ final class HunterWebPanelManager {
           if (!user) return;
           $('webUserName').value = user.displayName;
           $('webUserRole').value = user.role;
-          $('webUserPassword').value = '';
           $('webUserCommandExecution').checked = Boolean(user.commandExecution);
           $('webUserAllowedMode').value = user.allowedCommandsConfigured
             ? (user.allowedCommands?.length ? 'custom' : 'none')
@@ -5211,14 +5738,12 @@ final class HunterWebPanelManager {
           const payload = {
             username: $('webUserName').value,
             role: $('webUserRole').value,
-            password: $('webUserPassword').value,
             commandExecution: String($('webUserCommandExecution').checked),
             allowedCommandsMode: $('webUserAllowedMode').value,
             allowedCommands: $('webUserAllowedCommands').value
           };
           const result = await json('/api/admin/web-user/save', { method: 'POST', body: JSON.stringify(payload) });
           $('commandResult').textContent = result.ok ? 'Web user saved.' : `Error: ${result.error}`;
-          if (result.ok) $('webUserPassword').value = '';
           await refresh();
         });
 
@@ -5261,4 +5786,34 @@ final class HunterWebPanelManager {
         updateActorKind();
         setInterval(refresh, 5000);
         """;
+}
+
+/**
+ * Keeps identity rules independent from Bukkit startup so they can be unit-tested directly.
+ */
+final class WebIdentityAuthorization {
+    private WebIdentityAuthorization() {
+    }
+
+    static boolean matchesTrustedIdentity(
+        final String configuredIdentityUuid,
+        final HunterAuthWebAccountStore.Identity hunterAuth
+    ) {
+        if (hunterAuth == null || !hunterAuth.trustedIdentity() || hunterAuth.identityUuid() == null
+            || configuredIdentityUuid == null || configuredIdentityUuid.isBlank()) {
+            return false;
+        }
+        try {
+            return UUID.fromString(configuredIdentityUuid.trim()).equals(hunterAuth.identityUuid());
+        } catch (final IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    static UUID trustedSessionPlayerUuid(final HunterAuthWebAccountStore.Identity hunterAuth) {
+        if (hunterAuth == null || !hunterAuth.trustedIdentity()) {
+            return null;
+        }
+        return hunterAuth.identityUuid();
+    }
 }

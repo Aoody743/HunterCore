@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - codex/mc-26.2-experimental
   pull_request:
     branches:
       - main
+      - codex/mc-26.2-experimental
   workflow_dispatch:
 
 permissions:
@@ -28,15 +30,24 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
 
       - name: Setup JDK 25
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
         with:
           distribution: temurin
           java-version: 25
+          cache: gradle
+
+      - name: Restore verified bundled plugin cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/huntercore/bundled-plugin-artifacts
+          key: ${{ runner.os }}-huntercore-bundled-plugin-artifacts-${{ hashFiles('scripts/prepare-bundled-plugins.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-huntercore-bundled-plugin-artifacts-
 
       - name: Configure Git and Gradle
         run: |
@@ -44,27 +55,51 @@ jobs:
           git config --global user.name "GitHub Actions"
           chmod +x gradlew
           chmod +x scripts/prepare-bundled-plugins.sh
+          chmod +x scripts/verify-hunt-engine-vendor.sh
+          chmod +x third-party/hunt-engine/gradlew
+
+      - name: Verify vendored HuntEngine source
+        run: bash scripts/verify-hunt-engine-vendor.sh
+
+      - name: Build HuntEngine independently
+        run: |
+          (cd third-party/hunt-engine && ./gradlew assembleHuntEngine --stacktrace --no-daemon)
+          bash scripts/verify-hunt-engine-vendor.sh third-party/hunt-engine/target/HuntEngine.jar
 
       - name: Apply patches
         run: ./gradlew applyAllPatches --stacktrace --no-daemon
 
-      - name: Build paperclip
-        run: ./gradlew createPaperclipJar --stacktrace --no-daemon
+      - name: Run targeted checks and tests
+        run: |
+          ./gradlew :divinemc-api:test --stacktrace --no-daemon
+          ./gradlew :huntercore-plugins:hunter-auth:test --stacktrace --no-daemon
+          ./gradlew :huntercore-plugins:hunter-tools:test --stacktrace --no-daemon
+          ./gradlew :huntercore-plugins:hunter-tpa:test --stacktrace --no-daemon
+          ./gradlew :divinemc-server:compileJava --stacktrace --no-daemon
+
+      - name: Build verified release assets
+        run: ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease --stacktrace --no-daemon --no-configuration-cache
 
       - name: Prepare artifacts
         run: |
           set -euo pipefail
-          version="$(grep '^mcVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          huntercore_version="$(grep '^huntercoreVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          mc_version="$(grep '^mcVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          release_channel="$(grep '^releaseChannel=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          version_label="${huntercore_version}-build.${GITHUB_RUN_NUMBER}"
+          jar_name="HunterCore-${version_label}-MinecraftServer-${mc_version}-${release_channel}.jar"
+          web_name="HunterCore-${version_label}-WebPanel-${mc_version}-${release_channel}.zip"
+          source="build/huntercore-release"
           out="build/huntercore-artifacts"
           mkdir -p "$out"
-          cp divinemc-server/build/libs/divinemc-paperclip-*.jar "$out/HunterCore-${version}-${GITHUB_RUN_NUMBER}-paperclip.jar"
-          cp divinemc-server/build/libs/divinemc-bundler-*.jar "$out/" || true
-          cp divinemc-server/build/libs/divinemc-server-*.jar "$out/" || true
-          cp divinemc-api/build/libs/divinemc-api-*.jar "$out/" || true
-          (cd "$out" && sha256sum * > SHA256SUMS.txt)
+          test -f "$source/$jar_name"
+          test -f "$source/$web_name"
+          cp "$source/$jar_name" "$out/$jar_name"
+          cp "$source/$web_name" "$out/$web_name"
+          (cd "$out" && sha256sum "$jar_name" "$web_name" > SHA256SUMS.txt)
 
       - name: Upload jars
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: HunterCore-${{ github.run_number }}
           path: build/huntercore-artifacts/*
