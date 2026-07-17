@@ -26,7 +26,7 @@ index f5d4d48ad2b8b33a0be52bf935e371ea98d9183a..863ba3ffcd49cf28aa43b59b9b76bbdd
          this.tickCount++;
          this.tickRateManager.tick();
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index d69ccf9f6df819bdf300921a9ed458aa5f1ce816..d4b6f2c02926e942a4be6337d156e908d6814121 100644
+index cfdb8598054bc99bb9542d4d2c217c474e1c5e42..d3f3dd9aba7676b43191db45bd48b63ddafbc0c1 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -239,6 +239,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -37,7 +37,7 @@ index d69ccf9f6df819bdf300921a9ed458aa5f1ce816..d4b6f2c02926e942a4be6337d156e908
  
      @Override
      public @Nullable LevelChunk getChunkIfLoaded(int x, int z) {
-@@ -859,6 +860,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -860,6 +861,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
              }
          }
  

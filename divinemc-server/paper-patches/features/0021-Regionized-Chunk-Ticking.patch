@@ -8,7 +8,7 @@ This patch adds regionized chunk ticking feature, by grouping adjacent chunks in
 Original idea by Dueris, modified by NONPLAYT and heavily optimized by dan28000
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 3a2eb41c5e38a05d7dc006ef15027cb9c0c28067..74262af6ad9a88f8a2dd5a9e649e4b640eefc7fb 100644
+index 225f58a46f7795ec37d339868267d4eaae580bfe..76f93033b6b71586407ed7187e46bbb519ed97ce 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -752,21 +752,22 @@ public class CraftWorld extends CraftRegionAccessor implements World {
@@ -51,7 +51,7 @@ index 3a2eb41c5e38a05d7dc006ef15027cb9c0c28067..74262af6ad9a88f8a2dd5a9e649e4b64
  
      @Override
 diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-index 12f5b2e6475914d3a0f1e01865eb2bf247111b3b..8d8f0c5b4beacfc4bfad4b68da7f2b8e7cd27801 100644
+index 92f26971fa38ac78e2928f8c5b466373f4778c1a..4a35b1e95835adf6706e84cc4bffa5c3e4a62791 100644
 --- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 @@ -556,17 +556,18 @@ public class CraftBlock implements Block {
@@ -91,5 +91,5 @@ index 12f5b2e6475914d3a0f1e01865eb2bf247111b3b..8d8f0c5b4beacfc4bfad4b68da7f2b8e
          }
 +        // DivineMC end - Regionized Chunk Ticking - thread-safe block capture
  
-         return result == InteractionResult.SUCCESS && (event == null || !event.isCancelled());
+         return result instanceof InteractionResult.Success && (event == null || !event.isCancelled());
      }

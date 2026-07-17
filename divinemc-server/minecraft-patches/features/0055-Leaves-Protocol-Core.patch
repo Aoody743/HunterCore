@@ -48,11 +48,11 @@ index 8eb45a1733a563b6accf0d783d2510b1be4fa7e1..e5e20659d526a8611410cf9b96fd0a96
              tickable.run();
          }
 diff --git a/net/minecraft/server/network/ServerCommonPacketListenerImpl.java b/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
-index b47e228550076aff1fd351f183f75a37037498d9..8fdec6e88f47e88a912c92847247800f66e40477 100644
+index e0885debae3fd2b8fbdd152c33000cc0d00c2968..127637023a3d6cec317c7c7d1e9324ef37b95ce0 100644
 --- a/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
 @@ -62,6 +62,7 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
-     public @Nullable String playerBrand;
+     public @Nullable String clientBrand;
      public final java.util.Set<String> pluginMessagerChannels;
      // Paper end - retain certain values
 +    public final GameProfile profile; // DivineMC - Leaves Protocol Core
@@ -94,7 +94,7 @@ index b47e228550076aff1fd351f183f75a37037498d9..8fdec6e88f47e88a912c92847247800f
              bridge.removeChannel(channel);
          }
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index dcf17dc1280f7c1d3467e3a10dc4f1be913dece5..7863aabfa1af1eae73ac6ee19ed04e0b52f2b3c7 100644
+index 1e0a06488c8476b087677f8b3767a83085dcefc6..cd6ddb4be7a8a56ecf85bcecdcec845bbb5b8e20 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -254,6 +254,8 @@ public abstract class PlayerList {

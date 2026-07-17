@@ -250,7 +250,7 @@ index 69cdd304d255d52c9b7dc9b6a33ffdb630b79abe..73475f21a65395ab3f888d04d4860acd
 +    // DivineMC end - Parallel world ticking
  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index c7ce3d23aebce69fb80fdaebb5b998b064e7723d..612d6b4cee04545a236b9479dd1f6182807d9587 100644
+index 7fae4c7ff45f6e8ce2dbb8a2adb13ccc7a985bd2..efd1135d40c0592bfd21d020da56bc6c5c43f65a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -3066,4 +3066,11 @@ public final class CraftServer implements Server {
@@ -266,7 +266,7 @@ index c7ce3d23aebce69fb80fdaebb5b998b064e7723d..612d6b4cee04545a236b9479dd1f6182
 +    // DivineMC end - Parallel world ticking
  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index c107bc31bfd5cc01768b5abb4b4bfb173ea579a2..3a2eb41c5e38a05d7dc006ef15027cb9c0c28067 100644
+index a21019b0f89c3732935380feb599da28ce2428d9..225f58a46f7795ec37d339868267d4eaae580bfe 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -449,7 +449,13 @@ public class CraftWorld extends CraftRegionAccessor implements World {
@@ -339,7 +339,7 @@ index c107bc31bfd5cc01768b5abb4b4bfb173ea579a2..3a2eb41c5e38a05d7dc006ef15027cb9
          if (this.world.hasChunkAt(pos)) {
              net.minecraft.world.level.chunk.LevelChunk chunk = this.world.getChunkAt(pos);
  
-@@ -1858,6 +1875,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -1863,6 +1880,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
  
      @Override
      public void sendGameEvent(Entity sourceEntity, org.bukkit.GameEvent gameEvent, Vector position) {
@@ -347,7 +347,7 @@ index c107bc31bfd5cc01768b5abb4b4bfb173ea579a2..3a2eb41c5e38a05d7dc006ef15027cb9
          getHandle().gameEvent(sourceEntity != null ? ((CraftEntity) sourceEntity).getHandle(): null, net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT.get(org.bukkit.craftbukkit.util.CraftNamespacedKey.toMinecraft(gameEvent.getKey())).orElseThrow(), org.bukkit.craftbukkit.util.CraftVector.toBlockPos(position));
      }
      // Paper end
-@@ -2090,4 +2108,15 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -2095,4 +2113,15 @@ public class CraftWorld extends CraftRegionAccessor implements World {
          return POINTERS_SUPPLIER.view(this);
      }
      // Paper end
@@ -364,7 +364,7 @@ index c107bc31bfd5cc01768b5abb4b4bfb173ea579a2..3a2eb41c5e38a05d7dc006ef15027cb9
 +    // DivineMC end - Parallel world ticking
  }
 diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-index 58c6b34df95923e865f45c6e14ede1b383f0f2f6..12f5b2e6475914d3a0f1e01865eb2bf247111b3b 100644
+index 81f8db025ad07d0b4c9c89efbd4092639ba1139a..68e74307354a8d8989bae2d90741acb0f660dbb2 100644
 --- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 @@ -78,6 +78,11 @@ public class CraftBlock implements Block {
@@ -373,7 +373,7 @@ index 58c6b34df95923e865f45c6e14ede1b383f0f2f6..12f5b2e6475914d3a0f1e01865eb2bf2
      public net.minecraft.world.level.block.state.BlockState getBlockState() {
 +        // DivineMC start - Parallel world ticking
 +        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking && this.level instanceof ServerLevel serverWorld) {
-+            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
++            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThreadOrAsyncThread(serverWorld, "Cannot read world asynchronously");
 +        }
 +        // DivineMC end - Parallel world ticking
          return this.level.getBlockState(this.position);
@@ -409,7 +409,7 @@ index 58c6b34df95923e865f45c6e14ede1b383f0f2f6..12f5b2e6475914d3a0f1e01865eb2bf2
      public Biome getBiome() {
 +        // DivineMC start - Parallel world ticking
 +        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking && this.level instanceof ServerLevel serverWorld) {
-+            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
++            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThreadOrAsyncThread(serverWorld, "Cannot read world asynchronously");
 +        }
 +        // DivineMC end - Parallel world ticking
          return this.getWorld().getBiome(this.getX(), this.getY(), this.getZ());
@@ -419,7 +419,7 @@ index 58c6b34df95923e865f45c6e14ede1b383f0f2f6..12f5b2e6475914d3a0f1e01865eb2bf2
      public Biome getComputedBiome() {
 +        // DivineMC start - Parallel world ticking
 +        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking && this.level instanceof ServerLevel serverWorld) {
-+            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
++            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThreadOrAsyncThread(serverWorld, "Cannot read world asynchronously");
 +        }
 +        // DivineMC end - Parallel world ticking
          return this.getWorld().getComputedBiome(this.getX(), this.getY(), this.getZ());
@@ -441,7 +441,7 @@ index 58c6b34df95923e865f45c6e14ede1b383f0f2f6..12f5b2e6475914d3a0f1e01865eb2bf2
      public boolean isBlockFaceIndirectlyPowered(BlockFace face) {
 +        // DivineMC start - Parallel world ticking
 +        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking && this.level instanceof ServerLevel serverWorld) {
-+            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
++            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThreadOrAsyncThread(serverWorld, "Cannot read world asynchronously");
 +        }
 +        // DivineMC end - Parallel world ticking
          Direction direction = blockFaceToNotch(face);
@@ -453,7 +453,7 @@ index 58c6b34df95923e865f45c6e14ede1b383f0f2f6..12f5b2e6475914d3a0f1e01865eb2bf2
          Preconditions.checkArgument(face != null, "face cannot be null");
 +        // DivineMC start - Parallel world ticking
 +        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking && this.level instanceof ServerLevel serverWorld) {
-+            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
++            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThreadOrAsyncThread(serverWorld, "Cannot read world asynchronously");
 +        }
 +        // DivineMC end - Parallel world ticking
  
@@ -502,7 +502,7 @@ index 58c6b34df95923e865f45c6e14ede1b383f0f2f6..12f5b2e6475914d3a0f1e01865eb2bf2
      public RayTraceResult rayTrace(Location start, Vector direction, double maxDistance, FluidCollisionMode fluidCollisionMode) {
 +        // DivineMC start - Parallel world ticking
 +        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking && this.level instanceof ServerLevel serverWorld) {
-+            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
++            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThreadOrAsyncThread(serverWorld, "Cannot read world asynchronously");
 +        }
 +        // DivineMC end - Parallel world ticking
          Preconditions.checkArgument(start != null, "Location start cannot be null");
@@ -514,7 +514,7 @@ index 58c6b34df95923e865f45c6e14ede1b383f0f2f6..12f5b2e6475914d3a0f1e01865eb2bf2
      public boolean canPlace(BlockData data) {
 +        // DivineMC start - Parallel world ticking
 +        if (org.bxteam.divinemc.config.DivineConfig.AsyncCategory.enableParallelWorldTicking && this.level instanceof ServerLevel serverWorld) {
-+            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(serverWorld, this.position, "Cannot read world asynchronously");
++            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThreadOrAsyncThread(serverWorld, "Cannot read world asynchronously");
 +        }
 +        // DivineMC end - Parallel world ticking
          Preconditions.checkArgument(data != null, "BlockData cannot be null");

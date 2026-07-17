@@ -37,7 +37,7 @@ index 14bd5efe0da5c268f9b8fc014c4a14b68dcbee8d..352856ade8cbbbbeb90961de3b65d9a9
  
      protected NonNullList(final List<E> list, final @Nullable E defaultValue) {
 diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
-index baa629d948dd894f23e7b33b8ee2b03556860fd3..dc9e9aeb9d4e98294a332e662a488fd67986129f 100644
+index 04245121db4053aedf425a8969fbb064652871ba..3d2d4587cc2df640a5de429f29204d8617ff665d 100644
 --- a/net/minecraft/server/level/ChunkMap.java
 +++ b/net/minecraft/server/level/ChunkMap.java
 @@ -139,8 +139,10 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
@@ -54,7 +54,7 @@ index baa629d948dd894f23e7b33b8ee2b03556860fd3..dc9e9aeb9d4e98294a332e662a488fd6
      public int serverViewDistance;
      public final WorldGenContext worldGenContext; // Paper - public
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index d4fa7e79bf3cbf124bbae01d5dce531651d50c41..dc27e337084318e79dc557902284993bde77295b 100644
+index d3340bcfc50109b6f281d90445b3ce77aff8e778..467573c2b88cf931fc6a0e6f6c8c922e4bfa4835 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -268,7 +268,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl

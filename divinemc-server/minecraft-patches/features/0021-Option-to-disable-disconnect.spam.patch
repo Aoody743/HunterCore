@@ -5,7 +5,7 @@ Subject: [PATCH] Option to disable disconnect.spam
 
 
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 1698bff277bca32c98c7f23afc2107c1fe7a2d7b..d0d0e55ab98a56564970bcb9eebad313be1780d9 100644
+index 5e635fc730f758d12496ed21158ab0c1eab68e0f..70a0984f551822dc12cf9a88e42db4fa7e866d16 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -869,7 +869,7 @@ public class ServerGamePacketListenerImpl

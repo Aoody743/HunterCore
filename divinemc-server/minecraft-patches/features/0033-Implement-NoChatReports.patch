@@ -216,7 +216,7 @@ index 0b723c4566faa993c8a9dc79ae9f1af6010c3db7..151c1469230599e6033c655ff7d9dfa4
          // Paper start - Add setting for proxy online mode status
          return properties.enforceSecureProfile
 diff --git a/net/minecraft/server/network/ServerCommonPacketListenerImpl.java b/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
-index 115f3fa2e938e3aab2584e0932f4412755358d5f..b47e228550076aff1fd351f183f75a37037498d9 100644
+index 048bbab91c4614f8935797b389594c1bdd4542b0..e0885debae3fd2b8fbdd152c33000cc0d00c2968 100644
 --- a/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
 @@ -340,11 +340,65 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
@@ -287,7 +287,7 @@ index 115f3fa2e938e3aab2584e0932f4412755358d5f..b47e228550076aff1fd351f183f75a37
          if (packet == null) {
              return;
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index f89022226a4c2e7dd2227d80dd7e80ce4c50b58d..8fd110e2742cabecb98404f6d7fde4446f44776d 100644
+index a42d5c43ef04ec7a68d8f37ad7a7bfc6e719411b..c67d0039d40940e26e4f63b6d093c4e228f7d6cb 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -189,7 +189,7 @@ public abstract class PlayerList {

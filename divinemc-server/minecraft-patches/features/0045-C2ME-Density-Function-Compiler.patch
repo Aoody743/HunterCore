@@ -68,7 +68,7 @@ index 110e50665256d1bf9fe49c7769be927ec50168a9..e87c5c061ead272da25bd9e77da3ba9b
      }
  }
 diff --git a/net/minecraft/world/level/levelgen/DensityFunctions.java b/net/minecraft/world/level/levelgen/DensityFunctions.java
-index d59d96e1016796f1a780d89a338c14ddb6398654..dc79daafcd5e2f0c5617dac1ce00f680dac52a6f 100644
+index 9f740bfbdddbdbdb729351574f1eb7169dc2e230..3bb49f269ae2e66bf0f16fa8d2cb885d3a6cbcbc 100644
 --- a/net/minecraft/world/level/levelgen/DensityFunctions.java
 +++ b/net/minecraft/world/level/levelgen/DensityFunctions.java
 @@ -299,38 +299,66 @@ public final class DensityFunctions {
@@ -266,8 +266,8 @@ index d59d96e1016796f1a780d89a338c14ddb6398654..dc79daafcd5e2f0c5617dac1ce00f680
 +        }
 +
 +        @Override
-+        public DensityFunction mapChildren(final DensityFunction.Visitor visitor) {
-+            return this.c2me$withDelegate(visitor.apply(this.wrapped()));
++        public DensityFunction mapAll(Visitor visitor) {
++            return visitor.apply(this.c2me$withDelegate(this.wrapped().mapAll(visitor)));
 +        }
 +        // DivineMC end - Density Function Compiler
 +
@@ -296,7 +296,7 @@ index d59d96e1016796f1a780d89a338c14ddb6398654..dc79daafcd5e2f0c5617dac1ce00f680
              FlatCache("flat_cache"),
              Cache2D("cache_2d"),
 diff --git a/net/minecraft/world/level/levelgen/NoiseChunk.java b/net/minecraft/world/level/levelgen/NoiseChunk.java
-index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44caebf54b65 100644
+index 16a656a50ba2c39ca4f9facf7d71bf697ebc7658..e8813ff0f90e5065e6d1d18698dac706c4fef85a 100644
 --- a/net/minecraft/world/level/levelgen/NoiseChunk.java
 +++ b/net/minecraft/world/level/levelgen/NoiseChunk.java
 @@ -20,8 +20,18 @@ import net.minecraft.world.level.chunk.ChunkAccess;
@@ -320,7 +320,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
      private final int cellCountXZ;
      private final int cellCountY;
      private final int cellNoiseMinY;
-@@ -57,7 +67,51 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -57,7 +67,47 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
      private long interpolationCounter;
      private long arrayInterpolationCounter;
      private int arrayIndex;
@@ -353,12 +353,8 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
 +        }
 +    }
 +
-+    public Blender getBlender() {
-+        return this.blender;
-+    }
-+
 +    private @org.jetbrains.annotations.NotNull DelegatingBlendingAwareVisitor c2me$getDelegatingBlendingAwareVisitor(DensityFunction.Visitor visitor) {
-+        return new DelegatingBlendingAwareVisitor(visitor, this.getBlender() != Blender.empty());
++        return new DelegatingBlendingAwareVisitor(visitor, !this.blender.isEmpty());
 +    }
 +
 +    private DensityFunction.Visitor modifyVisitor1(DensityFunction.Visitor visitor) {
@@ -373,7 +369,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
          @Override
          public DensityFunction.FunctionContext forIndex(final int cellYIndex) {
              NoiseChunk.this.cellStartBlockY = (cellYIndex + NoiseChunk.this.cellNoiseMinY) * NoiseChunk.this.cellHeight;
-@@ -77,7 +131,23 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -77,7 +127,23 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
                  output[cellYIndex] = function.compute(NoiseChunk.this);
              }
          }
@@ -398,7 +394,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
  
      public static NoiseChunk forChunk(
          final ChunkAccess chunk,
-@@ -140,7 +210,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -140,7 +206,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
  
          NoiseRouter router = randomState.router();
@@ -407,7 +403,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
          this.preliminarySurfaceLevel = wrappedRouter.preliminarySurfaceLevel();
          if (!settings.isAquifersEnabled()) {
              this.aquifer = Aquifer.createDisabled(globalFluidPicker);
-@@ -156,7 +226,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -156,7 +222,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          DensityFunction fullNoiseValue = DensityFunctions.cacheAllInCell(
                  DensityFunctions.add(wrappedRouter.finalDensity(), DensityFunctions.BeardifierMarker.INSTANCE)
              )
@@ -416,7 +412,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
          this.fullNoiseDensity = fullNoiseValue;
          builder.add(context -> this.aquifer.computeSubstance(context, fullNoiseValue.compute(context)));
          if (settings.oreVeinsEnabled()) {
-@@ -168,12 +238,14 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -168,12 +234,14 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
  
      protected Climate.Sampler cachedClimateSampler(final NoiseRouter noises, final List<Climate.ParameterPoint> spawnTarget) {
          return new Climate.Sampler(
@@ -437,7 +433,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
              spawnTarget
          );
      }
-@@ -377,21 +449,28 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -377,21 +445,28 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
      }
  
      private DensityFunction wrapNew(final DensityFunction function) {
@@ -474,7 +470,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
                      default:
                          throw new MatchException(null, null);
                  }
-@@ -531,10 +610,48 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -531,10 +606,48 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          @Nullable BlockState calculate(final DensityFunction.FunctionContext context);
      }
  
@@ -524,7 +520,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
  
          private Cache2D(final DensityFunction function) {
              this.function = function;
-@@ -571,9 +688,92 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -571,9 +684,92 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
      }
  
@@ -619,7 +615,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
  
          private CacheAllInCell(final DensityFunction noiseFiller) {
              this.noiseFiller = noiseFiller;
-@@ -583,20 +783,66 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -583,20 +779,66 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
  
          @Override
          public double compute(final DensityFunction.FunctionContext context) {
@@ -696,7 +692,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
          }
  
          @Override
-@@ -615,12 +861,83 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -615,12 +857,83 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
      }
  
@@ -781,7 +777,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
  
          private CacheOnce(final DensityFunction function) {
              this.function = function;
-@@ -628,38 +945,99 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -628,38 +941,99 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
  
          @Override
          public double compute(final DensityFunction.FunctionContext context) {
@@ -900,7 +896,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
          }
  
          @Override
-@@ -673,10 +1051,64 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -673,10 +1047,64 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
      }
  
@@ -966,7 +962,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
  
          private FlatCache(final DensityFunction noiseFiller, final boolean fill) {
              this.noiseFiller = noiseFiller;
-@@ -735,7 +1167,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -735,7 +1163,7 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          }
      }
  
@@ -975,7 +971,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
          private double[][] slice0;
          private double[][] slice1;
          private DensityFunction noiseFiller;
-@@ -754,6 +1186,104 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -754,6 +1182,104 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
          private double valueZ0;
          private double valueZ1;
          private double value;
@@ -1080,7 +1076,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
  
          private NoiseInterpolator(final DensityFunction noiseFiller) {
              this.noiseFiller = noiseFiller;
-@@ -803,16 +1333,18 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -803,16 +1329,18 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
  
          @Override
          public double compute(final DensityFunction.FunctionContext context) {
@@ -1109,7 +1105,7 @@ index c418c1644a37946981e6fddc15f2c67ff33bb18a..705212b7a6a063ac8443093dec0f44ca
                          this.noise000,
                          this.noise100,
                          this.noise010,
-@@ -822,8 +1354,45 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
+@@ -822,8 +1350,45 @@ public class NoiseChunk implements DensityFunction.FunctionContext, DensityFunct
                          this.noise011,
                          this.noise111
                      )

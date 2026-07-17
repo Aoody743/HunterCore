@@ -21,7 +21,7 @@ public class AstVanillaInterface implements DensityFunction {
     }
 
     public double compute(FunctionContext pos) {
-        if (pos instanceof NoiseChunk sampler && sampler.getBlender() != Blender.empty()) {
+        if (pos instanceof NoiseChunk sampler && !sampler.blender.isEmpty()) {
             if (this.blendingFallback == null) {
                 throw new IllegalStateException("blendingFallback is no more");
             } else {
@@ -34,7 +34,7 @@ public class AstVanillaInterface implements DensityFunction {
 
     public void fillArray(double[] densities, ContextProvider applier) {
         if (applier instanceof NoiseChunk sampler) {
-            if (sampler.getBlender() != Blender.empty()) {
+            if (!sampler.blender.isEmpty()) {
                 if (this.blendingFallback == null) {
                     throw new IllegalStateException("blendingFallback is no more");
                 }

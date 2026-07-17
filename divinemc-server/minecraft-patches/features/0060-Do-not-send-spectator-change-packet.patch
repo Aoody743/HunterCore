@@ -39,7 +39,7 @@ index e6b644fcaf34199a0303e10b314eada894230284..b2cf73e213d82df7b0d78b7c73c4937c
 +    // DivineMC end - Do not send spectator change packet
  }
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index 7863aabfa1af1eae73ac6ee19ed04e0b52f2b3c7..44e6c7faf9f0a7bbd41877255554a25feb26309d 100644
+index cd6ddb4be7a8a56ecf85bcecdcec845bbb5b8e20..c7e2371da77ebe5dd7fdcc83c78b20843b02e447 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -266,6 +266,7 @@ public abstract class PlayerList {

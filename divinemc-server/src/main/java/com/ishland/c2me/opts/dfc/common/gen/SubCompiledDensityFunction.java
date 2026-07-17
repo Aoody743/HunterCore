@@ -41,7 +41,7 @@ public class SubCompiledDensityFunction implements DensityFunction {
     }
 
     public double compute(FunctionContext pos) {
-        if (pos instanceof NoiseChunk sampler && sampler.getBlender() != Blender.empty()) {
+        if (pos instanceof NoiseChunk sampler && !sampler.blender.isEmpty()) {
             DensityFunction fallback = this.getFallback();
             if (fallback == null) {
                 throw new IllegalStateException("blendingFallback is no more");
@@ -55,7 +55,7 @@ public class SubCompiledDensityFunction implements DensityFunction {
 
     public void fillArray(double[] densities, ContextProvider applier) {
         if (applier instanceof NoiseChunk sampler) {
-            if (sampler.getBlender() != Blender.empty()) {
+            if (!sampler.blender.isEmpty()) {
                 DensityFunction fallback = this.getFallback();
                 if (fallback == null) {
                     throw new IllegalStateException("blendingFallback is no more");

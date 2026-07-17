@@ -34,7 +34,7 @@ index 151c1469230599e6033c655ff7d9dfa42a72f91d..92add47d48532166c63276a2f5e4e38d
          this.notificationManager().serverStarted();
          return true;
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index d34a2ca3cd9d05aae4abf5b15c09920cd5f2e930..1e1ee6f99c158ae303e5c651f3beb4f393258d7a 100644
+index 8662fa5322af70f5c32763ced28ac8675549e3b2..ad498d9f7cf27c465506976ad36ac273d2cb123d 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
 @@ -75,6 +75,10 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
@@ -147,8 +147,8 @@ index d34a2ca3cd9d05aae4abf5b15c09920cd5f2e930..1e1ee6f99c158ae303e5c651f3beb4f3
              }
              // Paper end - PlayerNaturallySpawnCreaturesEvent
              boolean spawnPersistent = this.level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) != 0L && this.level.getGameTime() % this.level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) == 0L; // CraftBukkit
--            spawningCategories = NaturalSpawner.getFilteredSpawningCategories(spawnCookie, this.spawnFriendlies, this.spawnEnemies, spawnPersistent, this.level); // CraftBukkit // todo snapshot - method lost its spawnFriendlies parameter as mojang is moving away further. We can do what we did prior and reintroduce or re-evaluate. // re-added it for now but let's still re-evaluate later
-+            spawningCategories = NaturalSpawner.getFilteredSpawningCategories(this.lastSpawnState, this.spawnFriendlies, this.spawnEnemies, spawnPersistent, this.level); // CraftBukkit // DivineMC - Pufferfish: Optimize mob spawning // todo snapshot - method lost its spawnFriendlies parameter as mojang is moving away further. We can do what we did prior and reintroduce or re-evaluate. // re-added it for now but let's still re-evaluate later
+-            spawningCategories = NaturalSpawner.getFilteredSpawningCategories(spawnCookie, this.spawnFriendlies, this.spawnEnemies, spawnPersistent, this.level); // CraftBukkit
++            spawningCategories = NaturalSpawner.getFilteredSpawningCategories(this.lastSpawnState, this.spawnFriendlies, this.spawnEnemies, spawnPersistent, this.level); // CraftBukkit // DivineMC - Pufferfish: Optimize mob spawning
          } else {
              spawningCategories = List.of();
          }

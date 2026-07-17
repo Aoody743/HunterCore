@@ -169,7 +169,7 @@ index 196c01fe5f200ed57e6f23e0939cac616305571a..3a6c9ea3b0f6f2f7bed89379f1486ee3
          // Paper start - PlayerChunkLoadEvent
          if (io.papermc.paper.event.packet.PlayerChunkLoadEvent.getHandlerList().getRegisteredListeners().length > 0) {
 diff --git a/net/minecraft/world/level/chunk/LevelChunkSection.java b/net/minecraft/world/level/chunk/LevelChunkSection.java
-index 705f6314d2550b0f1c8c5209dd65161d89cbfd7e..1c68bf1c1dc4c69593d3e10625974ff2abdccf99 100644
+index a25b1747fe6bde428265f90eadfade81c0979400..dac6d56e604c1b5555a29becd16a3c90b3f4a0c1 100644
 --- a/net/minecraft/world/level/chunk/LevelChunkSection.java
 +++ b/net/minecraft/world/level/chunk/LevelChunkSection.java
 @@ -11,7 +11,7 @@ import net.minecraft.world.level.material.FluidState;

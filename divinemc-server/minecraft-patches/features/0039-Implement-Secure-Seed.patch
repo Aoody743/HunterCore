@@ -52,7 +52,7 @@ index 425d071c5cb51c596748093b16bb2ac8386e10dd..0b251e8917a445be5044dc5234791d12
              this.get("generator-settings", s -> GsonHelper.parse(!s.isEmpty() ? s : "{}"), new JsonObject()),
              this.get("level-type", v -> v.toLowerCase(Locale.ROOT), WorldPresets.NORMAL.identifier().toString())
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index 391b5c5f0eb60aab7638ccdebe180c49611ebfae..d34a2ca3cd9d05aae4abf5b15c09920cd5f2e930 100644
+index fed28e34a8e8e342b668b0b89e8b2de241ea9f1a..8662fa5322af70f5c32763ced28ac8675549e3b2 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
 @@ -644,6 +644,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
@@ -64,7 +64,7 @@ index 391b5c5f0eb60aab7638ccdebe180c49611ebfae..d34a2ca3cd9d05aae4abf5b15c09920c
      }
  
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index d4b6f2c02926e942a4be6337d156e908d6814121..8143960cb3584367d3265b1bf3b0edf3faaff6ab 100644
+index d3f3dd9aba7676b43191db45bd48b63ddafbc0c1..7ae1030ecbde044070866304be47e85109cf295e 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -693,6 +693,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
@@ -210,7 +210,7 @@ index 9208924f54d5024bc50ad4501fbff9eb2a289181..fecdb0ca5e609374723475383042413b
              ProfiledDuration profiledDuration = JvmProfiler.INSTANCE.onChunkGenerate(chunk.getPos(), context.level().dimension(), this.targetStatus.getName());
              return this.task.doWork(context, this, cache, chunk).thenApply(newCenterChunk -> this.completeChunkGeneration(newCenterChunk, profiledDuration));
 diff --git a/net/minecraft/world/level/levelgen/WorldOptions.java b/net/minecraft/world/level/levelgen/WorldOptions.java
-index 4ad94af024d81b7dfe910dcee2a6ec7a9b200d56..d0f2cf63814b657abaf3bc8c901d0584a458ee18 100644
+index 4ad94af024d81b7dfe910dcee2a6ec7a9b200d56..bcbbdb02bcf16bdef280595239f3344944ce5198 100644
 --- a/net/minecraft/world/level/levelgen/WorldOptions.java
 +++ b/net/minecraft/world/level/levelgen/WorldOptions.java
 @@ -10,8 +10,19 @@ import net.minecraft.util.RandomSource;
@@ -240,8 +240,8 @@ index 4ad94af024d81b7dfe910dcee2a6ec7a9b200d56..d0f2cf63814b657abaf3bc8c901d0584
      );
 -    public static final WorldOptions DEMO_OPTIONS = new WorldOptions("North Carolina".hashCode(), true, true);
 +    public static final WorldOptions DEMO_OPTIONS = isSecureSeedEnabled
-+        ? new WorldOptions("North Carolina".hashCode(), su.plo.matter.Globals.createRandomWorldSeed(), true, true)
-+        : new WorldOptions("North Carolina".hashCode(), true, true);
++            ? new WorldOptions("North Carolina".hashCode(), su.plo.matter.Globals.createRandomWorldSeed(), true, true)
++            : new WorldOptions("North Carolina".hashCode(), true, true);
 +    // DivineMC end - Implement Secure Seed
      private final long seed;
 +    private long[] featureSeed = su.plo.matter.Globals.createRandomWorldSeed(); // DivineMC - Implement Secure Seed
@@ -260,8 +260,8 @@ index 4ad94af024d81b7dfe910dcee2a6ec7a9b200d56..d0f2cf63814b657abaf3bc8c901d0584
      public static WorldOptions defaultWithRandomSeed() {
 -        return new WorldOptions(randomSeed(), true, false);
 +        return isSecureSeedEnabled
-+            ? new WorldOptions(randomSeed(), su.plo.matter.Globals.createRandomWorldSeed(), true, false)
-+            : new WorldOptions(randomSeed(), true, false);
++                ? new WorldOptions(randomSeed(), su.plo.matter.Globals.createRandomWorldSeed(), true, false)
++                : new WorldOptions(randomSeed(), true, false);
      }
  
 +    private WorldOptions(long seed, java.util.stream.LongStream featureSeed, boolean generateStructures, boolean bonusChest, Optional<String> legacyCustomOptions) {
@@ -308,22 +308,22 @@ index 4ad94af024d81b7dfe910dcee2a6ec7a9b200d56..d0f2cf63814b657abaf3bc8c901d0584
      public WorldOptions withBonusChest(final boolean generateBonusChest) {
 -        return new WorldOptions(this.seed, this.generateStructures, generateBonusChest, this.legacyCustomOptions);
 +        return isSecureSeedEnabled
-+            ? new WorldOptions(this.seed, this.featureSeed, this.generateStructures, generateBonusChest, this.legacyCustomOptions)
-+            : new WorldOptions(this.seed, this.generateStructures, generateBonusChest, this.legacyCustomOptions);
++                ? new WorldOptions(this.seed, this.featureSeed, this.generateStructures, generateBonusChest, this.legacyCustomOptions)
++                : new WorldOptions(this.seed, this.generateStructures, generateBonusChest, this.legacyCustomOptions);
      }
  
      public WorldOptions withStructures(final boolean generateStructures) {
 -        return new WorldOptions(this.seed, generateStructures, this.generateBonusChest, this.legacyCustomOptions);
 +        return isSecureSeedEnabled
-+            ? new WorldOptions(this.seed, this.featureSeed, generateStructures, this.generateBonusChest, this.legacyCustomOptions)
-+            : new WorldOptions(this.seed, generateStructures, this.generateBonusChest, this.legacyCustomOptions);
++                ? new WorldOptions(this.seed, this.featureSeed, generateStructures, this.generateBonusChest, this.legacyCustomOptions)
++                : new WorldOptions(this.seed, generateStructures, this.generateBonusChest, this.legacyCustomOptions);
      }
  
      public WorldOptions withSeed(final OptionalLong seed) {
 -        return new WorldOptions(seed.orElse(randomSeed()), this.generateStructures, this.generateBonusChest, this.legacyCustomOptions);
 +        return isSecureSeedEnabled
-+            ? new WorldOptions(seed.orElse(randomSeed()), su.plo.matter.Globals.createRandomWorldSeed(), this.generateStructures, this.generateBonusChest, this.legacyCustomOptions)
-+            : new WorldOptions(seed.orElse(randomSeed()), this.generateStructures, this.generateBonusChest, this.legacyCustomOptions);
++                ? new WorldOptions(seed.orElse(randomSeed()), su.plo.matter.Globals.createRandomWorldSeed(), this.generateStructures, this.generateBonusChest, this.legacyCustomOptions)
++                : new WorldOptions(seed.orElse(randomSeed()), this.generateStructures, this.generateBonusChest, this.legacyCustomOptions);
      }
 +    // DivineMC end - Implement Secure Seed
  

@@ -1,6 +1,6 @@
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
-@@ -772,8 +_,13 @@
+@@ -773,8 +_,13 @@
      public int getNextEntityId() {
          int id = 0;
  

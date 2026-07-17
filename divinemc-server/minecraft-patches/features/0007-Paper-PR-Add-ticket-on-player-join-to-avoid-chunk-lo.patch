@@ -27,7 +27,7 @@ index 0743659c9f1122088adad4992b93649efc9ba873..832ef0dff205fdf4ea809395b36f46ab
      public static final int GENERATED_TICKET_LEVEL = ChunkHolderManager.FULL_LOADED_TICKET_LEVEL;
      public static final int LOADED_TICKET_LEVEL = ChunkTaskScheduler.getTicketLevel(ChunkStatus.EMPTY);
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index bc83f725f431fe7d33d39fa3091771ffefe385a8..f89022226a4c2e7dd2227d80dd7e80ce4c50b58d 100644
+index 1c79ad937e7ca9d34862e5995e61a7af179eb659..a42d5c43ef04ec7a68d8f37ad7a7bfc6e719411b 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -228,6 +228,13 @@ public abstract class PlayerList {

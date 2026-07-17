@@ -8,7 +8,7 @@ Original project: https://github.com/PaperMC/Paper
 Paper pull request: https://github.com/PaperMC/Paper/pull/8074
 
 diff --git a/net/minecraft/server/players/PlayerList.java b/net/minecraft/server/players/PlayerList.java
-index 44e6c7faf9f0a7bbd41877255554a25feb26309d..d41fd29aaf66730dad2f792a294bae7e62ed4ade 100644
+index c7e2371da77ebe5dd7fdcc83c78b20843b02e447..91c235d03dde0d33a98e55982029a11007bf5535 100644
 --- a/net/minecraft/server/players/PlayerList.java
 +++ b/net/minecraft/server/players/PlayerList.java
 @@ -217,10 +217,15 @@ public abstract class PlayerList {

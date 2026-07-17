@@ -338,7 +338,7 @@ index 92add47d48532166c63276a2f5e4e38d3518152a..5c11180972915841e7b85be70cc714db
          LOGGER.info("Default game type: {}", properties.gameMode.get());
          // Paper start - Unix domain socket support
 diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
-index 1e1ee6f99c158ae303e5c651f3beb4f393258d7a..b721a557c10d89b6397e7d143514ee4803fd2534 100644
+index ad498d9f7cf27c465506976ad36ac273d2cb123d..070c5f3cb119f3b989d2430dc898a631d6c7924a 100644
 --- a/net/minecraft/server/level/ServerChunkCache.java
 +++ b/net/minecraft/server/level/ServerChunkCache.java
 @@ -179,8 +179,12 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
@@ -357,11 +357,11 @@ index 1e1ee6f99c158ae303e5c651f3beb4f393258d7a..b721a557c10d89b6397e7d143514ee48
          }
      }
 diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
-index 49a9cc3b24d44d95bb9a4d2f258bb5bc73f5e4ec..738c518b19decee35c6f64c907ef70f37d39ad1f 100644
+index d54492c643cd939b2aaabe51148c26d3bbfbe5b2..951298d3a355eca1b31e93dc050d0bf8344da126 100644
 --- a/net/minecraft/server/level/ServerLevel.java
 +++ b/net/minecraft/server/level/ServerLevel.java
 @@ -196,7 +196,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
-     private final ServerChunkCache chunkSource;
+     public final ServerChunkCache chunkSource;
      private final MinecraftServer server;
      public final io.papermc.paper.world.saveddata.PaperLevelOverrides serverLevelData; // Paper - type
 -    public final EntityTickList entityTickList = new EntityTickList();
@@ -377,7 +377,7 @@ index 49a9cc3b24d44d95bb9a4d2f258bb5bc73f5e4ec..738c518b19decee35c6f64c907ef70f3
  
      @Override
      public @Nullable LevelChunk getChunkIfLoaded(int x, int z) {
-@@ -763,6 +764,13 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -764,6 +765,13 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
          // Paper end - rewrite chunk system
          this.getCraftServer().addWorld(this.getWorld()); // CraftBukkit
          this.ominousBanner = Objects.requireNonNullElse(this.registryAccess(), net.minecraft.core.RegistryAccess.EMPTY).lookup(Registries.BANNER_PATTERN).map(Raid::getOminousBannerInstance).orElse(null); // DivineMC - Optimize Raids
@@ -391,7 +391,7 @@ index 49a9cc3b24d44d95bb9a4d2f258bb5bc73f5e4ec..738c518b19decee35c6f64c907ef70f3
      }
  
      // Paper start
-@@ -835,6 +843,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
+@@ -836,6 +844,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ServerEntityGet
              profiler.pop();
          }
  
@@ -945,7 +945,7 @@ index 54524a7472f75332e010a93bd923fd076f4ce66c..518416a36bb17f673052c09f6eeb446e
          this.containerId = containerId;
      }
 diff --git a/net/minecraft/world/item/ItemStack.java b/net/minecraft/world/item/ItemStack.java
-index c0fce943b33ebe63798a35ea17ec3ceb9cf6209a..9d900c9b24b15f9c3db9bfed7d97ea9f0e233ef7 100644
+index 95f4d1a002e6da049657d5927800df15d5e4e686..e163435f0e2d3a846330763e543fdc991507e5bb 100644
 --- a/net/minecraft/world/item/ItemStack.java
 +++ b/net/minecraft/world/item/ItemStack.java
 @@ -403,8 +403,10 @@ public final class ItemStack implements DataComponentHolder, ItemInstance {
@@ -962,7 +962,7 @@ index c0fce943b33ebe63798a35ea17ec3ceb9cf6209a..9d900c9b24b15f9c3db9bfed7d97ea9f
  
          DataComponentPatch newPatch = this.components.asPatch();
 diff --git a/net/minecraft/world/level/Level.java b/net/minecraft/world/level/Level.java
-index cbd04c5bf83eacc4016322ed2078fcd3d0882d58..28bc65b95eb27931962bf178f79f5076681606c2 100644
+index ba1dd7fae37c18afb7a2f358abafe3c17aac8805..3d329ec1eeac11d5249efce81a7316b0d0a09c48 100644
 --- a/net/minecraft/world/level/Level.java
 +++ b/net/minecraft/world/level/Level.java
 @@ -177,6 +177,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
@@ -1441,3 +1441,68 @@ index 6b3ce2ded53a7ea46cf7f0cb49043a022f6d9ee7..fbf0e14f6dd7907e2cb3a63a4410dbfe
 +        // DivineMC end - Parallel world ticking
      }
  }
+diff --git a/net/minecraft/world/level/storage/SavedDataStorage.java b/net/minecraft/world/level/storage/SavedDataStorage.java
+index f359e53024019f35aaa5cd8477da708bda2fc57a..a1b2c90b32abed4d494b2a1fd4513ef9dcf23d19 100644
+--- a/net/minecraft/world/level/storage/SavedDataStorage.java
++++ b/net/minecraft/world/level/storage/SavedDataStorage.java
+@@ -40,7 +40,7 @@ import org.slf4j.Logger;
+ 
+ public class SavedDataStorage implements AutoCloseable {
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    public final Map<SavedDataType<?>, Optional<SavedData>> cache = new HashMap<>();
++    public final Map<SavedDataType<?>, Optional<SavedData>> cache = new java.util.concurrent.ConcurrentHashMap<>(); // DivineMC - Parallel world ticking - thread-safe saved data storage
+     private final DataFixer fixerUpper;
+     private final HolderLookup.Provider registries;
+     private final Path dataFolder;
+@@ -63,24 +63,29 @@ public class SavedDataStorage implements AutoCloseable {
+     }
+ 
+     public <T extends SavedData> T computeIfAbsent(final SavedDataType<T> type) {
+-        T data = this.get(type);
+-        if (data != null) {
+-            return data;
+-        }
++        // DivineMC start - Parallel world ticking - thread-safe saved data storage
++        Optional<SavedData> data = this.cache.compute(type, (key, existing) -> {
++            if (existing == null) {
++                existing = Optional.ofNullable(this.readSavedData(type));
++            }
++
++            if (existing.isEmpty()) {
++                SavedData newData = type.constructor().get();
++                newData.setDirty();
++                existing = Optional.of(newData);
++            }
+ 
+-        T newData = (T)type.constructor().get();
+-        this.set(type, newData);
+-        return newData;
++            return existing;
++        });
++        return (T)data.orElseThrow();
++        // DivineMC end - Parallel world ticking - thread-safe saved data storage
+     }
+ 
+     public <T extends SavedData> @Nullable T get(final SavedDataType<T> type) {
+-        Optional<SavedData> data = this.cache.get(type);
+-        if (data == null) {
+-            data = Optional.ofNullable(this.readSavedData(type));
+-            this.cache.put(type, data);
+-        }
+-
++        // DivineMC start - Parallel world ticking - thread-safe saved data storage
++        Optional<SavedData> data = this.cache.computeIfAbsent(type, key -> Optional.ofNullable(this.readSavedData(type)));
+         return (T)data.orElse(null);
++        // DivineMC end - Parallel world ticking - thread-safe saved data storage
+     }
+ 
+     private <T extends SavedData> @Nullable T readSavedData(final SavedDataType<T> type) {
+@@ -143,7 +148,7 @@ public class SavedDataStorage implements AutoCloseable {
+         return gzip;
+     }
+ 
+-    public CompletableFuture<?> scheduleSave() {
++    public synchronized CompletableFuture<?> scheduleSave() { // DivineMC - Parallel world ticking - thread-safe saved data storage
+         if (this.closed) {
+             throw new IllegalStateException("Trying to schedule save when SavedDataStorage is already closed");
+         }

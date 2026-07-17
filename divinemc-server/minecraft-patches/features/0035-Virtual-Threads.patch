@@ -36,7 +36,7 @@ index 863ba3ffcd49cf28aa43b59b9b76bbdd05411699..31fa9c86a38fac4e9ca674e522e2760c
  
      public ChatDecorator getChatDecorator() {
 diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index d9fa9769ad87f1885d454f1dad4a1bbe5fa387b2..cfdb8195e395b5f176070f0ec204c6b016cb85ff 100644
+index 8fdc58ba84967bb70606f0425488f1205983b4cd..99868013c88c1b645308201a723ec89f1da820f0 100644
 --- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -861,8 +861,11 @@ public class ServerGamePacketListenerImpl
