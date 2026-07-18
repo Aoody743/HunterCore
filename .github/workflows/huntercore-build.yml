@@ -6,11 +6,13 @@ on:
       - main
       - codex/mc-26.2-experimental
       - codex/v2.9.16-release
+      - codex/v2.9.16-fixed
   pull_request:
     branches:
       - main
       - codex/mc-26.2-experimental
       - codex/v2.9.16-release
+      - codex/v2.9.16-fixed
   workflow_dispatch:
 
 permissions:
@@ -82,6 +84,15 @@ jobs:
 
       - name: Build verified release assets
         run: ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease :huntercore-network-bungee:jar :huntercore-network-velocity:jar --stacktrace --no-daemon --no-configuration-cache
+
+      - name: Cold-start packaged HunterCore
+        run: |
+          set -euo pipefail
+          huntercore_version="$(grep '^huntercoreVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          mc_version="$(grep '^mcVersion=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          release_channel="$(grep '^releaseChannel=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          jar_name="HunterCore-${huntercore_version}-build.${GITHUB_RUN_NUMBER}-MinecraftServer-${mc_version}-${release_channel}.jar"
+          bash scripts/smoke-test-release.sh "build/huntercore-release/$jar_name"
 
       - name: Prepare artifacts
         run: |

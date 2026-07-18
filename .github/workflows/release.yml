@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release tag, for example v2.9.16 or v2.9.16-build.42
+        description: Release tag, for example v2.9.16-fixed or v2.9.16-fixed-build.42
         required: true
         type: string
 
@@ -101,8 +101,9 @@ jobs:
           git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
           git fetch --no-tags origin '+refs/heads/codex/mc-26.2-experimental:refs/remotes/origin/codex/mc-26.2-experimental' || true
           git fetch --no-tags origin '+refs/heads/codex/v2.9.16-release:refs/remotes/origin/codex/v2.9.16-release' || true
+          git fetch --no-tags origin '+refs/heads/codex/v2.9.16-fixed:refs/remotes/origin/codex/v2.9.16-fixed' || true
           allowed_source=false
-          for branch in origin/main origin/codex/mc-26.2-experimental origin/codex/v2.9.16-release; do
+          for branch in origin/main origin/codex/mc-26.2-experimental origin/codex/v2.9.16-release origin/codex/v2.9.16-fixed; do
             if git rev-parse --verify "$branch^{commit}" >/dev/null 2>&1 && git merge-base --is-ancestor "$GITHUB_SHA" "$branch"; then
               allowed_source=true
               break
@@ -131,6 +132,11 @@ jobs:
         run: |
           set -euo pipefail
           BUILD_NUMBER="$RELEASE_BUILD_NUMBER" ./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease :huntercore-network-bungee:jar :huntercore-network-velocity:jar --stacktrace --no-daemon --no-configuration-cache
+
+      - name: Cold-start packaged HunterCore
+        env:
+          RELEASE_JAR_NAME: ${{ steps.release.outputs.jar_name }}
+        run: bash scripts/smoke-test-release.sh "build/huntercore-release/$RELEASE_JAR_NAME"
 
       - name: Prepare release assets
         id: assets
@@ -172,6 +178,7 @@ jobs:
           - Optional BungeeCord and Velocity companion jars for multi-proxy player-list and chat synchronization.
           - DivineMC/Purpur 26.2 optimization refresh retaining C2ME, Lithium, Matter secure seed, regionized ticking, and Leaves protocols.
           - CoreProtect 24.0 restored and enabled by default with a persistent content-addressed build cache.
+          - Rebased onto the official DivineMC 26.2 release with dynamic registry sizing, fixing the stale 35-entry attribute registry startup crash.
           - Web-editable MOTD, F3 server name, sidebar, TPS actionbar/subtitle text, and AI settings.
           - Common-native release jar keeping Linux/macOS/Windows x86_64/aarch64 native libraries.
           - Standalone WebPanel zip for separated frontend deployments with backend URL and optional API key connection.

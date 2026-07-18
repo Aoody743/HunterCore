@@ -365,7 +365,7 @@ shasum -a 256 HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
 
 HuntEngine 是独立固定源码构建，必须先构建并验证产物；HunterCore 不使用 Gradle composite build，也不会在首次启动时下载它的运行时依赖。
 
-HunterCore 2.9.16 支持同一后端同时接受直连、多个 BungeeCord 和多个 Velocity。入口信任与认证策略位于 `plugins/HunterCore/proxies.yml`；群组范围 Tab/聊天需要把 Release 中对应的 `HunterCore-Network-Bungee` / `HunterCore-Network-Velocity` 伴生 Jar 安装到代理端，并让 `network.properties` 的 `node-id` 与 `proxies.yml` 对应节点一致。
+HunterCore 2.9.16-fixed 支持同一后端同时接受直连、多个 BungeeCord 和多个 Velocity。入口信任与认证策略位于 `plugins/HunterCore/proxies.yml`；群组范围 Tab/聊天需要把 Release 中对应的 `HunterCore-Network-Bungee` / `HunterCore-Network-Velocity` 伴生 Jar 安装到代理端，并让 `network.properties` 的 `node-id` 与 `proxies.yml` 对应节点一致。fixed 版本已迁移至 DivineMC 正式 26.2 基线，并使用动态属性注册表容量，修复旧构建启动时的注册表大小崩溃。
 
 ```bash
 (cd third-party/hunt-engine && ./gradlew assembleHuntEngine --no-daemon)
@@ -385,7 +385,7 @@ divinemc-server/build/libs/
 可直接发布的 HunterCore jar 会生成在：
 
 ```text
-divinemc-server/build/libs/HunterCore-2.9.16-build.1-MinecraftServer-26.2-release.jar
+divinemc-server/build/libs/HunterCore-2.9.16-fixed-build.1-MinecraftServer-26.2-release.jar
 ```
 
 如果你需要未瘦身的通用 paperclip jar，也可以单独运行 `./gradlew :divinemc-server:createPaperclipJar`，产物是 `divinemc-server/build/libs/divinemc-paperclip-<mcVersion>.local-SNAPSHOT.jar`。

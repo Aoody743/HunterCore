@@ -16,17 +16,17 @@ GIT_CONFIG_VALUE_0=https://github.com/ \
 
 The build requires Java 25, Git, Bash 3.2 or newer, `curl`, `unzip`, `tar`, and `perl`. Windows developers should use WSL. Build HuntEngine first with its own fixed Gradle wrapper, then HunterCore embeds only `third-party/hunt-engine/target/HuntEngine.jar`; HunterCore does not use a Gradle composite build.
 
-The Minecraft 26.2 optimization baseline is pinned to DivineMC `b584fd628023e2bcbf5fc165ed84b1b9e367f399` and Purpur `1fc15cbbf7f1060b3f5ac3b1b1cbec812fb9b90e`. HunterCore retains the corresponding C2ME, Lithium, Matter secure-seed, regionized ticking, and Leaves protocol implementations before applying its own patches.
+The Minecraft 26.2 optimization baseline is pinned to the official DivineMC release `a52243f508f938bcec74c2a07ada101cb3a48944` and Purpur `6726940fb140e916e93fe6ecd67f051168ec3a29`. HunterCore retains the corresponding C2ME, Lithium, Matter secure-seed, regionized ticking, and Leaves protocol implementations before applying its own patches. The fixed release uses DivineMC's dynamic registry sizing and no longer assumes the Minecraft attribute registry contains 35 entries.
 
 The release jar is generated at:
 
 ```text
-divinemc-server/build/libs/HunterCore-2.9.16-build.1-MinecraftServer-26.2-release.jar
+divinemc-server/build/libs/HunterCore-2.9.16-fixed-build.1-MinecraftServer-26.2-release.jar
 ```
 
 `packageHunterCoreRelease` trims bundled Zstd and SQLite native jars to reduce the release size. It keeps Linux, macOS, and Windows x86_64/aarch64 native libraries, plus Linux-Musl x86_64/aarch64 for SQLite. Artifact size varies with the server and bundled plugin set; there is no fixed size promise. Use `:divinemc-server:createPaperclipJar` when a fully universal upstream-style paperclip jar is needed.
 
-The `Build HunterCore` GitHub Actions workflow runs on `main`, `codex/mc-26.2-experimental`, `codex/v2.9.16-release`, matching pull requests, and manual dispatches. It builds HuntEngine independently, applies patches, then runs targeted API/plugin/server checks before assembling release assets. The release workflow uses the same targeted verification.
+The `Build HunterCore` GitHub Actions workflow runs on `main`, `codex/mc-26.2-experimental`, `codex/v2.9.16-release`, `codex/v2.9.16-fixed`, matching pull requests, and manual dispatches. It builds HuntEngine independently, applies patches, then runs targeted API/plugin/server checks before assembling release assets. The release workflow uses the same targeted verification and the fixed release is additionally cold-start tested before publishing.
 
 ## Bundled Plugins
 
@@ -83,7 +83,7 @@ Use `/huntengine` or `/he` for the engine. The old `/hunterassets`, `/ha`, and `
 
 `plugins/HunterCore/proxies.yml` allows the same backend to accept direct players plus any number of trusted BungeeCord and Velocity nodes. Direct authentication defaults to `offline`; set `direct.authentication: online` or list selected entry hostnames under `direct.online-hostnames` to use Mojang authentication. Each proxy entry must define a unique `id`, `type`, IP/CIDR-only `trusted-addresses`, `network`, and `online-authenticated`; Velocity entries also require their forwarding `secret`.
 
-Install `HunterCore-Network-Bungee-2.9.16.jar` or `HunterCore-Network-Velocity-2.9.16.jar` on each proxy when network-wide Tab and chat are required. The companion's generated `network.properties` must use a `node-id` matching the corresponding `proxies.yml` entry and the same `network` value. Direct players see everyone on the current backend. Proxy players additionally see remote players and remote chat in their configured network, while direct players never receive remote-network-only entries or messages.
+Install `HunterCore-Network-Bungee-2.9.16-fixed.jar` or `HunterCore-Network-Velocity-2.9.16-fixed.jar` on each proxy when network-wide Tab and chat are required. The companion's generated `network.properties` must use a `node-id` matching the corresponding `proxies.yml` entry and the same `network` value. Direct players see everyone on the current backend. Proxy players additionally see remote players and remote chat in their configured network, while direct players never receive remote-network-only entries or messages.
 
 HunterAuth now evaluates the verified connection rather than the global server mode: offline direct connections require the normal password flow, Mojang-authenticated direct connections and trusted proxy connections bypass it, and unknown sources fail closed. After authentication or bypass, SkinsRestorer is invoked asynchronously; an unavailable official skin falls back to its built-in `steve` skin without blocking login.
 

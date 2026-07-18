@@ -564,10 +564,10 @@ download_github_release_asset \
 manifest_entry "viarewind-legacysupport" "ViaRewind-Legacy-Support" "1.5.4" "ViaRewind-Legacy-Support-1.5.4.jar" "https://github.com/ViaVersion/ViaRewind-Legacy-Support/releases/tag/1.5.4"
 
 download_file \
-  "https://download.geysermc.org/v2/projects/geyser/versions/2.10.1/builds/1177/downloads/spigot" \
-  "$PLUGINS_DIR/Geyser-Spigot-2.10.1-b1177.jar" \
-  "52a04e22c4876a357b57a90588c5e5e2996b7d67c5d919fac9091a092352abc2"
-manifest_entry "geyser" "Geyser-Spigot" "2.10.1-b1177" "Geyser-Spigot-2.10.1-b1177.jar" "https://download.geysermc.org/v2/projects/geyser/versions/2.10.1/builds/1177"
+  "https://download.geysermc.org/v2/projects/geyser/versions/2.10.1/builds/1184/downloads/spigot" \
+  "$PLUGINS_DIR/Geyser-Spigot-2.10.1-b1184.jar" \
+  "c3bf077b7ea642108fa3bf58e96ec46b876a18d58fc1235b15af4263195620fd"
+manifest_entry "geyser" "Geyser-Spigot" "2.10.1-b1184" "Geyser-Spigot-2.10.1-b1184.jar" "https://download.geysermc.org/v2/projects/geyser/versions/2.10.1/builds/1184"
 
 download_file \
   "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/138/downloads/spigot" \
@@ -596,10 +596,10 @@ download_file_sha512 \
 manifest_entry "chunky" "Chunky" "1.5.3" "Chunky-Bukkit-1.5.3.jar" "https://modrinth.com/plugin/chunky/version/1.5.3"
 
 download_file_sha512 \
-  "https://cdn.modrinth.com/data/lKEzGugV/versions/UmbIiI5H/PlaceholderAPI-2.12.2.jar" \
-  "$PLUGINS_DIR/PlaceholderAPI-2.12.2.jar" \
-  "94addf996ba45e16dbded3fcaf05e8b442212ce0d577f7edc42b743ad9532c1e24115263976126d36f27c0868ab1c03c40c2d13947985124b92dabca4527dddb"
-manifest_entry "placeholderapi" "PlaceholderAPI" "2.12.2" "PlaceholderAPI-2.12.2.jar" "https://modrinth.com/plugin/placeholderapi/version/2.12.2"
+  "https://cdn.modrinth.com/data/lKEzGugV/versions/pIvQcXW8/PlaceholderAPI-2.12.3.jar" \
+  "$PLUGINS_DIR/PlaceholderAPI-2.12.3.jar" \
+  "f048d55b633fd816c08e2e4472bd54a75fc4d13534682e6e7745408253d2f393706efdc389d12ca2cf28d4dc035a9afdda3eed9ecde51c7e332831391d9b6479"
+manifest_entry "placeholderapi" "PlaceholderAPI" "2.12.3" "PlaceholderAPI-2.12.3.jar" "https://modrinth.com/plugin/placeholderapi/version/2.12.3"
 
 download_file \
   "https://github.com/SkinsRestorer/SkinsRestorer/releases/download/15.12.4/SkinsRestorer.jar" \
