@@ -1,417 +1,80 @@
 # HunterCore
 
-HunterCore 是一个为 Minecraft 服主准备的高性能自定义服务器核心。它保留熟悉的 Bukkit、Spigot、Paper 插件兼容体验，同时把网页管理、地图入口、权限快捷管理、假人调试、常用服主工具和一批基础插件直接整合进核心。
+面向 Minecraft 26.2 的一体化高性能服务端。HunterCore 保留 Paper/Purpur 插件生态，把高性能运行时、HuntEngine 自定义内容、网页运维、认证、地图、常用服主管理能力和多代理网络接入收束为一个可发布版本。
 
-简单说：你下载一个 jar，就能得到一个更适合开服、调试、运营和远程管理的服务器核心。
+[下载 v2.9.16-fixed](https://github.com/Aoody743/HunterCore/releases/tag/v2.9.16-fixed) | [问题反馈](https://github.com/Aoody743/HunterCore/issues) | [官网](https://core.huntmc.club)
 
-- [下载最新版本](https://github.com/Aoody743/HunterCore/releases)
-- [查看源码](https://github.com/Aoody743/HunterCore)
+## 亮点
 
-## 为什么选择 HunterCore
-
-开服最烦的事情，往往不是把服务器跑起来，而是把一堆基础插件、权限、地图、网页、管理命令、假人测试工具、MOTD、性能参数一点点拼起来。HunterCore 想解决的就是这件事。
-
-- 开箱即用：内置 ViaVersion、BlueMap、LuckPerms、CoreProtect、WorldEdit、WorldGuard、Multiverse、Chunky 等常用基础能力。
-- 自带网页面板：打开浏览器就能看地图、服务器状态、玩家、世界、插件、命令输出、健康告警和管理入口。
-- 管理更直观：网页端支持插件启用、停用、重载和从 URL 更新插件，也支持模块开关、命令开关和网页用户权限管理。
-- 假人更像真玩家：`/player` 提供真实 `ServerPlayer` Bot，可以进入在线列表，支持背包编辑、持续右键、左键、跳跃、潜行、疾跑等调试动作。
-- 不堆重复插件：MOTD、基础传送、常用生存服命令和管理命令由 HunterTools 自研提供，不默认塞 EssentialsX、MiniMOTD、GSit 这类重叠插件。
-- 远程管理友好：网页端口、绑定地址、服务器名称、地图地址都能在网页或游戏内调整。
-- 品牌更统一：客户端 F3 里的服务端名称默认显示为 `"HunterCore" Server`，也可以在网页面板里改成自己的品牌名。
-- 配置集中：主要内置模块和开关统一放在 `plugins/HunterCore/preferences.yml`，不用在一堆插件配置里反复翻。
-
-## 适合谁
-
-HunterCore 很适合下面这些场景：
-
-- 想快速搭一个生存服、建筑服、朋友服、测试服。
-- 想要 BlueMap 地图和网页后台，但不想自己从零拼。
-- 想在网页上看插件状态、执行允许的命令、做简单运维。
-- 想测试红石、农场、刷怪塔、交互指令，需要 Carpet 风格假人能力。
-- 想保留 Paper/Purpur 插件生态，又希望核心里有更多服主常用功能。
+- **官方 DivineMC 26.2 基线**：动态属性注册表容量，修复旧实验构建的 26.2 启动崩溃；保留 C2ME、Lithium、异步区块发送、区域化 ticking 与安全种子优化。
+- **HuntEngine 内容系统**：GPL-3.0 Community Edition 派生集成，提供自定义物品、方块、家具、配方、资源包构建与游戏内目录；WebPanel 可校验、构建、发布原生内容包。
+- **网页与游戏共用账号**：HunterAuth 的游戏注册账号即 WebPanel 账号，用户名和密码一致；网页角色须显式授权，不因 OP 或同名自动取得管理权。
+- **完整运维工作台**：服务器健康、玩家、世界、BlueMap、插件、权限、命令、AI、内容包、迁移诊断和资源包发布均可按角色管理。
+- **混合入口网络**：同一后端可同时接受直连、多个 BungeeCord 与多个 Velocity；代理玩家共享指定群组的 Tab/聊天，直连玩家只看本服玩家。
+- **开箱可用组件**：BlueMap、LuckPerms、CoreProtect、WorldEdit、WorldGuard、Multiverse、Chunky、Geyser/Floodgate、ViaVersion 系列、SkinsRestorer、Vault、ProtocolLib 等均由发行物校验后内置。
 
 ## 快速开始
 
-从 [GitHub Releases](https://github.com/Aoody743/HunterCore/releases) 下载最新的：
-
-```text
-HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
-```
-
-然后启动：
+下载 Release 中的 `HunterCore-*-MinecraftServer-26.2-release.jar`，接受 EULA 后启动：
 
 ```bash
-java -Xms2G -Xmx4G -jar HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar nogui
+java -Xms2G -Xmx7.5G -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -Dfile.encoding=UTF-8 -jar HunterCore-2.9.16-fixed-build.1-MinecraftServer-26.2-release.jar nogui
 ```
 
-首次启动会生成 EULA 和配置文件。接受 Minecraft EULA 后再次启动即可。
+首次启动会准备内置插件与 `plugins/HunterCore/` 配置。WebPanel 默认仅绑定本机：`http://127.0.0.1:8088/`。
 
-先用该玩家名在游戏内完成一次 `/register` 与 `/login`，再在控制台绑定网页管理员角色：
+玩家在游戏内 `/register <password> <password>` 后，可用相同用户名和密码登录网页。控制台或已有管理员可授权网页角色：
 
 ```text
-/hc admin web user admin admin
+/hc admin web user <player> admin
 ```
 
-网页注册与游戏内 `/register` 使用同一套 HunterAuth 账号：用户名会双向占用，密码也完全一致。网页角色只绑定到已经在游戏内成功登录过的 HunterAuth UUID，因此改名不会丢失权限，也没有独立网页密码。HunterAuth 玩家不会因为用户名与 Minecraft OP 相同而自动获得网页管理员权限；网页管理员角色必须由已有管理员显式绑定和授权。
+公网部署时请保持面板绑定 `127.0.0.1`，通过 Caddy 或 Nginx 反向代理提供 HTTPS；确认 HTTPS 后将 `modules.web-panel.secure-cookies` 设置为 `true`。不要直接暴露 8088。
 
-升级到此版本时，旧的独立网页密码会被安全停用。让原网页管理员先用同一账号在游戏内登录一次，再执行上面的绑定命令即可恢复角色。
+## HuntEngine 与资源包
 
-默认网页面板地址：
+使用 `/huntengine` 或 `/he` 浏览内容。HuntEngine 是资源包的唯一生命周期所有者：认证模块只在玩家资源包就绪后使用增强 GUI，拒绝或下载失败自动回退原版 GUI。
 
-```text
-http://127.0.0.1:8088/
-```
+WebPanel 的 HuntEngine 工作台支持目录、草稿包上传、ZIP 安全校验、构建、发布、重载和资源包发送。发布产物使用不可变 hash 版本，失败不会替换当前生效包。旧 HunterAssets 数据会迁入 `huntercraft-legacy` 草稿包；无法可靠转换的内容会写入迁移报告。
 
-需要对局域网或公网开放时，可以在游戏内或控制台调整：
+## Network Jar：直连、BungeeCord 与 Velocity
 
-```text
-/hc admin web bind 0.0.0.0
-/hc admin web port 8088
-/hc admin web restart
-```
+Release 中的 `HunterCore-Network-Bungee-*.jar` 与 `HunterCore-Network-Velocity-*.jar` **只安装在代理端**。它们不是后端必需插件：不安装时后端仍可正常接受直连玩家，只是没有跨服 Tab/聊天同步。
 
-内置 Web 服务只提供 HTTP。不要把 `8088` 端口直接暴露到公网；公网访问必须通过 Caddy、Nginx 等反向代理终止 HTTPS，并用防火墙限制后端端口只允许反向代理访问。否则登录密码、会话 Cookie 和 API key 都可能在传输途中泄露。确认用户始终通过 HTTPS 访问后，还必须将 `modules.web-panel.secure-cookies` 设为 `true` 并重启网页服务，才能启用 Secure Cookie 和 HSTS。局域网内也建议使用 HTTPS，或保持默认的 `127.0.0.1` 绑定并通过安全隧道访问。
+1. 在每个 BungeeCord 或 Velocity 代理的 `plugins/` 目录放入对应 Jar 并启动一次。
+2. 编辑代理生成的 `plugins/HunterCore-Network/network.properties`：为每个代理填写唯一 `node-id`，并设置共同的 `network` 名称。
+3. 编辑后端 `plugins/HunterCore/proxies.yml`，为每个代理定义同名 `id`、`type: bungeecord` 或 `velocity`、仅 IP/CIDR 的 `trusted-addresses`、相同 `network`、`online-authenticated`；Velocity 还必须填写与代理 forwarding 一致的 `secret`。
+4. 重启代理与后端。不要把代理信任地址写成 `0.0.0.0/0`。
 
-## 网页面板
+行为规则：代理接入玩家会看到其 `network` 内的远程玩家和聊天，也会看到本后端的直连玩家；直连玩家会看到本后端全部玩家（包含从代理进入本服的人），但不会收到其他后端的群组 Tab 条目或聊天。多个 BungeeCord 与 Velocity 可以同时接入同一后端，只要节点 ID 唯一且信任边界准确。
 
-HunterCore 的网页面板不是一个简单状态页，而是面向服主日常运维做的控制台。界面采用 Apple 风格的液态玻璃视觉，首页优先展示 BlueMap 或你配置的地图，登录后再按权限显示不同内容。
+HunterAuth 默认对直连离线玩家要求密码；正版直连和可信代理转发玩家绕过密码流程。登录或验证后会请求 SkinsRestorer，查不到正版皮肤时回退 Steve。
 
-访客可以看到：
+## 运维与管理
 
-- 服务器基础状态。
-- TPS、MSPT、在线人数、内存信息。
-- 健康告警。
-- BlueMap 地图入口。
+- `/hc admin modules`、`/hc admin optimize`、`/hc admin web status` 管理核心模块、优化与网页服务。
+- `/player` 提供真实 ServerPlayer 测试假人；`/npc` 提供交互 NPC。
+- `/huntengine`、`/he` 管理内容；旧 `/hunterassets`、`/ha`、`/hassets` 在 2.9.x 仅提供迁移提示。
+- `preferences.yml` 集中管理内置模块；`proxies.yml` 管理入口信任；WebPanel 的危险操作继续要求角色、CSRF 和确认。
 
-普通玩家登录后可以看到：
+## 发行物与校验
 
-- 更完整的服务器信息。
-- 玩家和世界概览。
-- 允许范围内的命令执行入口。
-
-管理员登录后可以看到：
-
-- 插件列表和插件状态。
-- 插件启用、停用、重载。
-- 从 URL 下载 jar 并更新插件。
-- LuckPerms 用户、组和权限快捷操作。
-- 假人、NPC、真实假人生成和移除。
-- 假人点击执行命令配置。
-- HunterTools 模块和命令开关。
-- `/about`、`/plugins`、`/op` 无权限提示的自定义文案，支持 `&` 颜色和样式代码。
-- 网页用户、角色、允许命令和命令执行权限管理。
-- 网页端口、绑定地址、地图地址、服务器名称设置。
-- 原生 AI 接入设置：OpenAI 兼容 Base URL、模型、API key/env、聊天触发词、NPC Prompt、NPC 命令白名单和在线测试。
-
-网页端会读取根目录的 `server-icon.png` 作为服务器标志。面板支持中文和英文切换，会根据浏览器语言自动选择，也可以手动切换。
-
-提示：Minecraft 插件的热启停、热重载和热更新取决于插件自身是否安全支持。HunterCore 提供这个能力是为了让调试和维护更方便，但正式服更新关键插件前仍建议先测试。面板会保护承载网页面板的核心插件，避免把自己关掉。
-
-## 原生 AI 接入
-
-HunterCore 现在自带 AI 接入系统，不需要额外写插件就能把 ChatGPT 或其他 OpenAI-compatible 服务接进服务器。
-
-- 聊天栏 AI：玩家在聊天里提到已配置的 AI 名字，服务器会调用对应模型结合上下文回复。
-- NPC AI：NPC 没有点击指令时，可以直接由 AI 回复玩家，还能执行安全白名单动作。
-- 网页管理：管理员可以在后台配置 Base URL、模型、API key、环境变量、Prompt、冷却时间、NPC 可见半径和命令白名单。
-- 灵活接入：默认兼容 OpenAI 的 `/v1/chat/completions`，也可以换成支持同协议的第三方或自建模型网关。
-- 安全默认：AI 模块默认关闭，API key 不会回显到网页；NPC 只能执行白名单命令。
-
-快速启用：
-
-```text
-/hc admin ai key <你的 API key>
-/hc admin ai model gpt-4o-mini
-/hc admin ai enable
-```
-
-如果你更喜欢用环境变量，可以设置 `OPENAI_API_KEY`，或者在网页后台修改 `api-key-env`。
-
-## 剧情模式
-
-HunterTools 内置了一个实验性的 Story Mode，用于演示真实假人、AI 行为和阶段式事件编排。它默认不开放，首次启动生成的 `plugins/HunterCore/preferences.yml` 会把 `modules.story-mode.enabled` 设为 `false`，普通服务器不会自动出现剧情假人或失控事件。
-
-管理员可以在测试服或拍摄环境中手动启用：
-
-```text
-/story enable
-/start
-```
-
-`/story disable` 会关闭剧情模式并清理正在运行的剧情假人。这个功能依赖真实假人和 AI 配置，建议只在受控环境里开启，不建议作为公开服默认玩法开放。
-
-## 地图和 BlueMap
-
-HunterCore 内置 BlueMap。网页面板默认会把地图地址指向：
-
-```text
-http://%host%:8100/
-```
-
-如果你把 BlueMap 改到别的端口，或者想接入其他网页地图，可以在网页后台或配置里改 `map-url`。
-
-BlueMap 首次运行需要你在：
-
-```text
-plugins/BlueMap/core.conf
-```
-
-确认资源下载选项。BlueMap 会下载 Mojang 客户端资源用于地图渲染，这是 BlueMap 的正常流程。
-
-## 假人、NPC 和交互玩法
-
-HunterCore 现在有三类可控实体，适合不同场景：
-
-- `/npc`：支持 villager 和 mannequin 类型，适合做功能 NPC、传送 NPC、菜单 NPC；mannequin 可加载正版玩家皮肤。
-- `/player`：真实 `ServerPlayer` Bot，适合红石、农场、刷怪、区块加载、背包编辑和玩家行为调试。
-
-真实假人支持：
-
-```text
-/player spawn <name>
-/player remove <name>
-/player inv <name>
-/player skin <name> <minecraftName|clear>
-/player tp <name>
-/player tphere <name>
-/player sneak <name> <on|off>
-/player sprint <name> <on|off>
-/player jump <name> [once|continuous|stop]
-/player use <name> [once|continuous|stop]
-/player attack <name> [once|continuous|stop]
-/player stop <name>
-/player drop <name>
-/player dropstack <name>
-/player swap <name>
-/player gm <name> <survival|creative|adventure|spectator>
-/player slot <name> <1-9>
-```
-
-点击命令也支持在游戏内或网页端配置：
-
-```text
-/player click <name> say %player% clicked %actor%
-/npc click <name> lp user %player% permission set example.node true
-```
-
-可用占位符包括：
-
-```text
-%player%
-%player_uuid%
-%actor%
-%actor_name%
-%actor_uuid%
-%module%
-%world%
-%x%
-%y%
-%z%
-```
-
-## 自研服主工具
-
-HunterTools 内置了一组轻量实用功能，覆盖很多小服和测试服每天都会用到的操作：
-
-```text
-/htps
-/hc admin modules
-/hc admin module <module> <on|off>
-/hc admin command <module> <command> <on|off>
-/hc admin memory
-/hc admin gc
-/hc admin threads
-/hc admin optimize
-/hc admin motd <status|line1|line2|max>
-/hc admin web <status|restart|bind|port|map|public-map|user|remove|users|allow|execution>
-/heal [player]
-/feed [player]
-/fly [player] [on|off]
-/gm <mode> [player]
-/day [world]
-/night [world]
-/sun [world]
-/rain [world]
-/thunder [world]
-/broadcast <message>
-/clearchat
-/speed <1-10> [player] [walk|fly]
-/spawn [player]
-/setspawn
-/back
-/hat
-/craft
-/enderchest [player]
-/trash
-/start
-/story <start|enable|disable|status|skip|stop|line|meltdown>
-```
-
-这些功能可以通过 `preferences.yml` 或 `/hc admin` 开关。你可以只保留自己需要的部分，把不用的模块关掉。
-
-## 内置插件
-
-HunterCore 会在服务器扫描插件目录前准备内置插件。首次启动后会生成：
-
-```text
-plugins/HunterCore/preferences.yml
-```
-
-当前内置插件包括：
-
-```text
-ViaVersion 5.10.0
-ViaBackwards 5.10.0
-ViaRewind 4.1.2
-BlueMap 5.22
-Chunky 1.5.3
-PlaceholderAPI 2.12.2
-Vault 1.7.3
-ProtocolLib 5.4.0
-WorldEdit 7.4.3
-WorldGuard 7.0.17
-Multiverse-Core 5.7.1
-LuckPerms 5.5.53
-CoreProtect 24.0
-HunterTPA builtin
-HunterAuth builtin
-HunterTools builtin
-```
-
-外部内置插件可以在 `bundled-plugins.plugins.<plugin-id>` 里单独关闭。关闭已经加载的插件通常仍需要重启服务器，网页端热操作适合调试和插件自身支持热重载的场景。
-
-## 性能和优化
-
-HunterCore 继承成熟 Minecraft 服务端生态的优化基础，并额外加入一组偏保守、适合开服默认使用的设置：
-
-- 按 CPU 自动设置 Paper / core worker threads。
-- 自动设置 Netty IO threads 和 ForkJoin common pool parallelism。
-- 内置插件并行准备，减少首次启动等待。
-- HunterTools 异步渲染、异步保存、玩家缓存。
-- 假人和 NPC 配置异步加载、批量保存。
-- 网页面板使用独立 worker，游客状态接口带缓存。
-- 健康告警监测 TPS、MSPT、堆内存、区块、实体和禁用插件。
-
-如果你已经用 JVM 参数手动指定线程相关设置，HunterCore 会尊重你的配置，不会强行覆盖。
-
-## 常用配置
-
-主配置文件：
-
-```text
-plugins/HunterCore/preferences.yml
-```
-
-网页面板相关配置示例：
-
-```yaml
-modules:
-  web-panel:
-    enabled: true
-    bind-address: 127.0.0.1
-    port: 8088
-    server-name: HunterCore
-    public-map: true
-    map-url: http://%host%:8100/
-    require-csrf: true
-    secure-cookies: false
-    command-output-lines: 80
-    command-output-chars: 12000
-```
-
-常用游戏内管理命令：
-
-```text
-/hc admin web status
-/hc admin web bind <address>
-/hc admin web port <1-65535>
-/hc admin web map <url>
-/hc admin web public-map <on|off>
-/hc admin web user <name> <admin|player>
-/hc admin web allow <name> <inherit|none|*|command...>
-/hc admin web execution <name> <on|off>
-```
-
-## 下载、发布和校验
-
-推荐始终从 [Releases](https://github.com/Aoody743/HunterCore/releases) 下载 `HunterCore-*-MinecraftServer-*-release.jar`。
-
-每个发布版本都会附带：
-
-```text
-HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
-HunterCore-<version>-WebPanel-<mcVersion>-release.zip
-```
-
-发行 jar 会移除不常用的原生库以减小体积，并保留 Linux、macOS、Windows 的 x86_64/aarch64 常见原生库；SQLite 额外保留 Linux-Musl x86_64/aarch64。包体大小会随服务端和内置插件变化，不承诺固定上限。非常规架构可以从源码构建未瘦身的 `divinemc-paperclip` jar。
-
-如果你要检查文件完整性：
+Release 包含主服务端 Jar、WebPanel ZIP、Bungee/Velocity Network Jar 和 `SHA256SUMS.txt`。下载后校验：
 
 ```bash
-shasum -a 256 HunterCore-<version>-MinecraftServer-<mcVersion>-release.jar
+shasum -a 256 HunterCore-*-MinecraftServer-26.2-release.jar
 ```
 
 ## 从源码构建
 
-需要 Java 25、Git、Bash 3.2 或更高版本，以及 `curl`、`unzip`、`tar`、`perl`。构建脚本会在系统没有 Maven 时下载并校验固定版本的 Maven。Windows 建议在 WSL 中构建。
-
-普通开发验证不会下载或构建外部内置插件：
-
-```bash
-./gradlew check --no-daemon
-```
-
-只有 `packageHunterCoreRelease` 和 `:divinemc-server:createPaperclipJar` 会准备外部内置插件，因此发行构建需要可访问 GitHub、Modrinth、PaperMC 和脚本中列出的固定下载源。
-
-HuntEngine 是独立固定源码构建，必须先构建并验证产物；HunterCore 不使用 Gradle composite build，也不会在首次启动时下载它的运行时依赖。
-
-HunterCore 2.9.16-fixed 支持同一后端同时接受直连、多个 BungeeCord 和多个 Velocity。入口信任与认证策略位于 `plugins/HunterCore/proxies.yml`；群组范围 Tab/聊天需要把 Release 中对应的 `HunterCore-Network-Bungee` / `HunterCore-Network-Velocity` 伴生 Jar 安装到代理端，并让 `network.properties` 的 `node-id` 与 `proxies.yml` 对应节点一致。fixed 版本已迁移至 DivineMC 正式 26.2 基线，并使用动态属性注册表容量，修复旧构建启动时的注册表大小崩溃。
+需要 Java 25、Git、Bash、curl、unzip、tar、perl。HuntEngine 独立构建，HunterCore 不使用 Gradle composite build：
 
 ```bash
 (cd third-party/hunt-engine && ./gradlew assembleHuntEngine --no-daemon)
 bash scripts/verify-hunt-engine-vendor.sh third-party/hunt-engine/target/HuntEngine.jar
-GIT_CONFIG_COUNT=1 \
-GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
-GIT_CONFIG_VALUE_0=https://github.com/ \
-./gradlew packageHunterCoreRelease --no-daemon --no-configuration-cache
+./gradlew packageHunterCoreRelease packageHunterCoreWebPanel verifyHunterCoreRelease --no-daemon --no-configuration-cache
 ```
 
-构建产物会生成在：
+## 许可证
 
-```text
-divinemc-server/build/libs/
-```
-
-可直接发布的 HunterCore jar 会生成在：
-
-```text
-divinemc-server/build/libs/HunterCore-2.9.16-fixed-build.1-MinecraftServer-26.2-release.jar
-```
-
-如果你需要未瘦身的通用 paperclip jar，也可以单独运行 `./gradlew :divinemc-server:createPaperclipJar`，产物是 `divinemc-server/build/libs/divinemc-paperclip-<mcVersion>.local-SNAPSHOT.jar`。
-
-## 开发者 API
-
-HunterCore 提供 API 入口：
-
-```java
-org.huntercore.api.HunterCoreProvider.get()
-```
-
-插件可以注册 `/hc` 子命令扩展：
-
-```java
-HunterCoreProvider.get().registerCommandExtension(extension);
-```
-
-扩展接口：
-
-```java
-org.huntercore.api.HunterCommandExtension
-```
-
-## 上游和许可证
-
-HunterCore 继承 Minecraft 服务端生态相关项目的 GPL-3.0 许可证要求。详见 [LICENSE](LICENSE)。
-
-感谢 Purpur、Paper、Pufferfish、Leaves、SparklyPaper 等项目为 Minecraft 服务端生态做出的长期贡献。
+HunterCore 及其服务器上游适用 GPL-3.0 要求，详见 [LICENSE](LICENSE)。HuntEngine 的上游、提交、变更和源码获取说明位于项目的第三方合规文件中。
