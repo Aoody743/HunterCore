@@ -533,41 +533,33 @@ manifest_header
 
 download_github_release_asset \
   "ViaVersion/ViaVersion" \
-  "5.10.0" \
-  "ViaVersion-5.10.0.jar" \
-  "$PLUGINS_DIR/ViaVersion-5.10.0.jar" \
-  "ab137b62829721c8ced3c554ede904a6c02f6d1963c33b32d7d432bb25607b60"
-manifest_entry "viaversion" "ViaVersion" "5.10.0" "ViaVersion-5.10.0.jar" "https://github.com/ViaVersion/ViaVersion/releases/tag/5.10.0"
+  "5.11.0" \
+  "ViaVersion-5.11.0.jar" \
+  "$PLUGINS_DIR/ViaVersion-5.11.0.jar" \
+  "18d19e90fc9467d68128c076630ae8700449c901402a3ef421837ce006bc8cae"
+manifest_entry "viaversion" "ViaVersion" "5.11.0" "ViaVersion-5.11.0.jar" "https://github.com/ViaVersion/ViaVersion/releases/tag/5.11.0"
 
 download_github_release_asset \
   "ViaVersion/ViaBackwards" \
-  "5.10.0" \
-  "ViaBackwards-5.10.0.jar" \
-  "$PLUGINS_DIR/ViaBackwards-5.10.0.jar" \
-  "107a6bce08b1661382b8590df7c0ab714bc5967a93c1bba2d71531448689ce82"
-manifest_entry "viabackwards" "ViaBackwards" "5.10.0" "ViaBackwards-5.10.0.jar" "https://github.com/ViaVersion/ViaBackwards/releases/tag/5.10.0"
+  "5.11.0" \
+  "ViaBackwards-5.11.0.jar" \
+  "$PLUGINS_DIR/ViaBackwards-5.11.0.jar" \
+  "b21983d561e3f92df257683f0133ab6c68ec68175e8acfd82c6231723bf83587"
+manifest_entry "viabackwards" "ViaBackwards" "5.11.0" "ViaBackwards-5.11.0.jar" "https://github.com/ViaVersion/ViaBackwards/releases/tag/5.11.0"
 
 download_github_release_asset \
   "ViaVersion/ViaRewind" \
-  "4.1.2" \
-  "ViaRewind-4.1.2.jar" \
-  "$PLUGINS_DIR/ViaRewind-4.1.2.jar" \
-  "88f413eb1a5c302cf0fdd32bf11051bbb65485cbf6012921dbcfedab3772f341"
-manifest_entry "viarewind" "ViaRewind" "4.1.2" "ViaRewind-4.1.2.jar" "https://github.com/ViaVersion/ViaRewind/releases/tag/4.1.2"
-
-download_github_release_asset \
-  "ViaVersion/ViaRewind-Legacy-Support" \
-  "1.5.4" \
-  "ViaRewind-Legacy-Support-1.5.4.jar" \
-  "$PLUGINS_DIR/ViaRewind-Legacy-Support-1.5.4.jar" \
-  "ddf1773c68f63f89b37ae301a7141fc11297f0cbe5277a3c1419a07c21b93fa9"
-manifest_entry "viarewind-legacysupport" "ViaRewind-Legacy-Support" "1.5.4" "ViaRewind-Legacy-Support-1.5.4.jar" "https://github.com/ViaVersion/ViaRewind-Legacy-Support/releases/tag/1.5.4"
+  "4.1.3" \
+  "ViaRewind-4.1.3.jar" \
+  "$PLUGINS_DIR/ViaRewind-4.1.3.jar" \
+  "2d5970d22b4711c9ab2800932326c7b08acdace25ed7c6bbb8f6ea81054962b4"
+manifest_entry "viarewind" "ViaRewind" "4.1.3" "ViaRewind-4.1.3.jar" "https://github.com/ViaVersion/ViaRewind/releases/tag/4.1.3"
 
 download_file \
-  "https://download.geysermc.org/v2/projects/geyser/versions/2.10.1/builds/1184/downloads/spigot" \
-  "$PLUGINS_DIR/Geyser-Spigot-2.10.1-b1184.jar" \
-  "c3bf077b7ea642108fa3bf58e96ec46b876a18d58fc1235b15af4263195620fd"
-manifest_entry "geyser" "Geyser-Spigot" "2.10.1-b1184" "Geyser-Spigot-2.10.1-b1184.jar" "https://download.geysermc.org/v2/projects/geyser/versions/2.10.1/builds/1184"
+  "https://download.geysermc.org/v2/projects/geyser/versions/2.11.0/builds/1200/downloads/spigot" \
+  "$PLUGINS_DIR/Geyser-Spigot-2.11.0-b1200.jar" \
+  "392e5cf85b801397eaef336b98f83d69ad95d3ab000b3f590fd56b73a707b2e4"
+manifest_entry "geyser" "Geyser-Spigot" "2.11.0-b1200" "Geyser-Spigot-2.11.0-b1200.jar" "https://download.geysermc.org/v2/projects/geyser/versions/2.11.0/builds/1200"
 
 download_file \
   "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/138/downloads/spigot" \
